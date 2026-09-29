@@ -2,7 +2,7 @@
 # Re-run the benchmark for the leading models on an idle Mac (e.g. overnight).
 #   bash ~/kezohar-agent/bench/night.sh [model ...]
 # Waits (up to 3 h) until the Mac is quiet, keeps it awake while running, writes
-# bench/raw-night-<date>/ + bench/results-night-<date>.md, and commits them.
+# bench/raw-night-<date>/ + bench/results-night-<date>.md, commits and pushes them.
 # Requirements: LM Studio open with its server on, Mac plugged in, lid open.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -33,4 +33,5 @@ python3 bench/report.py --raw "$OUT" --out "results-night-$STAMP.md"
 
 git add "bench/$OUT" "bench/results-night-$STAMP.md" "$LOG"
 git commit -qm "Night benchmark $STAMP: ${MODELS[*]}" && echo "✅ נשמר ב-git."
+git push -q && echo "✅ נדחף ל-GitHub." || echo "⚠️ הדחיפה ל-GitHub נכשלה — התוצאות שמורות במחשב, נדחוף אחר כך."
 echo "$(date '+%F %H:%M') סיום. הדוח: bench/results-night-$STAMP.md"
