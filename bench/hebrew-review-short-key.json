@@ -1,0 +1,27 @@
+{
+ "7": {
+  "A": "qwen/qwen3.5-35b-a3b",
+  "B": "dictalm-3.0-nemotron-12b-instruct",
+  "C": "google/gemma-4-26b-a4b"
+ },
+ "8": {
+  "A": "qwen/qwen3.5-35b-a3b",
+  "B": "google/gemma-4-26b-a4b",
+  "C": "dictalm-3.0-nemotron-12b-instruct"
+ },
+ "10": {
+  "A": "dictalm-3.0-nemotron-12b-instruct",
+  "B": "qwen/qwen3.5-35b-a3b",
+  "C": "google/gemma-4-26b-a4b"
+ },
+ "11": {
+  "A": "google/gemma-4-26b-a4b",
+  "B": "qwen/qwen3.5-35b-a3b",
+  "C": "dictalm-3.0-nemotron-12b-instruct"
+ },
+ "20": {
+  "A": "dictalm-3.0-nemotron-12b-instruct",
+  "B": "google/gemma-4-26b-a4b",
+  "C": "qwen/qwen3.5-35b-a3b"
+ }
+}
