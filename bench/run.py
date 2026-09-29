@@ -4,11 +4,13 @@ For each candidate model (loaded one at a time via the `lms` CLI):
   1. Tool test   - model gets a dummy `search_halacha` tool; did it call it when it should?
   2. Answer test - model gets the question + fixed Sefaria passages (bench/contexts.json),
                    streamed; we measure time to first token, first sentence, total, tok/s.
-Raw data -> bench/raw/<model>.json. Summary -> bench/results.md (via report.py).
+Raw data -> bench/<out>/<model>.json (default bench/raw). Summary -> bench/results.md (via report.py).
+Each run also records machine load (load average, busiest processes) so results taken
+under load can be told apart.
 
-Usage: python3 bench/run.py [model ...]     (stdlib only, reads LLM_BASE_URL from .env)
+Usage: python3 bench/run.py [--out DIR] [model ...]   (stdlib only, reads LLM_BASE_URL from .env)
 """
-import json, re, subprocess, sys, time, urllib.request
+import argparse, json, os, re, subprocess, time, urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -20,6 +22,7 @@ MODELS = [
     "dictalm-3.0-nemotron-12b-instruct",
     "qwen/qwen3.5-35b-a3b",
     "zai-org/glm-4.7-flash",
+    "google/gemma-4-26b-a4b",
     "dictalm-3.0-24b-thinking",  # Hebrew-quality baseline only
 ]
 
@@ -87,6 +90,23 @@ def mem_used_gb():
 
 def lms(*args):
     return subprocess.run([LMS, *args], capture_output=True, text=True).stdout
+
+
+def machine_load():
+    """Load average + the busiest non-LM-Studio processes right now."""
+    out = subprocess.run(["ps", "-Ao", "pcpu=,command="], capture_output=True, text=True).stdout
+    procs = []
+    for line in out.splitlines():
+        cpu, _, cmd = line.strip().partition(" ")
+        argv = cmd.split()
+        name = Path(argv[0]).name
+        if name in ("node", "python3", "python") and len(argv) > 1:
+            name += " " + Path(argv[1]).name  # show which script is busy
+        if float(cpu) >= 20 and "LM Studio" not in cmd and ".lmstudio" not in cmd and "llmworker" not in name.lower():
+            procs.append((float(cpu), name))
+    procs.sort(reverse=True)
+    return {"loadavg_1m": round(os.getloadavg()[0], 1), "cores": os.cpu_count(),
+            "busy_procs": [f"{n} {c:.0f}%" for c, n in procs[:5]]}
 
 
 def load_model(model):
@@ -180,7 +200,7 @@ def answer_test(model, q, ctx):
         "completion_tokens": ntok,
         "reasoning_tokens": (usage.get("completion_tokens_details") or {}).get("reasoning_tokens", 0),
         "reasoning_chars": len(reasoning),
-        "tok_per_s": round(ntok / gen_time, 1) if gen_time > 0 and ntok else None,
+        "tok_per_s": round(ntok / gen_time, 1) if gen_time > 0.25 and ntok > 1 else None,  # too short to measure
         "chars": len(text),
         "sentences": len(sentences),
         "latin_chars": latin,
@@ -191,9 +211,9 @@ def answer_test(model, q, ctx):
     }
 
 
-def run_model(model, questions, contexts):
+def run_model(model, questions, contexts, out_dir):
     print(f"\n=== {model} ===", flush=True)
-    res = {"model": model, "load": load_model(model), "questions": []}
+    res = {"model": model, "load": load_model(model), "conditions": {"start": machine_load()}, "questions": []}
     print("  load:", res["load"], flush=True)
     post("/chat/completions", {"model": model, "max_tokens": 5, "reasoning_effort": "none",
                                "messages": [{"role": "user", "content": "שלום"}]})  # warm-up
@@ -205,7 +225,10 @@ def run_model(model, questions, contexts):
         print(f"  Q{q['n']:>2} tool={row['tool']['verdict']:<5} ttft={a.get('ttft_s')} total={a.get('total_s')} "
               f"tok/s={a.get('tok_per_s')}", flush=True)
         res["questions"].append(row)
-    out = BENCH / "raw" / (model.replace("/", "__") + ".json")
+    res["conditions"]["end"] = machine_load()
+    res["conditions"]["finished_at"] = time.strftime("%Y-%m-%d %H:%M")
+    print("  conditions:", res["conditions"], flush=True)
+    out = out_dir / (model.replace("/", "__") + ".json")
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(res, ensure_ascii=False, indent=1))
     return res
@@ -215,5 +238,9 @@ if __name__ == "__main__":
     questions = load_questions()
     assert len(questions) == 20, len(questions)
     contexts = json.loads((BENCH / "contexts.json").read_text())
-    for m in sys.argv[1:] or MODELS:
-        run_model(m, questions, contexts)
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", default="raw", help="output folder under bench/")
+    ap.add_argument("models", nargs="*", default=MODELS)
+    a = ap.parse_args()
+    for m in a.models:
+        run_model(m, questions, contexts, BENCH / a.out)

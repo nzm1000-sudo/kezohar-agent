@@ -1,0 +1,114 @@
+{
+ "1": {
+  "A": "zai-org/glm-4.7-flash",
+  "B": "qwen/qwen3.5-35b-a3b",
+  "C": "dictalm-3.0-24b-thinking",
+  "D": "dictalm-3.0-nemotron-12b-instruct",
+  "E": "google/gemma-4-26b-a4b"
+ },
+ "2": {
+  "A": "dictalm-3.0-nemotron-12b-instruct",
+  "B": "google/gemma-4-26b-a4b",
+  "C": "dictalm-3.0-24b-thinking",
+  "D": "zai-org/glm-4.7-flash",
+  "E": "qwen/qwen3.5-35b-a3b"
+ },
+ "5": {
+  "A": "dictalm-3.0-24b-thinking",
+  "B": "google/gemma-4-26b-a4b",
+  "C": "dictalm-3.0-nemotron-12b-instruct",
+  "D": "qwen/qwen3.5-35b-a3b",
+  "E": "zai-org/glm-4.7-flash"
+ },
+ "6": {
+  "A": "dictalm-3.0-nemotron-12b-instruct",
+  "B": "zai-org/glm-4.7-flash",
+  "C": "google/gemma-4-26b-a4b",
+  "D": "qwen/qwen3.5-35b-a3b",
+  "E": "dictalm-3.0-24b-thinking"
+ },
+ "7": {
+  "A": "dictalm-3.0-24b-thinking",
+  "B": "dictalm-3.0-nemotron-12b-instruct",
+  "C": "google/gemma-4-26b-a4b",
+  "D": "zai-org/glm-4.7-flash",
+  "E": "qwen/qwen3.5-35b-a3b"
+ },
+ "8": {
+  "A": "google/gemma-4-26b-a4b",
+  "B": "zai-org/glm-4.7-flash",
+  "C": "dictalm-3.0-nemotron-12b-instruct",
+  "D": "qwen/qwen3.5-35b-a3b",
+  "E": "dictalm-3.0-24b-thinking"
+ },
+ "9": {
+  "A": "dictalm-3.0-nemotron-12b-instruct",
+  "B": "zai-org/glm-4.7-flash",
+  "C": "google/gemma-4-26b-a4b",
+  "D": "dictalm-3.0-24b-thinking",
+  "E": "qwen/qwen3.5-35b-a3b"
+ },
+ "10": {
+  "A": "qwen/qwen3.5-35b-a3b",
+  "B": "dictalm-3.0-nemotron-12b-instruct",
+  "C": "zai-org/glm-4.7-flash",
+  "D": "dictalm-3.0-24b-thinking",
+  "E": "google/gemma-4-26b-a4b"
+ },
+ "11": {
+  "A": "qwen/qwen3.5-35b-a3b",
+  "B": "dictalm-3.0-24b-thinking",
+  "C": "dictalm-3.0-nemotron-12b-instruct",
+  "D": "zai-org/glm-4.7-flash",
+  "E": "google/gemma-4-26b-a4b"
+ },
+ "14": {
+  "A": "qwen/qwen3.5-35b-a3b",
+  "B": "zai-org/glm-4.7-flash",
+  "C": "google/gemma-4-26b-a4b",
+  "D": "dictalm-3.0-24b-thinking",
+  "E": "dictalm-3.0-nemotron-12b-instruct"
+ },
+ "15": {
+  "A": "qwen/qwen3.5-35b-a3b",
+  "B": "dictalm-3.0-nemotron-12b-instruct",
+  "C": "google/gemma-4-26b-a4b",
+  "D": "zai-org/glm-4.7-flash",
+  "E": "dictalm-3.0-24b-thinking"
+ },
+ "16": {
+  "A": "google/gemma-4-26b-a4b",
+  "B": "dictalm-3.0-24b-thinking",
+  "C": "qwen/qwen3.5-35b-a3b",
+  "D": "dictalm-3.0-nemotron-12b-instruct",
+  "E": "zai-org/glm-4.7-flash"
+ },
+ "17": {
+  "A": "google/gemma-4-26b-a4b",
+  "B": "dictalm-3.0-24b-thinking",
+  "C": "qwen/qwen3.5-35b-a3b",
+  "D": "zai-org/glm-4.7-flash",
+  "E": "dictalm-3.0-nemotron-12b-instruct"
+ },
+ "18": {
+  "A": "google/gemma-4-26b-a4b",
+  "B": "dictalm-3.0-nemotron-12b-instruct",
+  "C": "qwen/qwen3.5-35b-a3b",
+  "D": "zai-org/glm-4.7-flash",
+  "E": "dictalm-3.0-24b-thinking"
+ },
+ "19": {
+  "A": "qwen/qwen3.5-35b-a3b",
+  "B": "google/gemma-4-26b-a4b",
+  "C": "zai-org/glm-4.7-flash",
+  "D": "dictalm-3.0-24b-thinking",
+  "E": "dictalm-3.0-nemotron-12b-instruct"
+ },
+ "20": {
+  "A": "google/gemma-4-26b-a4b",
+  "B": "zai-org/glm-4.7-flash",
+  "C": "dictalm-3.0-nemotron-12b-instruct",
+  "D": "dictalm-3.0-24b-thinking",
+  "E": "qwen/qwen3.5-35b-a3b"
+ }
+}

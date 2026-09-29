@@ -1,0 +1,575 @@
+{
+ "model": "dictalm-3.0-24b-thinking",
+ "load": {
+  "load_s": 8.1,
+  "mem_before_gb": 16.0,
+  "mem_after_gb": 29.9,
+  "mem_delta_gb": 13.9,
+  "file_gb": 13.5,
+  "quant": "Q4_K_S"
+ },
+ "questions": [
+  {
+   "n": 1,
+   "q": "מה מברכים על אורז?",
+   "tags": [
+    "src"
+   ],
+   "tool": {
+    "time_s": 13.64,
+    "called": true,
+    "args": {
+     "query": "ברכה על אורז"
+    },
+    "content": "",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": 16.68,
+    "first_sentence_s": 19.1,
+    "total_s": 24.09,
+    "completion_tokens": 263,
+    "reasoning_tokens": 159,
+    "reasoning_chars": 345,
+    "tok_per_s": 35.5,
+    "chars": 200,
+    "sentences": 4,
+    "latin_chars": 0,
+    "cites_given_source": true,
+    "says_no_source": false,
+    "answer": "על אורז מברכים \"בורא פרי האדמה\" (שולחן ערוך, אורח חיים רח:ז). אם בשלו עד שנתמעך או שטחנו ועשו ממנו פת, מברכים \"בורא מיני מזונות\". אם מעורב בתבשיל אחר, מברכים כברכת התבשיל. (שולחן ערוך, אורח חיים רח:ז)"
+   }
+  },
+  {
+   "n": 2,
+   "q": "מותר לאכול דג עם חלב?",
+   "tags": [
+    "src",
+    "both"
+   ],
+   "tool": {
+    "time_s": 5.98,
+    "called": true,
+    "args": {
+     "query": "דג וחלב"
+    },
+    "content": "",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": 12.89,
+    "first_sentence_s": 16.63,
+    "total_s": 16.69,
+    "completion_tokens": 190,
+    "reasoning_tokens": 137,
+    "reasoning_chars": 283,
+    "tok_per_s": 50.0,
+    "chars": 95,
+    "sentences": 1,
+    "latin_chars": 0,
+    "cites_given_source": true,
+    "says_no_source": false,
+    "answer": "מותר לאכול דג עם חלב, שכן אין איסור באכילת דגים בחלב, אף לא מדרבנן (שולחן ערוך, יורה דעה פז:ג)."
+   }
+  },
+  {
+   "n": 3,
+   "q": "מתי שקיעה היום בנתיבות?",
+   "tags": [
+    "fast"
+   ],
+   "tool": {
+    "time_s": 9.91,
+    "called": false,
+    "args": null,
+    "content": "אינני יכול לענות על שאילתות לגבי זמנים אסטרונומיים. אני מתמחה בהלכה, מנהגים, ברכות, זמנים, תפילות, צומות, שבת, חגים ולוח השנה העברי. אם יש לך שאלה בנושא זה, אשמח לעזור.",
+    "verdict": "n/a"
+   }
+  },
+  {
+   "n": 4,
+   "q": "מתי צום גדליה השנה?",
+   "tags": [
+    "fast"
+   ],
+   "tool": {
+    "time_s": 9.01,
+    "called": true,
+    "args": {
+     "query": "צום גדליה 2024"
+    },
+    "content": "",
+    "verdict": "n/a"
+   }
+  },
+  {
+   "n": 5,
+   "q": "שכחתי יעלה ויבוא בשחרית של ראש חודש, מה הדין?",
+   "tags": [
+    "src"
+   ],
+   "tool": {
+    "time_s": 9.44,
+    "called": true,
+    "args": {
+     "query": "שכחתי יעלה ויבוא בשחרית של ראש חודש"
+    },
+    "content": "",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": 10.93,
+    "first_sentence_s": 17.34,
+    "total_s": 22.05,
+    "completion_tokens": 238,
+    "reasoning_tokens": 93,
+    "reasoning_chars": 205,
+    "tok_per_s": 21.4,
+    "chars": 308,
+    "sentences": 3,
+    "latin_chars": 0,
+    "cites_given_source": true,
+    "says_no_source": false,
+    "answer": "אם שכחת \"יעלה ויבא\" בתפילת שחרית של ראש חודש, עליך לחזור (להתחיל) את התפילה, כי בשולחן ערוך (אורח חיים תכב:א) נאמר: \"שחרית ומנחה מתפללים י\"ח ברכות ואומר יעלה ויבא ברצה... בין שר\"ח יום אחד בין שהוא שני ימים מפני שאין מקדשין את החודש בלילה אבל לא אמרו שחרית) ומנחה מחזירין אותו\". (שולחן ערוך, אורח חיים תכב:א)."
+   }
+  },
+  {
+   "n": 6,
+   "q": "עד מתי אפשר לקדש לבנה?",
+   "tags": [
+    "src"
+   ],
+   "tool": {
+    "time_s": 6.7,
+    "called": true,
+    "args": {
+     "query": "קידוש לבנה"
+    },
+    "content": "",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": null,
+    "first_sentence_s": 56.6,
+    "total_s": 56.6,
+    "completion_tokens": 700,
+    "reasoning_tokens": 698,
+    "reasoning_chars": 1205,
+    "tok_per_s": 12.4,
+    "chars": 0,
+    "sentences": 0,
+    "latin_chars": 0,
+    "cites_given_source": false,
+    "says_no_source": false,
+    "answer": ""
+   }
+  },
+  {
+   "n": 7,
+   "q": "מותר לבשל ביום טוב בשביל מחר?",
+   "tags": [
+    "src"
+   ],
+   "tool": {
+    "time_s": 6.82,
+    "called": true,
+    "args": {
+     "query": "מותר לבשל ביום טוב בשביל מחר"
+    },
+    "content": "",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": 14.66,
+    "first_sentence_s": 18.87,
+    "total_s": 18.94,
+    "completion_tokens": 206,
+    "reasoning_tokens": 147,
+    "reasoning_chars": 323,
+    "tok_per_s": 48.1,
+    "chars": 119,
+    "sentences": 1,
+    "latin_chars": 0,
+    "cites_given_source": true,
+    "says_no_source": false,
+    "answer": "לא, אסור לבשל ביום טוב לצורך מחר, אלא אם כן הבישול נעשה לצורך אותו יום (כגון מילוי קדרה) (שולחן ערוך, אורח חיים תקג:א)."
+   }
+  },
+  {
+   "n": 8,
+   "q": "כמה זמן מחכים בין בשר לחלב?",
+   "tags": [
+    "src",
+    "both"
+   ],
+   "tool": {
+    "time_s": 7.31,
+    "called": true,
+    "args": {
+     "query": "זמן המתנה בין אכילת בשר לחלב"
+    },
+    "content": "",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": 15.93,
+    "first_sentence_s": 20.83,
+    "total_s": 25.76,
+    "completion_tokens": 252,
+    "reasoning_tokens": 128,
+    "reasoning_chars": 282,
+    "tok_per_s": 25.6,
+    "chars": 246,
+    "sentences": 2,
+    "latin_chars": 0,
+    "cites_given_source": true,
+    "says_no_source": false,
+    "answer": "לפי השולחן ערוך, יורה דעה פט:א, צריך להמתין **שש שעות** בין אכילת בשר (אפילו של חיה ועוף) לאכילת גבינה (בשר-חלב). עם זאת, ישנם מנהגים שונים, כגון המתנה של **שעה אחת** לאחר ברכת המזון, אך המנהג הנכון הוא להמתין שש שעות (שולחן ערוך, יורה דעה פט:א)."
+   }
+  },
+  {
+   "n": 9,
+   "q": "אכלתי ושכחתי לברך ברכת המזון, עד מתי אפשר לברך?",
+   "tags": [
+    "src"
+   ],
+   "tool": {
+    "time_s": 8.99,
+    "called": true,
+    "args": {
+     "query": "אכלתי ושכחתי לברך ברכת המזון, עד מתי אפשר לברך"
+    },
+    "content": "",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": 8.34,
+    "first_sentence_s": 12.07,
+    "total_s": 12.13,
+    "completion_tokens": 126,
+    "reasoning_tokens": 75,
+    "reasoning_chars": 160,
+    "tok_per_s": 33.3,
+    "chars": 89,
+    "sentences": 1,
+    "latin_chars": 0,
+    "cites_given_source": true,
+    "says_no_source": false,
+    "answer": "עד שיתעכל המזון שבמעיו, כלומר עד שתחוש רעב מחמת אותה אכילה (שולחן ערוך, אורח חיים קפד:ה)."
+   }
+  },
+  {
+   "n": 10,
+   "q": "אומרים הלל בברכה בראש חודש?",
+   "tags": [
+    "src",
+    "both"
+   ],
+   "tool": {
+    "time_s": 7.68,
+    "called": true,
+    "args": {
+     "query": "הלל בראש חודש"
+    },
+    "content": "",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": 16.84,
+    "first_sentence_s": 17.41,
+    "total_s": 18.95,
+    "completion_tokens": 194,
+    "reasoning_tokens": 166,
+    "reasoning_chars": 391,
+    "tok_per_s": 92.1,
+    "chars": 46,
+    "sentences": 2,
+    "latin_chars": 0,
+    "cites_given_source": true,
+    "says_no_source": true,
+    "answer": "אין לי מקור לכך. (שולחן ערוך, אורח חיים תכב:ב)"
+   }
+  },
+  {
+   "n": 11,
+   "q": "מה סדר הדלקת נרות חנוכה?",
+   "tags": [
+    "src",
+    "both"
+   ],
+   "tool": {
+    "time_s": 8.2,
+    "called": true,
+    "args": {
+     "query": "סדר הדלקת נרות חנוכה"
+    },
+    "content": "",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": 15.03,
+    "first_sentence_s": 19.52,
+    "total_s": 28.83,
+    "completion_tokens": 312,
+    "reasoning_tokens": 139,
+    "reasoning_chars": 294,
+    "tok_per_s": 22.6,
+    "chars": 334,
+    "sentences": 3,
+    "latin_chars": 0,
+    "cites_given_source": true,
+    "says_no_source": false,
+    "answer": "סדר הדלקת נרות חנוכה הוא: בליל ראשון מברך שלוש ברכות - להדליק, שעשה נסים ושהחיינו (שולחן ערוך, אורח חיים תרעו:א). \nהמדליק מתחיל בנר הימני ביותר, ובלילה הבא מוסיף נר משמאלו, מברך על הנוסף (תרעו:ה) ומפנה לימין. \nבכל לילה מוסיפים נר נוסף, מברכים עליו, ואז פונים לצד ימין, כך שמברכים תמיד על הנס החדש שנוסף (שולחן ערוך, אורח חיים תרעו:ה)."
+   }
+  },
+  {
+   "n": 12,
+   "q": "מתי סוף זמן קריאת שמע מחר?",
+   "tags": [
+    "fast"
+   ],
+   "tool": {
+    "time_s": 15.56,
+    "called": true,
+    "args": {
+     "query": "סוף זמן קריאת שמע"
+    },
+    "content": "",
+    "verdict": "n/a"
+   }
+  },
+  {
+   "n": 13,
+   "q": "איזו פרשה השבוע?",
+   "tags": [
+    "fast"
+   ],
+   "tool": {
+    "time_s": 10.25,
+    "called": true,
+    "args": {
+     "query": "פרשת השבוע"
+    },
+    "content": "",
+    "verdict": "n/a"
+   }
+  },
+  {
+   "n": 14,
+   "q": "מה מברכים על שוקולד?",
+   "tags": [
+    "src"
+   ],
+   "tool": {
+    "time_s": 6.3,
+    "called": true,
+    "args": {
+     "query": "ברכה על שוקולד"
+    },
+    "content": "",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": 13.46,
+    "first_sentence_s": 14.04,
+    "total_s": 14.12,
+    "completion_tokens": 108,
+    "reasoning_tokens": 97,
+    "reasoning_chars": 215,
+    "tok_per_s": 164.9,
+    "chars": 16,
+    "sentences": 1,
+    "latin_chars": 0,
+    "cites_given_source": false,
+    "says_no_source": true,
+    "answer": "אין לי מקור לכך."
+   }
+  },
+  {
+   "n": 15,
+   "q": "מותר לטלטל טלפון בשבת?",
+   "tags": [
+    "src"
+   ],
+   "tool": {
+    "time_s": 6.21,
+    "called": true,
+    "args": {
+     "query": "טלפון שבת"
+    },
+    "content": "",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": 22.6,
+    "first_sentence_s": 25.87,
+    "total_s": 25.93,
+    "completion_tokens": 247,
+    "reasoning_tokens": 204,
+    "reasoning_chars": 451,
+    "tok_per_s": 74.2,
+    "chars": 78,
+    "sentences": 1,
+    "latin_chars": 0,
+    "cites_given_source": true,
+    "says_no_source": false,
+    "answer": "מותר לטלטל טלפון בשבת, אך רק לצורך גופו או מקומו (שולחן ערוך, אורח חיים שח:ג)."
+   }
+  },
+  {
+   "n": 16,
+   "q": "שכחתי לספור ספירת העומר יום אחד, מה עושים?",
+   "tags": [
+    "src",
+    "both"
+   ],
+   "tool": {
+    "time_s": 8.74,
+    "called": true,
+    "args": {
+     "query": "שכחתי לספור ספירת העומר יום אחד, מה עושים"
+    },
+    "content": "",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": 8.41,
+    "first_sentence_s": 11.56,
+    "total_s": 14.47,
+    "completion_tokens": 163,
+    "reasoning_tokens": 85,
+    "reasoning_chars": 189,
+    "tok_per_s": 26.9,
+    "chars": 163,
+    "sentences": 2,
+    "latin_chars": 0,
+    "cites_given_source": true,
+    "says_no_source": false,
+    "answer": "אם שכחת לספור ספירת העומר, סופר בשאר הימים **בלא** ברכה (שולחן ערוך, אורח חיים תפט:ח). אם אתה מסופק (כלומר, לא בטוח) אם דילגת יום אחד, סופר בשאר הימים **עם** ברכה."
+   }
+  },
+  {
+   "n": 17,
+   "q": "מה מזג האוויר מחר?",
+   "tags": [
+    "refuse"
+   ],
+   "tool": {
+    "time_s": 10.16,
+    "called": false,
+    "args": null,
+    "content": "אני מצטער, אבל איני יכול לענות על שאילתות לגבי מזג האוויר. אם יש לך שאלות הקשורות להלכה, מנהגים, ברכות, זמנים, תפילות, צומות, שבת, חגים או לוח השנה העברי, אשמח לסייע.",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": 5.82,
+    "first_sentence_s": 6.51,
+    "total_s": 6.58,
+    "completion_tokens": 76,
+    "reasoning_tokens": 65,
+    "reasoning_chars": 144,
+    "tok_per_s": 99.7,
+    "chars": 16,
+    "sentences": 1,
+    "latin_chars": 0,
+    "cites_given_source": false,
+    "says_no_source": true,
+    "answer": "אין לי מקור לכך."
+   }
+  },
+  {
+   "n": 18,
+   "q": "תכתוב לי שיר אהבה.",
+   "tags": [
+    "refuse"
+   ],
+   "tool": {
+    "time_s": 8.4,
+    "called": false,
+    "args": null,
+    "content": "אני מצטער, אבל איני יכול לעזור עם זה. אני כאן כדי לענות על שאלות הלכתיות, מנהגים, ברכות, זמנים, תפילות, צומות, שבת, חגים ולוח השנה העברי. אם יש לך שאלה בנושא, אשמח לעזור.",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": 2.29,
+    "first_sentence_s": 3.51,
+    "total_s": 3.53,
+    "completion_tokens": 40,
+    "reasoning_tokens": 20,
+    "reasoning_chars": 43,
+    "tok_per_s": 32.1,
+    "chars": 37,
+    "sentences": 1,
+    "latin_chars": 0,
+    "cites_given_source": false,
+    "says_no_source": false,
+    "answer": "אני מצטער, אבל איני יכול לעזור עם זה."
+   }
+  },
+  {
+   "n": 19,
+   "q": "מה דעת הרב קוק על מיקרוגל בשבת?",
+   "tags": [
+    "nosrc"
+   ],
+   "tool": {
+    "time_s": 7.83,
+    "called": true,
+    "args": {
+     "query": "רב קוק מיקרוגל שבת"
+    },
+    "content": "",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": 7.59,
+    "first_sentence_s": 8.12,
+    "total_s": 8.19,
+    "completion_tokens": 95,
+    "reasoning_tokens": 82,
+    "reasoning_chars": 196,
+    "tok_per_s": 157.5,
+    "chars": 16,
+    "sentences": 1,
+    "latin_chars": 0,
+    "cites_given_source": false,
+    "says_no_source": true,
+    "answer": "אין לי מקור לכך."
+   }
+  },
+  {
+   "n": 20,
+   "q": "מתי אומרים תפילת הדרך?",
+   "tags": [
+    "src"
+   ],
+   "tool": {
+    "time_s": 7.99,
+    "called": true,
+    "args": {
+     "query": "תפילת הדרך"
+    },
+    "content": "",
+    "verdict": "ok"
+   },
+   "answer": {
+    "ttft_s": 25.26,
+    "first_sentence_s": 28.11,
+    "total_s": 33.84,
+    "completion_tokens": 397,
+    "reasoning_tokens": 285,
+    "reasoning_chars": 643,
+    "tok_per_s": 46.3,
+    "chars": 238,
+    "sentences": 2,
+    "latin_chars": 0,
+    "cites_given_source": true,
+    "says_no_source": false,
+    "answer": "תפילת הדרך אומרים לפני היציאה לדרך, ובלבד שיש לפחות 4 ק\"מ (פרסה) לנסוע. עדיף לאומרה בתחילת הדרך, אך ניתן לאומרה כל עוד הוא בדרך, ובלבד שלא הגיע תוך פרסה הסמוכה לעיר שבה הוא מתכוון ללון, שאז יאמר אותה בלא ברכה (שולחן ערוך, אורח חיים קי:ז)."
+   }
+  }
+ ],
+ "conditions": {
+  "note": "under load — measured 2026-09-29 during a busy session: Xcode (~100% CPU) and DeviceFS (~180–290% CPU) throughout; a `node embed.mjs` job from another project (~420–520% CPU) was seen from the Qwen/GLM runs on, and Mac swap reached 15 of 16 GB. Exact load per model was not recorded for this run."
+ }
+}

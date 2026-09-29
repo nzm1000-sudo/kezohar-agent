@@ -564,5 +564,8 @@
     "answer": "תפילת הדרך אומרים אחר שהחזיק בדרך, כלומר לאחר שיצא מהעיר. יש לאומרה רק אם עומד ללכת פרסה (כ-1.8 ק\"מ), אך פחות מפרסה אין צורך לחתום בברכה. לכתחילה יאמר אותה בפרסה הראשונה של הדרך. אם שכח, יכול לומר אותה כל זמן שהוא בדרך, בתנאי שלא הגיע תוך פרסה הסמוכה לעיר שרוצה ללון בה; משם ואילך אומרים את התפילה ללא ברכה (שולחן ערוך, אורח חיים קי:ז)."
    }
   }
- ]
+ ],
+ "conditions": {
+  "note": "under load — measured 2026-09-29 during a busy session: Xcode (~100% CPU) and DeviceFS (~180–290% CPU) throughout; a `node embed.mjs` job from another project (~420–520% CPU) was seen from the Qwen/GLM runs on, and Mac swap reached 15 of 16 GB. Exact load per model was not recorded for this run."
+ }
 }
