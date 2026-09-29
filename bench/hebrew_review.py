@@ -66,35 +66,74 @@ def build(cfg):
     print(f"wrote {sheet.name} ({len(key)} questions, {len(runs)} models) and {keyfile.name}")
 
 
-def read_scores(cfg):
+SCORE_RE = re.compile(r"(?<![\d.,])([1-5](?:[.,]5)?)(?![\d.,])")  # 4, 3.5, 3,5
+
+
+def read_entries(cfg):
+    """[(question, model, score or None, note)] for every answer the reviewer filled in.
+
+    The score and any free-text note (e.g. "הבין לא נכון") may be written anywhere inside an
+    answer's section (after the score label, on the lines below it, or even above it), as long
+    as it is not inside the quoted answer itself (lines starting with ">").
+    """
     sheet, keyfile = paths(cfg)
     if not (sheet.exists() and keyfile.exists()):
-        return {}
+        return []
     key = json.loads(keyfile.read_text())
-    scores, q, letter = {}, None, None
+    entries, q, letter, filled = [], None, None, None
+
+    def flush():
+        text = " ".join(filled).strip() if filled is not None else ""
+        if text:
+            m = SCORE_RE.search(text)
+            s = float(m[1].replace(",", ".")) if m else None
+            note = (text[:m.start()] + text[m.end():]).strip(" -–:,") if m else text
+            entries.append((q, key[q][letter], s, note))
+
     for line in sheet.read_text().splitlines():
-        if m := re.match(r"## שאלה (\d+):", line):
-            q = m[1]
-        elif m := re.match(r"### ([A-J])\s*$", line):
-            letter = m[1]
-        elif SCORE_LINE in line and q and letter:
-            if d := re.search(r"[1-5]", line.split(SCORE_LINE, 1)[1]):
-                scores.setdefault(key[q][letter], []).append(int(d[0]))
-    return scores
+        if (m := re.match(r"## שאלה (\d+):", line)) or (n := re.match(r"### ([A-J])\s*$", line)) or line == "---":
+            flush()
+            filled = None
+            if m:
+                q = m[1]
+            elif line != "---":
+                letter = n[1]
+                filled = []
+        elif filled is not None and not line.lstrip().startswith(">"):
+            filled.append(line.replace(SCORE_LINE, "").replace("**", ""))
+    flush()
+    return entries
+
+
+MISUNDERSTOOD = re.compile(r"לא הבין|הבין לא נכון|לא נכון")
 
 
 def score():
-    found = False
-    for cfg in SHEETS.values():
-        scores = read_scores(cfg)
-        if not scores:
-            continue
-        found = True
-        print(f"\n{paths(cfg)[0].name}:")
-        for model, s in sorted(scores.items(), key=lambda kv: -statistics.mean(kv[1])):
-            print(f"  {statistics.mean(s):.2f}  ({len(s)} ציונים)  {model}")
-    if not found:
+    per_sheet = {n: read_entries(cfg) for n, cfg in SHEETS.items()}
+    per_sheet = {n: e for n, e in per_sheet.items() if e}
+    if not per_sheet:
         print("לא נמצאו ציונים באף קובץ דירוג.")
+        return
+    models = sorted({e[1] for es in per_sheet.values() for e in es})
+    avg = lambda xs: f"{statistics.mean(xs):.2f} ({len(xs)})" if xs else "—"
+    rows = []
+    for mdl in models:
+        cols = [avg([s for _, m, s, _ in es if m == mdl and s is not None]) for es in per_sheet.values()]
+        allv = [s for es in per_sheet.values() for _, m, s, _ in es if m == mdl and s is not None]
+        wrong = sorted({int(q) for es in per_sheet.values() for q, m, _, note in es
+                        if m == mdl and MISUNDERSTOOD.search(note)})
+        rows.append((statistics.mean(allv) if allv else 0, mdl, cols, avg(allv), wrong))
+    names = {"full": "ארוך", "short": "קצר"}
+    print("| מודל | " + " | ".join(f"ממוצע {names[n]}" for n in per_sheet) + " | ממוצע כולל | 'הבין לא נכון' בשאלות |")
+    print("|---|" + "---|" * len(per_sheet) + "---|---|")
+    for _, mdl, cols, total, wrong in sorted(rows, reverse=True):
+        print(f"| {mdl} | " + " | ".join(cols) + f" | {total} | {', '.join(map(str, wrong)) or '—'} |")
+    print("\n(בסוגריים: מספר הציונים)")
+    notes = [(n, q, m, s, note) for n, es in per_sheet.items() for q, m, s, note in es if note]
+    if notes:
+        print("\nהערות שכתבת:")
+        for n, q, m, s, note in notes:
+            print(f"  [{names[n]}] שאלה {q} — {m}: {note}" + (f" (ציון {s:g})" if s is not None else ""))
 
 
 if __name__ == "__main__":
