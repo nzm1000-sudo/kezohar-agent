@@ -191,7 +191,7 @@ def verify_source_id_answer(answer, retrieved):
             return {'verdict': 'invalid_citation', 'support': 'source id or stored locator absent'}
         quote = item['quote']
         if quote != quote.strip() or not complete_quote(quote,source):
-            return {'verdict': 'unsupported', 'support': 'quote not present in cited excerpt'}
+            return {'verdict': 'unsupported', 'support': 'incomplete-quote-unit' if quote and quote in source.get('text','') else 'quote-text-mismatch'}
         evidence.append({'source_id': item['source_id'], 'quote': quote})
         rendered.append('״' + quote + '״ (' + source['reference'] + ').')
     return {'verdict': 'ok', 'support': 'source-selection-whole-unit-reading' if selection else 'exact-extract-only', 'evidence': evidence,

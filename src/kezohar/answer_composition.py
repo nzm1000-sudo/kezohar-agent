@@ -40,8 +40,13 @@ def verification_layers(verification, sources):
 
 
 class VerifiedAnswerComposer:
-    def compose(self, result, reasoning=None):
+    def compose(self, result, reasoning=None, question=None, rule_answers=None):
         result = dict(result)
+        # Rebuild derived case data; never trust an old presentation payload.
+        result.pop('known_rule_context',None)
+        result.pop('answer_status',None)
+        if result.get('clarifications'):
+            result['clarifications']=[c for c in result['clarifications'] if c.get('kind')!='source-condition']
         verification = result.get('verification', {})
         layers = verification_layers(verification,result.get('sources',[]))
         if result.get('mode')=='web-sources-only' and verification.get('verdict')!='ok':
@@ -57,7 +62,7 @@ class VerifiedAnswerComposer:
         if verification.get('verdict')!='ok':
             # Diagnostics are public API data too: do not leak a revoked quote,
             # a previously supported statement or a rejected model assertion.
-            verification={k:v for k,v in verification.items() if k not in ('evidence','claims','rendered_answer')}
+            verification={k:v for k,v in verification.items() if k not in ('evidence','claims','rendered_answer','derived_rules')}
             result['verification']=verification
         sources = {s['source_id']: s for s in result.get('sources', [])}
         citations = []
@@ -113,6 +118,32 @@ class VerifiedAnswerComposer:
                     result['answer']='\n'.join('ברכה ראשונה לפי הטבלה עבור ״'+r['food']+'״: ״'+r['first_column']+'״ ('+r['reference']+').' for r in tables)
                 result['answer']+='\nהעמודה השנייה מסווגת ברכה אחרונה בלבד; אין כאן קביעה שחייבים בה לאחר כל אכילה. תנאי החיוב במקרה שלך לא אומתו.'
                 result['structured_answer']['short_answer']=result['answer']
+        # Only validated complete evidence enters this server-authored language
+        # layer. It approves no free model paraphrase or case ruling.
+        from .source_rules import context, validate_answers
+        from .answer_status import describe
+        answers=validate_answers(rule_answers)
+        if (question is not None and result.get('verdict')=='ok' and snapshot_valid(verification,result.get('sources',[]))
+                and not result['structured_answer'].get('table_readings') and not claims):
+            rule_context=context(verification,result.get('sources',[]),question,answers)
+            result['known_rule_context']=rule_context
+            if rule_context['rules']:
+                result['structured_answer']['explanations']=rule_context['rules']
+                result['answer']='המקור המאומת, בשינויי לשון מוגבלים בלבד:\n'+'\n'.join(
+                    r['text']+' ('+r['reference']+').' for r in rule_context['rules'])
+                result['structured_answer']['explanation']='הסבר שנוצר בשרת מתוך יחידת המקור המלאה; אין אימות סמנטי כללי או הכרעה במקרה.'
+                missing=[c for c in rule_context['conditions'] if c['status']=='missing']
+                if missing:
+                    result.update(verdict='rule_needs_clarification',mode='rule-with-clarification',clarifications=missing)
+                    result['answer']+='\nחסר פרט להחלת הכלל: '+' '.join(c['question'] for c in missing)
+                elif rule_context['conditions']:
+                    result['answer']+='\nהפרטים שנמסרו מתועדים בלבד; לא אומתה הכרעה במקרה. תנאים נוספים נשמרו בטקסט המקור.'
+                result['structured_answer']['short_answer']=result['answer']
+        status=describe(result)
+        result['answer_status']=status
+        if result.get('verdict') in ('no_source','unsupported','invalid_citation','irrelevant','review_required','format_error'):
+            result['answer']=status['message']
+            result['structured_answer']['short_answer']=result['answer']
         result['human_review'] = 'required'
         result['halachic_verified'] = False
         return result

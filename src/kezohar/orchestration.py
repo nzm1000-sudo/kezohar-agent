@@ -15,6 +15,8 @@ class HalachicOrchestrator:
         self.composer = VerifiedAnswerComposer()
 
     def answer(self, question, circumstances=None, research=False, **kwargs):
+        from .source_rules import validate_answers
+        rule_answers=validate_answers(kwargs.pop('rule_answers',None))
         budget = kwargs.pop('request_budget', None)
         if budget is None:
             budget = RequestBudget(seconds=45.0 if research else 5.0)
@@ -85,7 +87,7 @@ class HalachicOrchestrator:
             result.update(answer='מצב חיפוש: הבקשה הגיעה למגבלת הזמן, הקריאות או ההקשר; אין תשובה מאומתת.',
                           verdict='budget_exhausted',mode='sources-only')
         trace += ['independent-source-verifier', 'verified-answer-composer']
-        result = self.composer.compose(result, reasoning)
+        result = self.composer.compose(result, reasoning, question=question, rule_answers=rule_answers)
         if result.get('verification',{}).get('verdict')!='ok':
             reasoning=dict(reasoning,supported_statement_units=[],distinction_candidates=[],difference_candidates=[])
         graph=getattr(self.agent,'source_graph',None)

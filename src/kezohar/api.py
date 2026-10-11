@@ -82,6 +82,8 @@ def _validate_body(body, search=False):
         from .question_understanding import analyze
         analyze(q,body.get('circumstances'))
         opts['circumstances']=body.get('circumstances')
+        from .source_rules import validate_answers
+        opts['rule_answers']=validate_answers(body.get('rule_answers'))
         for flag in ('stream','research'):
             if type(body.get(flag,False)) is not bool:raise ValueError('invalid '+flag)
             opts[flag]=body.get(flag,False)
@@ -113,8 +115,8 @@ def _rate_ok(ip, limit=30, window=60):
     _hits[ip] = arr
     return True
 
-def _ask_result(question, top_k=5, lat=None, lon=None, location=None, research=False, circumstances=None):
-    result=get_agent().converse(question,circumstances=circumstances,research=research,
+def _ask_result(question, top_k=5, lat=None, lon=None, location=None, research=False, circumstances=None, rule_answers=None):
+    result=get_agent().converse(question,circumstances=circumstances,rule_answers=rule_answers,research=research,
                                top_k=top_k,lat=lat,lon=lon,location=location)
     return dict(result,sources=public_sources(result.get('sources',[])))
 
@@ -154,13 +156,15 @@ def _sse_events(result):
         'explanation':result.get('explanation'), 'differences':result.get('differences',[]),
         'verification_layers':result.get('verification_layers'),
         'structured_answer':result.get('structured_answer'),
+        'answer_status':result.get('answer_status'),
+        'known_rule_context':result.get('known_rule_context'),
         'orchestration':result.get('orchestration'),
         'source_relationships':result.get('source_relationships',[]),
         'verification':result.get('verification'), 'search_status':result.get('search_status',{'partial':False,'errors':[]}),
         'error':result.get('error'),
         'human_review':result.get('human_review'),'halachic_verified':result.get('halachic_verified')}, ensure_ascii=False) + "\n\n"
 
-def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumstances=None):
+def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumstances=None, rule_answers=None):
     """Yield source event before starting inference; retrieved passages are reused."""
     ag = get_agent()
     from .request_budget import RequestBudget
@@ -168,7 +172,7 @@ def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumst
     from .question_understanding import analyze, effective_question
     analysis=analyze(question,circumstances)
     if analysis['requires_clarification'] and not fastpath.is_out_of_scope(question):
-        yield from _sse_events(ag.converse(question,circumstances=circumstances,request_budget=budget))
+        yield from _sse_events(ag.converse(question,circumstances=circumstances,rule_answers=rule_answers,request_budget=budget))
         return
     fast = fastpath.is_out_of_scope(question) or fastpath.handle(question,
         lat=lat or fastpath.DEFAULT_LAT, lon=lon or fastpath.DEFAULT_LON,
@@ -177,11 +181,11 @@ def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumst
     from .request_budget import BudgetExceeded
     try:sources = [] if fast else ag.search_only(effective,top_k=top_k,request_budget=budget)
     except BudgetExceeded:
-        yield from _sse_events(ag.converse(question,circumstances=circumstances,request_budget=budget))
+        yield from _sse_events(ag.converse(question,circumstances=circumstances,rule_answers=rule_answers,request_budget=budget))
         return
     yield 'event: sources\ndata: '+json.dumps({'sources':public_sources(sources),
         'search_status':getattr(sources,'status',{'partial':False,'errors':[]})},ensure_ascii=False)+'\n\n'
-    result=ag.converse(question,circumstances=circumstances,top_k=top_k,lat=lat,lon=lon,location=location,retrieved_sources=sources,request_budget=budget)
+    result=ag.converse(question,circumstances=circumstances,rule_answers=rule_answers,top_k=top_k,lat=lat,lon=lon,location=location,retrieved_sources=sources,request_budget=budget)
     events=iter(_sse_events(result))
     next(events)  # Source event was already delivered.
     yield from events

@@ -28,7 +28,8 @@ def load_catalog():
     return catalog_data().get('rules', [])
 
 def catalog_revision():
-    return hashlib.sha256(json.dumps(catalog_data(),sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+    from .source_rules import revision
+    return hashlib.sha256(json.dumps({'catalog':catalog_data(),'source_style':revision()},sort_keys=True,ensure_ascii=False).encode()).hexdigest()
 
 
 def units_for(question, source):

@@ -443,3 +443,110 @@ def test_condition_in_table_last_column_is_not_lost_in_first_column_projection()
     assert v['verdict']=='ok'
     r=VerifiedAnswerComposer().compose({'answer':v['rendered_answer'],'verification':v,'sources':[s]})
     assert s['text'] in r['answer'] and r['structured_answer']['table_readings'][0]['has_conditions']
+
+# No actual law or production corpus in these cases.
+RULE_TEXT='בדיקת סמל אלפא: כל זמן שאינו אדום מחמת דגל הבדיקה ומשעה שהשתנה הדגל אין להציג אלפא. תנאי נוסף: רק בבדיקת יחידה.'
+
+def rule_result(s=None,q='בדיקת סמל אלפא',answers=None):
+    s=s or source(text=RULE_TEXT)
+    v=ExtractiveSourceVerifier().verify(q,json.dumps({'selected_sources':['s1']}),[s])
+    return VerifiedAnswerComposer().compose({'answer':v.get('rendered_answer',''),'verdict':v['verdict'],
+        'verification':v,'sources':[s]},question=q,rule_answers=answers)
+
+def test_rule_shown_before_case_detail_and_whole_conditions_retained():
+    r=rule_result()
+    assert r['verdict']=='rule_needs_clarification' and r['verification']['verdict']=='ok'
+    assert 'תנאי נוסף' in r['answer'] and 'משעה' in r['answer']
+    assert r['structured_answer']['quotations'][0]['text']==RULE_TEXT
+    assert r['answer_status']['category']=='rule_needs_details'
+    assert not r['known_rule_context']['case_ruling_verified']
+
+@pytest.mark.parametrize('value',['yes','no','unknown'])
+def test_reported_source_condition_is_not_a_ruling_or_infinite_loop(value):
+    first=rule_result();key=first['clarifications'][0]['condition_id']
+    r=rule_result(answers={key:value})
+    assert not r.get('clarifications') and not r['halachic_verified']
+    assert r['known_rule_context']['conditions'][0]['reported_value']==value
+    assert 'תנאי נוסף' in r['answer']
+
+@pytest.mark.parametrize('change',[{'text':RULE_TEXT+' שינוי'}, {'version':'edition-two'}, {'reference':'בדיקה ב:א'}])
+def test_source_bound_answer_never_reused_after_change(change):
+    key=rule_result()['clarifications'][0]['condition_id']
+    s=source(text=RULE_TEXT);s.update(change)
+    r=rule_result(s,answers={key:'no'})
+    assert r['known_rule_context']['stale_answers'] and r.get('clarifications')
+    assert r['known_rule_context']['conditions'][0]['reported_value'] is None
+
+def test_source_condition_cannot_be_reused_for_different_question_or_other_session():
+    key=rule_result()['clarifications'][0]['condition_id']
+    assert rule_result(q='בדיקת סמל אלפא נוספת',answers={key:'no'})['known_rule_context']['stale_answers']
+    assert rule_result()['known_rule_context']['conditions'][0]['reported_value'] is None
+
+@pytest.mark.parametrize('bad',[[], {'bad':'yes'}, {'a'*32:'maybe'}, {'a'*32:True}])
+def test_rule_answers_validated_before_inference(bad):
+    a=agent()
+    with pytest.raises(ValueError):a.converse(Q,rule_answers=bad)
+    assert not a.answer_model.calls
+
+@pytest.mark.parametrize('change',[{'metadata':{'rag_answers_allowed':False}},{'version':'edition-two'},{'text':RULE_TEXT+' changed'}])
+def test_changed_source_cannot_enter_language_layer(change):
+    s=source(text=RULE_TEXT)
+    v=ExtractiveSourceVerifier().verify('בדיקת סמל אלפא',json.dumps({'selected_sources':['s1']}),[s])
+    s.update(change)
+    r=VerifiedAnswerComposer().compose({'verdict':'ok','verification':v,'sources':[s]},question='בדיקת סמל אלפא')
+    assert not r.get('known_rule_context') and not r['structured_answer']['explanations']
+
+@pytest.mark.parametrize('text,code',[(RULE_TEXT.split(' ומשעה')[0],'incomplete-quote-unit'),('ניסוח שלא קיים','quote-text-mismatch')])
+def test_quote_failure_explains_exact_reason(text,code):
+    s=source(text=RULE_TEXT)
+    # Legacy protocol also remains fail-closed; JSON gives exact mismatch code.
+    v=ExtractiveSourceVerifier().verify('בדיקת סמל אלפא',json.dumps({'quotes':[{'source_id':'s1','quote':text}]}),[s])
+    assert v['verdict']=='unsupported' and v['support']==code
+    r=VerifiedAnswerComposer().compose({'verdict':'unsupported','verification':v,'sources':[s]})
+    assert r['answer_status']['category']=='quotation_mismatch' and 'אין לי מקור לכך' not in r['answer']
+
+def test_rule_status_and_context_survive_sse():
+    r=rule_result();done=list(events(''.join(api._sse_events(r))))[-1]
+    assert done[1]['answer_status']==r['answer_status']
+    assert done[1]['known_rule_context']==r['known_rule_context']
+
+@pytest.mark.parametrize('verdict,sources,category',[
+    ('no_source',[],'no_relevant_source'),('no_source',[source()],'insufficient_evidence'),
+    ('unsupported',[],'unsupported_claim'),('invalid_citation',[],'source_identity_or_permission'),
+    ('sources-only',[],'technical_error'),('irrelevant',[source()],'no_relevant_source')])
+def test_failure_categories_are_distinct(verdict,sources,category):
+    r=VerifiedAnswerComposer().compose({'verdict':verdict,'sources':sources})
+    assert r['answer_status']['category']==category and not r['halachic_verified']
+
+def test_old_case_payload_is_removed_when_permission_changes():
+    r=rule_result();r['sources'][0]['metadata']['rag_answers_allowed']=False
+    new=VerifiedAnswerComposer().compose(r,question='בדיקת סמל אלפא')
+    assert not new.get('known_rule_context') and not new.get('clarifications')
+    assert not new['structured_answer']['quotations']
+
+def test_budget_stop_never_replaced_by_source_explanation():
+    r=rule_result();r.update(verdict='budget_exhausted',answer='מגבלת זמן')
+    new=VerifiedAnswerComposer().compose(r,question='בדיקת סמל אלפא')
+    assert new['answer']=='מגבלת זמן' and not new.get('known_rule_context')
+
+def test_style_policy_update_invalidates_existing_proof(monkeypatch):
+    from kezohar import source_rules
+    r=rule_result()
+    monkeypatch.setattr(source_rules,'STYLE',source_rules.STYLE+(('אלפא','ביתא'),))
+    new=VerifiedAnswerComposer().compose(r,question='בדיקת סמל אלפא')
+    assert new['verdict']=='invalid_citation' and not new.get('known_rule_context')
+
+def test_source_condition_roundtrip_normal_http_and_sse(monkeypatch):
+    a=agent([source(text=RULE_TEXT)],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    monkeypatch.setattr(api,'get_agent',lambda:a)
+    q='בדיקת סמל אלפא'
+    normal=request('/ask',{'question':q}).json()
+    streamed=events(request('/ask',{'question':q,'stream':True}).text)
+    done=streamed[-1][1]
+    assert done['answer_status']==normal['answer_status']
+    assert done['known_rule_context']==normal['known_rule_context']
+    key=normal['clarifications'][0]['condition_id']
+    follow=request('/ask',{'question':q,'rule_answers':{key:'unknown'}}).json()
+    assert not follow.get('clarifications') and not follow['halachic_verified']
+    bad=request('/ask',{'question':q,'stream':True,'rule_answers':{'bad':'yes'}})
+    assert bad.status_code==400 and 'event: answer' not in bad.text

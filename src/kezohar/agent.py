@@ -184,7 +184,8 @@ class Agent:
             stopped=getattr(getattr(generator,'budget',None),'reason',None)
             res = {"answer": evidence.INSUFFICIENT if evidence.shared_oil_waiting(q) else "מצב חיפוש (המודל אינו זמין): אלו המקורות הקרובים ביותר.",
                    "sources": retrieved, "verdict": "sources-only",
-                   "mode": "sources-only", "elapsed_s": round(time.time() - t0, 3)}
+                   "mode": "sources-only", "elapsed_s": round(time.time() - t0, 3),
+                   "technical_error":{"code":"local_model_unavailable","type":type(exc).__name__}}
             if stopped:
                 res.update(answer='מצב חיפוש: הבקשה הגיעה למגבלת הזמן, הקריאות או ההקשר; אין תשובה מאומתת.',
                            verdict='budget_exhausted')
