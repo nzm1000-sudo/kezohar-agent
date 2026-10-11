@@ -1,0 +1,48 @@
+"""Source corpus and its retrieval engines; no answer-model configuration here."""
+from .ingest import load_store
+from .hybrid import HybridSearch
+from .models import Source
+
+
+class KnowledgeBase:
+    def __init__(self, sources=None, store_path=None, search_engine=None):
+        if search_engine is not None:
+            self.search = search_engine
+            return
+        if sources is None:
+            unique = {}
+            paths = store_path if isinstance(store_path, (list, tuple)) else [store_path]
+            for path in paths:
+                if path:
+                    for source in load_store(path):
+                        unique[source.source_id] = source
+            sources = list(unique.values())
+        self.search = HybridSearch(sources)
+
+    def status(self):
+        primary = getattr(self.search, 'primary', self.search)
+        vector = getattr(primary, 'vector', None)
+        count = getattr(self.search, 'source_count', None)
+        if count is None:
+            count = len(primary.bm25.docs) if hasattr(primary, 'bm25') else None
+        state = getattr(primary, 'vector_status', 'external')
+        revision = getattr(vector, 'revision', None)
+        if isinstance(revision, tuple) and len(revision) == 2 and revision[0] != revision[1]:
+            state = 'reindex-required'
+        spec = getattr(vector, 'index_spec', None)
+        return {'source_count': count, 'vector_status': state,
+                'vector_index': spec.manifest() if spec is not None else None}
+
+    def upsert_verified(self, sources):
+        """Update the small verified-source corpus, preserving app disk backends."""
+        primary = getattr(self.search, 'primary', self.search)
+        merged = {s.source_id: s for s in primary.bm25.docs}
+        merged.update({s['source_id']: Source.from_dict(s) for s in sources})
+        # Preserve embedding provider/disablement; no dependency on answer settings.
+        vector = primary.vector.empty_copy() if primary.vector is not None else False
+        updated = HybridSearch(list(merged.values()), vector_store=vector)
+        if hasattr(self.search, 'primary'):
+            self.search.primary = updated
+            self.search.bm25, self.search.vector = updated.bm25, updated.vector
+        else:
+            self.search = updated

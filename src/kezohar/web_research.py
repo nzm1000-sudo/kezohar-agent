@@ -304,7 +304,7 @@ class WebResearchEngine:
         results=rank_sources(HybridSearch(sources).search(question,top_k=limit)) if sources else []
         return {'sources':results,'errors':errors,'comparisons':compare(results),
                 'answer':evidence.INSUFFICIENT if evidence.shared_oil_waiting(question) else self.extractive_answer(results),'mode':'web-evidence','verdict':'insufficient_context' if evidence.shared_oil_waiting(question) else 'exact-extract-only','discovery_backend':getattr(self.searcher,'last_backend','custom'),'verification':{'support':'exact-excerpts','psak':'not-inferred'}}
-    def answer(self, question, base_url, model, limit=5, urls=None, timeout=15, local_sources=None):
+    def answer(self, question, base_url, model, limit=5, urls=None, timeout=15, local_sources=None, answer_model=None, source_verifier=None):
         result = self.research(question, limit=limit, urls=urls)
         local_sources = [s for s in (local_sources or []) if rag_eligible(s)]
         if local_sources:
@@ -313,16 +313,19 @@ class WebResearchEngine:
             result['sources'] = order_sources(list(unique.values()),question)[:limit]
             result['answer'] = self.extractive_answer(result['sources'])
             result['comparisons'] = compare(result['sources'])
-        eligible = evidence.applicable_sources(question, result['sources'])
+        from .verification import ExtractiveSourceVerifier
+        verifier = source_verifier if source_verifier is not None else ExtractiveSourceVerifier()
+        eligible = verifier.eligible_sources(question, result['sources'])
         if evidence.shared_oil_waiting(question):
             result.update(answer=evidence.INSUFFICIENT, verdict='insufficient_context', mode='web-evidence')
         if not eligible:
             return result
         result['sources'] = eligible
-        prompt = question + '\nהחזר רק ציטוטים מדויקים מהקטעים, כל אחד במבנה: ״ציטוט״ (מראה מקום מלא). ללא דברי הסבר נוספים.'
+        from .answer_models import ConfiguredAnswerModel
+        generator = answer_model if answer_model is not None else ConfiguredAnswerModel(base_url, model)
         try:
-            generated = llm.ask(prompt, result['sources'], base_url, model, timeout=timeout)['answer']
-            verification = evidence.verify_context(question, citations.verify_extractive_answer(generated, result['sources']))
+            generated = generator.generate(question, result['sources'], timeout=timeout)['answer']
+            verification = verifier.verify(question, generated, result['sources'])
             result['verification'] = verification
             if verification['verdict']=='ok':
                 result.update(answer=generated, mode='web-llm-verified', verdict='exact-extract-only')

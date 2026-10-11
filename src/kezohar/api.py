@@ -85,10 +85,12 @@ if HAVE_FASTAPI:
 
     @app.get("/health")
     def health():
-        ok, models = llm_client.check_health(config.llm_base_url())
+        ok, models = get_agent().answer_model.health()
+        retrieval = get_agent().knowledge.status()
         return {"status": "ok", "uptime_s": round(time.time() - _started, 1),
                 "llm_ok": ok, "llm_models": models if ok else [],
-                "store_docs": getattr(get_agent().search,"source_count",len(get_agent().search.bm25.docs))}
+                "store_docs": retrieval["source_count"],
+                "retrieval": retrieval}
 
     @app.post("/search")
     async def search(req: Request):
@@ -154,7 +156,7 @@ def run_stdio_fallback(port=None):
             self.wfile.write(data)
         def do_GET(self):
             if self.path == "/health":
-                ok, models = llm_client.check_health(config.llm_base_url())
+                ok, models = get_agent().answer_model.health()
                 self._send(200, {"status": "ok", "llm_ok": ok})
             else:
                 self._send(404, {"error": "not found"})

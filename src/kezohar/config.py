@@ -53,3 +53,38 @@ def agent_port():
 
 def has_llm():
     return bool(llm_base_url())
+
+
+# Generation and embedding settings deliberately have no shared model field.
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class AnswerSettings:
+    provider: str
+    model: str
+    base_url: str
+
+
+def answer_settings(base_url=None, model=None):
+    return AnswerSettings(provider=get('LLM_PROVIDER', 'openai-compatible'),
+                          model=model if model is not None else llm_model(),
+                          base_url=base_url if base_url is not None else llm_base_url())
+
+
+@dataclass(frozen=True)
+class EmbeddingSettings:
+    provider: str
+    model: str
+    dimensions: int
+    revision: str
+
+
+def embedding_settings():
+    dimensions = int(get('EMBEDDINGS_DIMENSIONS', '128'))
+    if dimensions <= 0:
+        raise ValueError('EMBEDDINGS_DIMENSIONS must be positive')
+    return EmbeddingSettings(provider=get('EMBEDDINGS_PROVIDER', 'mock'),
+                             model=get('EMBEDDINGS_MODEL', 'hash-trigram-v1'),
+                             dimensions=dimensions,
+                             revision=get('EMBEDDINGS_REVISION', '1'))

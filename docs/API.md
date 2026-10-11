@@ -36,3 +36,7 @@
 `POST /research` מקבל את אותו מבנה שאלה (ללא צורך ב־`research:true`). התוצאה מוסיפה `errors`,‏ `comparisons`,‏ `verification`,‏ `discovery_backend`. סוגי המחקר: `web-evidence`,‏ `web-llm-verified`,‏ `web-llm-guarded`,‏ `web-sources-only`.
 
 במסלול מקומי בלבד `stream:true` שולח מקורות לפני ההפקה, עם שימוש חוזר באותה תוצאת retrieval. מצב `sources-only` כולל גם timeout של מודל נגיש. במסלול המחקר תוצאות הזרימה עדיין מגיעות לאחר החיפוש/אימות; אין הבטחת latency זהה למסלול המקומי. תשובה מאומתת מוגבלת לציטוטים מדויקים; פרפרזה הלכתית עצמאית טרם מאומתת. ראו `WEB_RESEARCH.md`.
+
+## מצב מנועי האחזור
+
+`GET /health` משתמש במתאם מודל התשובות הפעיל ומוסיף `retrieval`: מספר המקורות, `vector_status` (`ready`, `disabled`, `reindex-required` או `external`) ו־`vector_index` עם manifest כאשר קיים. אין החזרת כתובת ספק או סודות. `reindex-required` אומר שזהות Embeddings השתנתה; החיפוש המילולי ממשיך בלי להשתמש בווקטורים הישנים.

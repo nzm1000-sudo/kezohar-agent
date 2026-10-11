@@ -1,8 +1,9 @@
 """Agent orchestration: fastpath -> retrieval (code) -> one LLM call -> safety check."""
 import time
-from . import fastpath, citations, llm as llm_client, config
-from .hybrid import HybridSearch
-from .ingest import load_store
+from . import fastpath, llm as llm_client
+from .knowledge import KnowledgeBase
+from .answer_models import ConfiguredAnswerModel
+from .verification import ExtractiveSourceVerifier
 from .ranking import topic_tokens, retrieval_query, topic_overlap
 from .permissions import rag_eligible
 from . import evidence
@@ -30,22 +31,30 @@ def order_sources(sources, question=""):
 
 
 class Agent:
-    def __init__(self, sources=None, store_path=None, base_url=None, model=None, research_engine=None):
-        if sources is None:
-            sources = []
-            if store_path:
-                paths = store_path if isinstance(store_path, (list, tuple)) else [store_path]
-                unique = {}
-                for path in paths:
-                    for source in load_store(path):
-                        unique[source.source_id] = source
-                sources = list(unique.values())
-        self.search = HybridSearch(sources)
-        self.base_url = base_url if base_url is not None else config.llm_base_url()
-        self.model = model or config.llm_model()
+    def __init__(self, sources=None, store_path=None, base_url=None, model=None, research_engine=None,
+                 knowledge=None, search_engine=None, answer_model=None, source_verifier=None):
+        self.knowledge = knowledge if knowledge is not None else KnowledgeBase(sources, store_path, search_engine)
+        self.answer_model = answer_model if answer_model is not None else ConfiguredAnswerModel(base_url, model)
+        self.source_verifier = source_verifier if source_verifier is not None else ExtractiveSourceVerifier()
         self.research_engine = research_engine
         self._cache_revision = None
-        self._cache = {}  # q -> (ts, result)
+        self._cache = {}
+
+    @property
+    def base_url(self):
+        return getattr(self.answer_model.identity, 'base_url', '')
+
+    @property
+    def model(self):
+        return getattr(self.answer_model.identity, 'model', '')
+
+    @property
+    def search(self):
+        return self.knowledge.search
+
+    @search.setter
+    def search(self, value):
+        self.knowledge.search = value
 
     def ask(self, question, top_k=5, lat=None, lon=None, location=None, timeout=4.5, cache_ttl=300, retrieved_sources=None):
         t0 = time.time()
@@ -54,7 +63,7 @@ class Agent:
             return {"answer": "נא לשאול שאלה.", "sources": [], "verdict": "empty",
                     "mode": "refuse", "elapsed_s": 0.0}
         # Permission/index changes invalidate answers derived from older records.
-        revision = getattr(self.search,"revision",None)
+        revision = (getattr(self.search,"revision",None), self.answer_model.identity)
         if revision != self._cache_revision:
             self._cache.clear()
             self._cache_revision = revision
@@ -95,7 +104,7 @@ class Agent:
             return {'answer':'מצב חיפוש: המקורות מותרים לחיפוש; היקף השימוש בהם להפקת תשובה עדיין בבירור.',
                     'sources':searchable, 'verdict':'rag-scope-pending', 'mode':'sources-only',
                     'elapsed_s':round(time.time()-t0,3)}
-        eligible = evidence.applicable_sources(q, retrieved)
+        eligible = self.source_verifier.eligible_sources(q, retrieved)
         if not eligible:
             return {"answer": evidence.INSUFFICIENT, "sources": retrieved,
                     "verdict": "insufficient_context", "mode": "sources-only",
@@ -103,7 +112,7 @@ class Agent:
         retrieved = eligible
         # one LLM call
         try:
-            lr = llm_client.ask(q, retrieved, self.base_url, self.model, timeout=timeout)
+            lr = self.answer_model.generate(q, retrieved, timeout=timeout)
             answer = lr["answer"]
             mode = "llm"
         except llm_client.LLMUnavailable:
@@ -114,13 +123,9 @@ class Agent:
             self._cache[q] = (now, res)
             return dict(res)
         # safety verification
-        v = evidence.verify_context(q, citations.verify_extractive_answer(answer, retrieved))
-        if 'אין לי מקור' in answer and answer.strip().rstrip('.')=='אין לי מקור לכך':
-            v = {'verdict':'no_source', 'support':'no claim'}
-            if evidence.shared_oil_waiting(q):
-                answer = evidence.INSUFFICIENT
-        elif v['verdict']=='ok' and not any(citations.check_relevance(s['text'],q)[0] for s in retrieved):
-            v = {'verdict':'irrelevant', 'support':'quotation unrelated to question'}
+        v = self.source_verifier.verify(q, answer, retrieved)
+        if v['verdict'] == 'no_source' and evidence.shared_oil_waiting(q):
+            answer = evidence.INSUFFICIENT
         verdict = v["verdict"]
         if verdict not in ("ok", "no_source"):
             # do not present as certain ruling
@@ -153,19 +158,11 @@ class Agent:
                 store_path=os.environ.get('WEB_STORE_PATH','data/store/web/sources.jsonl'))
         engine = self.research_engine
         result = engine.answer(question, self.base_url, self.model, limit=top_k,
-                             local_sources=[s for s in self.search_only(question,top_k=top_k) if rag_eligible(s)])
+                             local_sources=[s for s in self.search_only(question,top_k=top_k) if rag_eligible(s)],
+                             answer_model=self.answer_model, source_verifier=self.source_verifier)
         approved = [s for s in result.get('sources',[]) if s.get('source_project')=='verified-web'
                     and s.get('metadata',{}).get('persistence_allowed')]
         if approved and engine.store_path:
-            from .models import Source
-            primary = getattr(self.search,'primary',self.search)
-            merged = {s.source_id:s for s in primary.bm25.docs}
-            merged.update({s['source_id']:Source.from_dict(s) for s in approved})
-            updated = HybridSearch(list(merged.values()))
-            if hasattr(self.search,'primary'):
-                self.search.primary = updated
-                self.search.bm25, self.search.vector = updated.bm25, updated.vector
-            else:
-                self.search = updated
+            self.knowledge.upsert_verified(approved)
             self._cache.clear()
         return result

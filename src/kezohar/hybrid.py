@@ -1,6 +1,7 @@
 """Hybrid search: BM25 + Vector with RRF fusion (k=60)."""
 from .bm25 import BM25Index
 from .vector import MockVectorStore
+from .embeddings import VectorIndexMismatch
 
 RRF_K = 60
 
@@ -27,15 +28,26 @@ def rrf_fuse(rank_lists, k=RRF_K, top_k=5):
 class HybridSearch:
     def __init__(self, sources=None, vector_store=None):
         self.bm25 = BM25Index()
-        self.vector = vector_store or (MockVectorStore() if not sources or len(sources) <= 10000 else None)
+        self.vector = None if vector_store is False else (vector_store if vector_store is not None else
+            (MockVectorStore() if not sources or len(sources) <= 10000 else None))
+        self.vector_status = 'ready' if self.vector is not None else 'disabled'
         if sources:
             self.bm25.build(sources)
             if self.vector is not None:
                 self.vector.add(sources)
 
+    @property
+    def revision(self):
+        return (id(self.bm25), getattr(self.vector, 'revision', None))
+
     def search(self, query, top_k=5):
         b = self.bm25.search(query, top_k=top_k*2)
-        v = self.vector.search(query, top_k=top_k*2) if self.vector is not None else []
+        try:
+            v = self.vector.search(query, top_k=top_k*2) if self.vector is not None else []
+            self.vector_status = 'ready' if self.vector is not None else 'disabled'
+        except VectorIndexMismatch:
+            self.vector_status = 'reindex-required'
+            v = []  # lexical search remains available; never mix embedding spaces.
         if not b and not v:
             return []
         if not b:
@@ -55,7 +67,7 @@ class FederatedSearch:
 
     @property
     def revision(self):
-        return tuple(getattr(backend,"revision",None) for backend in self.backends)
+        return (getattr(self.primary,"revision",None), tuple(getattr(backend,"revision",None) for backend in self.backends))
 
     @property
     def source_count(self):
