@@ -296,3 +296,51 @@ def test_catalog_change_between_quote_check_and_snapshot_binding_fails_closed(tm
     assert v['verdict'] != 'ok'
     result = VerifiedAnswerComposer().compose({'answer': 'אין בסיס מאומת.', 'verification': v, 'sources': [s]})
     assert not result['structured_answer']['quotations'] and not result['halachic_verified']
+
+# The private demo uses the same guards with a longer per-request time budget.
+def demo_request(path, body=None, headers=None, method='POST'):
+    import asyncio, httpx
+    from kezohar.demo import app
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url='http://127.0.0.1:8711') as client:
+            return await client.request(method, path, json=body, headers=headers)
+    return asyncio.run(run())
+
+@pytest.mark.parametrize('headers', [{'host':'evil.invalid'}, {'origin':'https://evil.invalid'},
+                                    {'origin':'http://localhost:8711'}])
+def test_private_demo_rejects_foreign_origin_and_host_before_agent(monkeypatch, headers):
+    monkeypatch.setattr(api, 'get_agent', lambda: pytest.fail('foreign page reached agent'))
+    assert demo_request('/demo/ask', {'question':Q}, headers).status_code == 403
+
+
+def test_private_demo_uses_real_pipeline_with_mock_provider_and_no_old_cache(monkeypatch):
+    a = agent(); monkeypatch.setattr(api,'_agent',a)
+    for _ in range(2):
+        r = demo_request('/demo/ask', {'question':Q,'circumstances':complete()}).json()
+        assert r['verdict']=='ok' and r['demo_model_calls']==1 and not r['halachic_verified']
+        assert 4.5 < a.answer_model.calls[-1][2] <= 45
+    assert len(a.answer_model.calls)==2
+    assert demo_request('/api/sources/s1', method='GET').status_code==200
+    assert demo_request('/api/research', {'question':Q}).status_code==404
+
+
+@pytest.mark.parametrize('body', [{'question':Q,'stream':True}, {'question':Q,'research':True},
+                                  {'question':None}, {'question':Q,'top_k':False}])
+def test_private_demo_invalid_input_rejected_without_generation(monkeypatch, body):
+    monkeypatch.setattr(api,'get_agent',lambda:pytest.fail('invalid demo reached agent'))
+    assert demo_request('/demo/ask',body).status_code==400
+
+
+def test_ruling_calendar_mention_is_not_a_fast_date_answer():
+    from kezohar.fastpath import is_fast_question
+    assert not is_fast_question('שכחתי לומר יעלה ויבוא בראש חודש — האם חוזרים?')
+    assert is_fast_question('מה התאריך העברי היום?')
+
+
+def test_missing_prayer_service_and_soup_details_are_not_inferred():
+    from kezohar.question_understanding import analyze
+    p = analyze('שכחתי לומר יעלה ויבוא בראש חודש — האם חוזרים?')
+    assert p['requires_clarification'] and p['missing_fields']==['prayer_service','prayer_stage']
+    s = analyze('האם מותר לחמם בשבת מרק שהתקרר?')
+    assert s['requires_clarification'] and set(s['missing_fields'])=={'soup_cooked','soup_temperature','reheating_method'}

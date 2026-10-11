@@ -25,6 +25,9 @@ OUT_OF_SCOPE_RE = re.compile(r'(מזג האוויר|מזג אוויר|שיר א�
 def is_fast_question(q):
     if not q:
         return False
+    # Mentioning a calendar event does not make a ruling question a date query.
+    if re.search(r'(יעלה\s+ויב[וא]+|שכחתי|שכח|האם חוזר|הלל.*ברכה)', q):
+        return False
     if FAST_RE.search(q):
         return True
     if any(w in q for w in HOLIDAY_WORDS) and WHEN_RE.search(q):

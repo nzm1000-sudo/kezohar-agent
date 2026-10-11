@@ -11,6 +11,10 @@ SLOTS = {
     'tradition': ('לפי איזו מסורת מבוקש המענה?', {'sephardi':'לפי פסיקת הספרדים', 'ashkenazi':'לפי פסיקת האשכנזים', 'both':'השוואת מסורות'})
 }
 SLOTS.update({
+    'prayer_service': ('באיזו תפילה נשכחה ההזכרה?', {'shachrit':'בתפילת שחרית', 'mincha':'בתפילת מנחה', 'arvit':'בתפילת ערבית', 'unknown':'התפילה לא ידועה'}),
+    'soup_cooked': ('האם המרק כבר התבשל כל צורכו?', {'fully':'המרק מבושל כל צורכו', 'not_fully':'המרק לא מבושל כל צורכו', 'unknown':'מצב הבישול לא ידוע'}),
+    'soup_temperature': ('מה מצב המרק כעת?', {'cold':'המרק קר', 'warm':'המרק עדיין חם', 'unknown':'מצב חום המרק לא ידוע'}),
+    'reheating_method': ('כיצד מבוקש לחמם את המרק?', {'hotplate':'על פלטה', 'flame':'על אש', 'other':'באופן אחר; יש לפרט בשאלה', 'unknown':'אופן החימום לא ידוע'}),
     'next_food': ('לאחר הצ׳יפס, האם מבוקש לאכול מאכל חלבי?', {'dairy':'לאחר מכן מבוקש לאכול מאכל חלבי', 'other':'לא מבוקש לאכול מאכל חלבי', 'unknown':'סוג המאכל הבא לא ידוע'}),
     'oil_residue': ('האם נשארו בשמן פירורי בשר או שומן ממשי?', {'present':'נשארו פירורי בשר או שומן ממשי בשמן', 'absent':'לא נשארו שיירי בשר או שומן ממשי בשמן', 'unknown':'מצב שיירי הבשר בשמן לא ידוע'}),
     'phone_purpose': ('לשם מה מבוקש טלטול הטלפון בשבת?', {'use':'לצורך שימוש בטלפון', 'place':'לצורך מקומו של הטלפון', 'protect':'לשמירת הטלפון מנזק', 'unknown':'מטרת הטלטול לא ידועה'}),
@@ -24,12 +28,27 @@ def analyze(question, circumstances=None):
         raise ValueError('circumstances must contain supported slot/value pairs')
     q = normalize(question)
     intent = question_intent(question)
+    if 'יעלה' in q and any(t in q for t in ('ראש חודש', 'ראש חדש')):
+        service = supplied.get('prayer_service')
+        for word, value in (('שחרית','shachrit'),('מנחה','mincha'),('ערבית','arvit')):
+            if word in q:
+                service = value
+        intent = 'yaaleh-shachrit' if service == 'shachrit' else 'yaaleh-general'
+    if 'מרק' in q and 'שבת' in q and any(t in q for t in ('לחממ', 'לחמם', 'חימומ')):
+        intent = 'soup-reheat'
     from .discovery import interpret
     discovery=interpret(question)
     if discovery['shared_oil_candidate'] and discovery['waiting_requested']:intent='shared-oil'
     if 'טלפונ' in q and 'שבת' in q:intent='phone-shabbat'
     if 'מיחמ' in q and any(t in q for t in ('להוסיפ','להכניס')):intent='water-urn'
     facts = {}
+    if intent in ('yaaleh-shachrit','yaaleh-general'):
+        for word, value in (('שחרית','shachrit'),('מנחה','mincha'),('ערבית','arvit')):
+            if word in q: facts['prayer_service'] = value
+        if 'עקרתי' in q or 'עקר רגל' in q or 'סיימתי' in q: facts['prayer_stage']='finished'
+        elif 'באמצע' in q: facts['prayer_stage']='during'
+    # Soup circumstances come from explicit choices; keyword presence alone
+    # cannot distinguish a stated fact from a negation or hypothetical method.
     if intent == 'rice':
         if 'כוסס' in q or 'לא מבושל' in q: facts['rice_form']='raw'
         elif 'תערובת' in q or 'מעורב' in q: facts['rice_form']='mixed'
@@ -71,6 +90,8 @@ def analyze(question, circumstances=None):
     facts.update(supplied)
     origins.update({k:'user-supplied-slot' for k in supplied})
     requirements = {'rice':['rice_form'], 'yaaleh-shachrit':['prayer_stage'],
+                    'yaaleh-general':['prayer_service','prayer_stage'],
+                    'soup-reheat':['soup_cooked','soup_temperature','reheating_method'],
                     'shared-oil':['oil_case','next_food','oil_residue'], 'travel':['travel_distance','travel_stage'],
                     'phone-shabbat':['phone_purpose'],'water-urn':['water_temperature']}
     if intent=='shared-oil' and (facts.get('oil_case')=='new_clean' or facts.get('next_food')=='other'):
