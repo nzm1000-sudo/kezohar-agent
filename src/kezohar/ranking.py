@@ -11,12 +11,14 @@ def topic_tokens(question):
 
 def retrieval_query(question):
     terms = topic_tokens(question)
-    from .semantic_claims import question_intent
-    intent=question_intent(question)
+    from .question_understanding import analyze
+    intent=analyze(question)['intent']
     # Expand the requested case, never an answer or a predetermined ruling.
     expansions={'travel':['תפילת','הדרך','פרסה','החזיק'],
                 'birkat-mazon':['ברכת','המזון','יתעכל','רעב'],
-                'tea':['תה','שקית','כלי','שני']}
+                'tea':['תה','שקית','כלי','שני'],
+                'phone-shabbat':['טלפון','מוקצה','טלטול'],
+                'water-urn':['מיחם','להוסיף','מים']}
     terms.extend(expansions.get(intent,[]))
     if not terms:
         return question

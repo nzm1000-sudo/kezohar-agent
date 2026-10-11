@@ -29,7 +29,8 @@ def get_agent():
         from .hybrid import FederatedSearch
         app_db = os.environ.get("APP_LIBRARY_DB_PATH", str(Path(app_store).with_name("library.sqlite3")))
         user_db = os.environ.get("USER_LIBRARY_DB_PATH", "data/store/user-library/library.sqlite3")
-        backends = [SQLiteLibrarySearch(path) for path in dict.fromkeys((app_db, user_db))
+        from .locator_resolution import resolved_source
+        backends = [SQLiteLibrarySearch(path,locator_overlay=resolved_source if path==user_db else None) for path in dict.fromkeys((app_db, user_db))
                     if Path(path).exists()]
         if backends:
             _agent.search = FederatedSearch(_agent.search, backends)
@@ -56,29 +57,40 @@ def _rate_ok(ip, limit=30, window=60):
     _hits[ip] = arr
     return True
 
-def _ask_result(question, top_k=5, lat=None, lon=None, location=None, research=False):
-    if research:
-        return get_agent().research(question, top_k=top_k)
-    return get_agent().ask(question, top_k=top_k, lat=lat, lon=lon, location=location)
+def _ask_result(question, top_k=5, lat=None, lon=None, location=None, research=False, circumstances=None):
+    return get_agent().converse(question,circumstances=circumstances,research=research,
+                               top_k=top_k,lat=lat,lon=lon,location=location)
 
 def _sse_events(result):
     # event 1: sources first (<1s target), then answer sentences
     yield "event: sources\n" + "data: " + json.dumps({"sources": result.get("sources", [])}, ensure_ascii=False) + "\n\n"
+    if result.get('clarifications'):
+        yield 'event: clarification\ndata: '+json.dumps({'clarifications':result['clarifications'],
+            'question_analysis':result.get('question_analysis',{})},ensure_ascii=False)+'\n\n'
     ans = result.get("answer", "")
     parts = [p.strip() for p in re.split(r'(?<=[.!?])\s+', ans) if p.strip()]
     for s in parts:
         yield "event: answer\n" + "data: " + json.dumps({"sentence": s}, ensure_ascii=False) + "\n\n"
-    yield "event: done\n" + "data: " + json.dumps({"verdict": result.get("verdict"), "mode": result.get("mode"), "elapsed_s": result.get("elapsed_s")}, ensure_ascii=False) + "\n\n"
+    yield "event: done\n" + "data: " + json.dumps({"verdict": result.get("verdict"), "mode": result.get("mode"), "elapsed_s": result.get("elapsed_s"),
+        'explanation':result.get('explanation'), 'differences':result.get('differences',[]),
+        'human_review':result.get('human_review'),'halachic_verified':result.get('halachic_verified')}, ensure_ascii=False) + "\n\n"
 
-def _stream_local(question, top_k=5, lat=None, lon=None, location=None):
+def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumstances=None):
     """Yield source event before starting inference; retrieved passages are reused."""
     ag = get_agent()
+    from .question_understanding import analyze, contextual_question
+    analysis=analyze(question,circumstances)
+    if analysis['requires_clarification'] and not fastpath.is_out_of_scope(question):
+        yield from _sse_events(ag.converse(question,circumstances=circumstances))
+        return
     fast = fastpath.is_out_of_scope(question) or fastpath.handle(question,
         lat=lat or fastpath.DEFAULT_LAT, lon=lon or fastpath.DEFAULT_LON,
         location=location or fastpath.DEFAULT_LOCATION) is not None
-    sources = [] if fast else ag.search_only(question,top_k=top_k)
+    effective=contextual_question(question,analysis)
+    if analysis['circumstances']['tradition']=='ashkenazi':effective+='\nלפי פסיקת האשכנזים'
+    sources = [] if fast else ag.search_only(effective,top_k=top_k)
     yield 'event: sources\ndata: '+json.dumps({'sources':sources},ensure_ascii=False)+'\n\n'
-    result=ag.ask(question,top_k=top_k,lat=lat,lon=lon,location=location,retrieved_sources=sources)
+    result=ag.converse(question,circumstances=circumstances,top_k=top_k,lat=lat,lon=lon,location=location,retrieved_sources=sources)
     events=iter(_sse_events(result))
     next(events)  # Source event was already delivered.
     yield from events
@@ -112,10 +124,15 @@ if HAVE_FASTAPI:
         if err:
             return JSONResponse({"error": err}, status_code=400)
         try:
+            from .question_understanding import analyze
+            analyze(q,body.get('circumstances'))
+        except ValueError as exc:
+            return JSONResponse({'error':str(exc)},status_code=400)
+        try:
             limit = max(1, min(int(body.get("top_k", 5)), 8))
         except (TypeError, ValueError):
             return JSONResponse({"error": "invalid top_k"}, status_code=400)
-        return get_agent().research(q, top_k=limit)
+        return get_agent().converse(q,circumstances=body.get('circumstances'),research=True,top_k=limit)
 
     @app.post("/ask")
     async def ask(req: Request):
@@ -129,14 +146,21 @@ if HAVE_FASTAPI:
         q, err = _validate_ask(body if isinstance(body, dict) else {})
         if err:
             return JSONResponse({"error": err}, status_code=400)
+        try:
+            from .question_understanding import analyze
+            analyze(q,body.get('circumstances'))
+            limit=max(1,min(int(body.get('top_k',5)),8))
+        except (ValueError,TypeError) as exc:
+            return JSONResponse({'error':str(exc)},status_code=400)
         stream = body.get("stream", False)
         if stream and body.get('research') is not True:
-            return StreamingResponse(_stream_local(q,top_k=int(body.get('top_k',5)),
-                lat=body.get('lat'),lon=body.get('lon'),location=body.get('location')),
+            return StreamingResponse(_stream_local(q,top_k=limit,
+                lat=body.get('lat'),lon=body.get('lon'),location=body.get('location'),circumstances=body.get('circumstances')),
                 media_type='text/event-stream')
-        res = _ask_result(q, top_k=int(body.get("top_k", 5)),
+        res = _ask_result(q, top_k=limit,
                           lat=body.get("lat"), lon=body.get("lon"),
-                          location=body.get("location"), research=body.get("research") is True)
+                          location=body.get("location"), research=body.get("research") is True,
+                          circumstances=body.get('circumstances'))
         if stream:
             return StreamingResponse(_sse_events(res), media_type="text/event-stream")
         return res
@@ -179,7 +203,10 @@ def run_stdio_fallback(port=None):
                 q, err = _validate_ask(body)
                 if err:
                     return self._send(400, {"error": err})
-                res = _ask_result(q)
+                try:
+                    res = _ask_result(q,circumstances=body.get('circumstances'),research=body.get('research') is True)
+                except ValueError as exc:
+                    return self._send(400,{'error':str(exc)})
                 if body.get("stream"):
                     self.send_response(200)
                     self.send_header("Content-Type", "text/event-stream")

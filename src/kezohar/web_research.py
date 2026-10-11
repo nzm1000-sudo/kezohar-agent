@@ -220,17 +220,11 @@ def short_excerpt(passage, question, word_limit=25):
     start=max(0,min(center-5,len(words)-word_limit))
     return ' '.join(words[start:start+word_limit])
 
-def compare(sources):
+def compare(sources, question=''):
     """Only flag possible differences; polarity alone cannot establish machloket."""
-    candidates=[]
-    for i,a in enumerate(sources):
-        for b in sources[i+1:]:
-            at=hebrew.normalize(a['text']);bt=hebrew.normalize(b['text'])
-            if ('אסור' in at and 'מותר' in bt) or ('מותר' in at and 'אסור' in bt):
-                candidates.append({'sources':[a['source_id'],b['source_id']],
-                                   'status':'possible-difference-needs-context',
-                                   'explanation':'נמצאו לשונות היתר ואיסור; אין בכך לבדו הוכחה למחלוקת באותו מקרה'})
-    return candidates
+    from .halachic_authority import differences
+    if not question:return []
+    return differences(question,sources)
 
 def save_verified(source, path):
     """Atomic upsert of an authorized exact excerpt, serialized across writers."""
@@ -315,7 +309,7 @@ class WebResearchEngine:
             except Exception as exc:
                 errors.append({'url':url,'error':type(exc).__name__})
         results=rank_sources(HybridSearch(sources).search(question,top_k=limit)) if sources else []
-        return {'sources':results,'errors':errors,'rejected_sources':rejected,'comparisons':compare(results),
+        return {'sources':results,'errors':errors,'rejected_sources':rejected,'comparisons':compare(results,question),
                 'answer':evidence.INSUFFICIENT if evidence.shared_oil_waiting(question) else self.extractive_answer(results),'mode':'web-evidence','verdict':'insufficient_context' if evidence.shared_oil_waiting(question) else 'exact-extract-only','discovery_backend':getattr(self.searcher,'last_backend','custom'),'discovery_attempts':getattr(self.searcher,'last_attempts',[]),'verification':{'support':'exact-excerpts','psak':'not-inferred'}}
     def answer(self, question, base_url, model, limit=5, urls=None, timeout=15, local_sources=None, answer_model=None, source_verifier=None):
         result = self.research(question, limit=limit, urls=urls)
@@ -326,7 +320,7 @@ class WebResearchEngine:
             unique = {s['source_id']:s for s in list(local_sources)+result['sources']}
             result['sources'] = order_sources(list(unique.values()),question)[:limit]
             result['answer'] = self.extractive_answer(result['sources'])
-            result['comparisons'] = compare(result['sources'])
+            result['comparisons'] = compare(result['sources'],question)
         from .verification import ExtractiveSourceVerifier
         verifier = source_verifier if source_verifier is not None else ExtractiveSourceVerifier()
         eligible = verifier.eligible_sources(question, result['sources'])
@@ -351,6 +345,8 @@ class WebResearchEngine:
             else:
                 result['mode']='web-llm-guarded'
                 result['verdict']=verification['verdict']
+                result['answer']=(evidence.INSUFFICIENT if evidence.shared_oil_waiting(question)
+                                  else 'אין במקורות ובאימות הקיימים בסיס מספיק לתשובה הלכתית. המקורות זמינים לבדיקה; אין להציג את פלט המודל כפסיקה.')
         except llm.LLMUnavailable:
             result['mode']='web-sources-only'
         return result

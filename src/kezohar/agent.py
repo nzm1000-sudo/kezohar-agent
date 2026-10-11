@@ -8,8 +8,30 @@ from .ranking import topic_tokens, retrieval_query, topic_overlap
 from .permissions import rag_eligible
 from . import evidence
 from .source_quality import classify, exclusion_reason
+from .halachic_authority import profile as authority_profile, differences
+from .question_understanding import analyze, contextual_question, case_coverage
 
 TRADITION_ORDER = {"sephardi": 0, "": 1, "ashkenazi": 2}
+
+
+def diverse_sources(ordered, limit):
+    """Keep relevant authority order while avoiding one work filling the prompt.
+
+    This changes selection only, never text/locator or evidence approval.
+    Distinct excerpts/editions stay separate records, including on the second pass.
+    """
+    if limit<1:return []
+    chosen=[];works=set();ids=set()
+    for source in ordered:
+        work=(source.get('work_title'),source.get('author'),source.get('tradition'))
+        if work in works or source['source_id'] in ids:continue
+        chosen.append(source);works.add(work);ids.add(source['source_id'])
+        if len(chosen)>=limit:return chosen
+    for source in ordered:
+        if source['source_id'] not in ids:
+            chosen.append(source);ids.add(source['source_id'])
+            if len(chosen)>=limit:break
+    return chosen
 
 def order_sources(sources, question=""):
     """Maran/Sephardi first, then others — stable within groups."""
@@ -25,11 +47,17 @@ def order_sources(sources, question=""):
         source.setdefault('source_reliability', source.get('metadata',{}).get('source_reliability','import-provenance-only'))
         source.setdefault('halachic_authority', source.get('authority_level','') or ('maran' if source.get('work_title','').startswith('שולחן ערוך') or source.get('book_id')=='Beit_Yosef' else 'unclassified'))
         source.setdefault('evidence_support', 'not-claim-verified')
+        source['authority_profile']=authority_profile(source)
+        source['halachic_authority']=source['authority_profile']['authority']
+        source['tradition']=source['authority_profile']['tradition']
+        source['case_coverage']=case_coverage(question,source) if question else 0
+    preferred=analyze(question)['circumstances']['tradition'] if question else 'sephardi'
     return sorted(sources, key=lambda s: (
         not rag_eligible(s),
         s.get('domain') != 'halacha',
-        TRADITION_ORDER.get(s.get('tradition',''),1),
-        s.get('halachic_authority')!='maran',
+        (s.get('tradition')!='ashkenazi' if preferred=='ashkenazi' else TRADITION_ORDER.get(s.get('tradition',''),1)),
+        -s.get('case_coverage',0),
+        s['authority_profile']['priority'],
         s.get('source_type')!='psak-code',
         -s.get('topical_overlap',0),
         s.get('category') not in ('halacha','responsa'),
@@ -153,7 +181,41 @@ class Agent:
         return dict(res)
 
     def search_only(self, query, top_k=5):
-        return order_sources(self.search.search(retrieval_query(query), top_k=max(top_k*10,50)),query)[:top_k]
+        if top_k<1:return []
+        ordered=order_sources(self.search.search(retrieval_query(query), top_k=max(top_k*10,50)),query)
+        # Pending locators must not be promoted by diversity over usable passages.
+        usable=[s for s in ordered if rag_eligible(s)]
+        pending=[s for s in ordered if not rag_eligible(s)]
+        selected=diverse_sources(usable,top_k)
+        return selected+diverse_sources(pending,top_k-len(selected)) if len(selected)<top_k else selected
+
+    def converse(self, question, circumstances=None, research=False, **kwargs):
+        """Stateless conversation: client retains the question and explicit slot values."""
+        analysis=analyze(question,circumstances)
+        if analysis['requires_clarification'] and not fastpath.is_out_of_scope(question):
+            return {'answer':'כדי להתאים את המקורות למקרה: '+ ' '.join(
+                        c['question'] for c in analysis['clarifications']),
+                    'mode':'clarification','verdict':'needs_clarification','sources':[],
+                    'question_analysis':analysis,'clarifications':analysis['clarifications'],
+                    'human_review':'required','halachic_verified':False,
+                    'explanation':'הנסיבות חסרות או סותרות; טרם ניתנה הכרעה הלכתית.',
+                    'original_question':question}
+        effective=contextual_question(question,analysis)
+        if analysis['circumstances']['tradition']=='ashkenazi':
+            effective+='\nלפי פסיקת האשכנזים'
+        elif analysis['circumstances']['tradition']=='both':
+            effective+='\nהשוואת מסורות'
+        result=(self.research(effective,top_k=kwargs.get('top_k',5)) if research
+                else self.ask(effective,**kwargs))
+        result=dict(result)
+        result['question_analysis']=analysis
+        result['original_question']=question
+        result['differences']=differences(effective,result.get('sources',[]))
+        supported=result.get('verification',{}).get('verdict')=='ok'
+        result['explanation']=('ההפניות נבנו מהמקורות שנשלפו; אימות התוכנה אינו הכרעה הלכתית אנושית.'
+                               if supported else 'המקורות או האימות אינם מספיקים להכרעה; אין להסיק דין נוסף מהתוצאות.')
+        result['human_review']='required';result['halachic_verified']=False
+        return result
 
     def research(self, question, top_k=5):
         from .web_research import WebResearchEngine

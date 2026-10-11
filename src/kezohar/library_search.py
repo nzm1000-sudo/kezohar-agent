@@ -25,12 +25,30 @@ def rebuild_fts(connection):
 
 
 class SQLiteLibrarySearch:
-    def __init__(self, path):
+    def __init__(self, path, locator_overlay=None):
         self.path = Path(path).resolve()
+        self.locator_overlay=locator_overlay
 
     @property
     def revision(self):
-        return self.path.stat().st_mtime_ns if self.path.exists() else None
+        revision=self.path.stat().st_mtime_ns if self.path.exists() else None
+        if self.locator_overlay is not None:
+            # Any review/registry/grant change invalidates answers from prior evidence.
+            root=Path(__file__).resolve().parents[2]
+            files=[root/'data/locator_resolution_registry.json',root/'data/yalkut_parquet_permission.json',
+                   root/'data/store/user-library/approved_resolutions.json']
+            # Catalogs can be revoked by editing their file, not just the registry.
+            registry=files[0]
+            if registry.exists():
+                from .locator_resolution import read_json
+                entries=read_json(registry,{}).get('resources',[])
+                if not isinstance(entries,list):entries=[]
+                for entry in entries:
+                    if not isinstance(entry,dict) or not isinstance(entry.get('path'),str):continue
+                    candidate=(root/entry.get('path','')).resolve()
+                    if root in candidate.parents:files.append(candidate)
+            return (revision,tuple(p.stat().st_mtime_ns if p.exists() else None for p in files))
+        return revision
 
     @property
     def source_count(self):
@@ -52,6 +70,7 @@ class SQLiteLibrarySearch:
         result=[]
         for payload, score in rows:
             source=json.loads(payload)
+            if self.locator_overlay is not None:source=self.locator_overlay(source)
             source.update(score=-score, search_relevance=-score, backend='app-library-fts5')
             result.append(source)
         return result
