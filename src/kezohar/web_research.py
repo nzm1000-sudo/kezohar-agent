@@ -21,7 +21,7 @@ from . import citations, hebrew, llm
 from .hybrid import HybridSearch
 from .ingest import load_licenses
 from .models import Source, stable_id, utcnow_iso
-from .permissions import permission_for
+from .permissions import permission_for, rag_eligible
 from .ranking import topic_tokens, topic_overlap, STOP
 
 USER_AGENT = 'KezoharResearch/1.0'
@@ -305,6 +305,7 @@ class WebResearchEngine:
                 'answer':self.extractive_answer(results),'mode':'web-evidence','verdict':'exact-extract-only','discovery_backend':getattr(self.searcher,'last_backend','custom'),'verification':{'support':'exact-excerpts','psak':'not-inferred'}}
     def answer(self, question, base_url, model, limit=5, urls=None, timeout=15, local_sources=None):
         result = self.research(question, limit=limit, urls=urls)
+        local_sources = [s for s in (local_sources or []) if rag_eligible(s)]
         if local_sources:
             from .agent import order_sources
             unique = {s['source_id']:s for s in list(local_sources)+result['sources']}

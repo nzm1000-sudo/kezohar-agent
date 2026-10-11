@@ -64,3 +64,30 @@ def test_generic_terms_and_prefix_substring_are_not_evidence():
     assert topic_overlap('מברכים על אור ביום כיפור','מה מברכים על אורז?')==0
     assert topic_overlap('הכוסס את האורז','מה מברכים על אורז?')==1
     assert A.order_sources([{'work_title':'קיצור שולחן ערוך','text':'אורז','score':1}], 'אורז')[0]['halachic_authority']=='unclassified'
+
+def test_search_only_grant_never_reaches_llm(monkeypatch):
+    from kezohar.models import Source
+    from kezohar import llm
+    def forbidden(*a,**k):raise AssertionError('RAG scope not authorized')
+    monkeypatch.setattr(llm,'ask',forbidden)
+    s=Source(source_id='index-only',work_title='ספר',reference='א:א',text='אורז מזונות',metadata={'rag_answers_allowed':False})
+    ag=A.Agent(sources=[s],base_url='local')
+    assert ag.search_only('אורז')
+    result=ag.ask('ברכת אורז')
+    assert result['mode']=='sources-only' and result['verdict']=='rag-scope-pending'
+
+def test_search_permission_revision_invalidates_cached_answer(monkeypatch):
+    from kezohar.models import Source
+    from kezohar import llm
+    s=Source(source_id='changing-scope',work_title='ספר',reference='א:א',text='אורז מזונות')
+    ag=A.Agent(sources=[s],base_url='local')
+    class ChangingSearch:
+        revision=1
+        def search(self,*a,**k):return [s.to_dict()]
+    ag.search=ChangingSearch()
+    monkeypatch.setattr(llm,'ask',lambda *a,**k:{'answer':'״אורז מזונות״ (א:א).'})
+    assert ag.ask('ברכת אורז')['mode']=='llm'
+    assert ag.ask('ברכת אורז')['cached']
+    s.metadata['rag_answers_allowed']=False;ag.search.revision=2
+    r=ag.ask('ברכת אורז')
+    assert r['verdict']=='rag-scope-pending' and not r.get('cached')

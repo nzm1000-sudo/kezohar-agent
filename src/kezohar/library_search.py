@@ -29,6 +29,10 @@ class SQLiteLibrarySearch:
         self.path = Path(path).resolve()
 
     @property
+    def revision(self):
+        return self.path.stat().st_mtime_ns if self.path.exists() else None
+
+    @property
     def source_count(self):
         if not self.path.exists():
             return 0

@@ -54,6 +54,10 @@ class FederatedSearch:
         self.vector = primary.vector
 
     @property
+    def revision(self):
+        return tuple(getattr(backend,"revision",None) for backend in self.backends)
+
+    @property
     def source_count(self):
         return len(self.bm25.docs)+sum(getattr(backend,'source_count',0) for backend in self.backends)
 

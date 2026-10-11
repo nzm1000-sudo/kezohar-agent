@@ -4,6 +4,7 @@ from . import fastpath, citations, llm as llm_client, config
 from .hybrid import HybridSearch
 from .ingest import load_store
 from .ranking import topic_tokens, retrieval_query, topic_overlap
+from .permissions import rag_eligible
 
 TRADITION_ORDER = {"sephardi": 0, "": 1, "ashkenazi": 2}
 
@@ -42,6 +43,7 @@ class Agent:
         self.base_url = base_url if base_url is not None else config.llm_base_url()
         self.model = model or config.llm_model()
         self.research_engine = research_engine
+        self._cache_revision = None
         self._cache = {}  # q -> (ts, result)
 
     def ask(self, question, top_k=5, lat=None, lon=None, location=None, timeout=4.5, cache_ttl=300, retrieved_sources=None):
@@ -50,6 +52,11 @@ class Agent:
         if not q:
             return {"answer": "נא לשאול שאלה.", "sources": [], "verdict": "empty",
                     "mode": "refuse", "elapsed_s": 0.0}
+        # Permission/index changes invalidate answers derived from older records.
+        revision = getattr(self.search,"revision",None)
+        if revision != self._cache_revision:
+            self._cache.clear()
+            self._cache_revision = revision
         # cache
         now = time.time()
         if q in self._cache:
@@ -81,6 +88,12 @@ class Agent:
                    "elapsed_s": round(time.time() - t0, 3)}
             self._cache[q] = (now, res)
             return dict(res)
+        searchable = retrieved
+        retrieved = [s for s in retrieved if rag_eligible(s)]
+        if not retrieved:
+            return {'answer':'מצב חיפוש: המקורות מותרים לחיפוש; היקף השימוש בהם להפקת תשובה עדיין בבירור.',
+                    'sources':searchable, 'verdict':'rag-scope-pending', 'mode':'sources-only',
+                    'elapsed_s':round(time.time()-t0,3)}
         # one LLM call
         try:
             lr = llm_client.ask(q, retrieved, self.base_url, self.model, timeout=timeout)
@@ -131,7 +144,7 @@ class Agent:
                 store_path=os.environ.get('WEB_STORE_PATH','data/store/web/sources.jsonl'))
         engine = self.research_engine
         result = engine.answer(question, self.base_url, self.model, limit=top_k,
-                             local_sources=self.search_only(question,top_k=top_k))
+                             local_sources=[s for s in self.search_only(question,top_k=top_k) if rag_eligible(s)])
         approved = [s for s in result.get('sources',[]) if s.get('source_project')=='verified-web'
                     and s.get('metadata',{}).get('persistence_allowed')]
         if approved and engine.store_path:

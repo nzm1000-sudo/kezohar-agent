@@ -48,7 +48,9 @@ def test_revoked_permission_removes_searchable_text(library):
 def test_verified_scope_grant_and_scope_missing(library):
     app,out,_=library
     grant={'verified':True,'evidence':'owner-record-1','scope':dict(local_storage=True,search_index=True)}
-    assert sync_library(app,out,{}, {'p/b.json.gz':grant})['sources']==0
+    first = sync_library(app,out,{}, {'p/b.json.gz':grant})
+    assert first['sources']>0 and first['pending_scope_review']
+    assert load_store(out/'sources.jsonl')[0].metadata['rag_answers_allowed'] is False
     grant['scope']['rag_answers']=True
     assert sync_library(app,out,{}, {'p/b.json.gz':grant})['sources']>0
 
@@ -142,3 +144,18 @@ def test_api_uses_disk_index_without_loading_library_jsonl(library,monkeypatch):
     monkeypatch.setenv('APP_LIBRARY_DB_PATH',str(out/'library.sqlite3'))
     assert api.get_agent().search_only('שבת')
     assert api.get_agent().search.bm25.docs==[]
+
+def test_copyright_grant_overrides_license_default(library):
+    app,out,_=library
+    mp=app/'public/library/packs/p/manifest.json';m=json.loads(mp.read_text());m['license']='RESTRICTED';mp.write_text(json.dumps(m))
+    grant={'verified':True,'evidence':'documented-owner-permission','scope':dict(local_storage=True,search_index=True,rag_answers=True)}
+    report=sync_library(app,out,{'RESTRICTED':{'allows_full_text':False}}, {'p/b.json.gz':grant})
+    assert report['sources']>0 and not report['blocked'] and not report['errors']
+
+
+def test_declared_app_permission_is_reported_without_inventing_rag_scope(library,monkeypatch):
+    app,out,_=library
+    report=sync_library(app,out,{})
+    assert report['pending_scope_review'][0]['status']=='pending-scope-review'
+    assert 'זכויות יוצרים כשלעצמן אינן עילת חסימה' in report['blocked'][0]['permission']['reason']
+    assert report['owner_declaration']=='app-owner-existing-library-2026-10-11'

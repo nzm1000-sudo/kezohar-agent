@@ -33,12 +33,12 @@
     }
   },
   "RESTRICTED": {
-    "name": "Restricted / copyrighted — no full-text import",
+    "name": "Copyright / permission scope needs documentation",
     "allows_full_text": false,
     "app_enabled": false,
-    "status": "blocked",
+    "status": "scope-review-required",
     "url": "",
-    "notes": "ילקוט יוסף, חזון עובדיה וכל יצירה מוגנת — אין לייבא טקסט מלא ללא הרשאה."
+    "notes": "זכויות יוצרים אינן חסימה אוטומטית: אישור פרטני המכסה את השימושים הנדרשים גובר על ברירת המחדל. ללא היקף מתועד מסמנים לבירור."
   },
   "public-domain": {
     "name": "Public Domain",
@@ -96,24 +96,27 @@
     "name": "Creative Commons Attribution-NonCommercial",
     "allows_full_text": false,
     "app_enabled": false,
-    "status": "pending-review",
+    "status": "additional-use-scope-pending",
     "url": "https://creativecommons.org/licenses/by-nc/4.0/",
-    "notes": "מושבת עד לאישור: היקף NC ליצירת תשובות RAG לא אומת."
+    "notes": "בעל האפליקציה הצהיר שכל התכנים הקיימים נכללים באישורי השימוש. התאמת ההיקף לשמירה, אינדוקס ו־RAG נבדקת בנפרד; אישור פרטני מתועד מאפשר את השימוש המכוסה.",
+    "owner_declaration": "app-owner-existing-library-2026-10-11"
   },
   "cc-by-nc-sa": {
     "name": "Creative Commons Attribution-NonCommercial-ShareAlike",
     "allows_full_text": false,
     "app_enabled": false,
-    "status": "pending-review",
+    "status": "additional-use-scope-pending",
     "url": "http://www.toratemetfreeware.com/online/a_wellcome.html",
-    "notes": "מושבת עד לאישור: היקף NC+SA ליצירת תשובות RAG לא אומת (כולל חק לישראל, ילקוט יוסף במאגר תורת אמת)."
+    "notes": "בעל האפליקציה הצהיר שכל התכנים הקיימים נכללים באישורי השימוש. התאמת ההיקף לשמירה, אינדוקס ו־RAG נבדקת בנפרד; אישור פרטני מתועד מאפשר את השימוש המכוסה.",
+    "owner_declaration": "app-owner-existing-library-2026-10-11"
   },
   "author-permission": {
     "name": "Author permission (declared, evidence not in repo)",
     "allows_full_text": false,
     "app_enabled": false,
-    "status": "declared-unverified",
+    "status": "additional-use-scope-pending",
     "url": "",
-    "notes": "בעל האפליקציה מצהיר שיש בידיו אישור כתוב (למשל עונג שבת); המסמך אינו ב-repo וההיקף (חיפוש/אינדוקס/יצירת תשובות RAG) אינו מתועד — מושבת עד לאישור היקף."
+    "notes": "בעל האפליקציה הצהיר שכל התכנים הקיימים נכללים באישורי השימוש. התאמת ההיקף לשמירה, אינדוקס ו־RAG נבדקת בנפרד; אישור פרטני מתועד מאפשר את השימוש המכוסה.",
+    "owner_declaration": "app-owner-existing-library-2026-10-11"
   }
 }

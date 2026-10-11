@@ -11,7 +11,7 @@ from pathlib import Path
 from .hebrew import normalize
 from .ingest import chunk_text, load_licenses
 from .models import Source, stable_id, utcnow_iso
-from .permissions import permission_for
+from .permissions import permission_for, INDEX_PURPOSES
 
 SCHEMA_VERSION = 4
 MAX_RAW_BYTES = 128 * 1024 * 1024
@@ -134,6 +134,9 @@ def _sync_library(app_root, output_dir, licenses=None, grants=None, pack_ids=Non
     out.mkdir(parents=True, exist_ok=True)
     licenses = load_licenses() if licenses is None else licenses
     grants = grants or {}
+    declaration_path = project / 'data/app_owner_declaration.json'
+    declaration = json.loads(declaration_path.read_text(encoding='utf-8')) if declaration_path.exists() else {}
+    declared_resources = declaration.get('application_snapshot', {}).get('resources', {})
     works = catalog(app_root)
     db = sqlite3.connect(str(out / 'library.sqlite3'))
     db.execute('CREATE TABLE IF NOT EXISTS files (key TEXT PRIMARY KEY, digest TEXT)')
@@ -141,7 +144,7 @@ def _sync_library(app_root, output_dir, licenses=None, grants=None, pack_ids=Non
     db.execute('CREATE INDEX IF NOT EXISTS record_file ON records(file)')
     evidence_path = out / 'provenance.json'
     evidence = json.loads(evidence_path.read_text(encoding='utf-8')) if evidence_path.exists() else {}
-    report = {'packs':0, 'updated_files':0, 'unchanged_files':0, 'blocked':[], 'errors':[], 'sources':0}
+    report = {'packs':0, 'updated_files':0, 'unchanged_files':0, 'blocked':[], 'errors':[], 'sources':0, 'pending_scope_review':[], 'owner_declaration':declaration.get('declaration_id')}
     active = set()
     scanned = set()
     packs_root = app_root / 'public/library/packs'
@@ -187,13 +190,23 @@ def _sync_library(app_root, output_dir, licenses=None, grants=None, pack_ids=Non
                     wid = entry.get('workId') or entry.get('book') or path.name.split('.json')[0]
                     work = works.get((mp.parent.name, wid), {})
                     license_id = work.get('license') or manifest.get('license', '')
-                    allowed, permission = permission_for(license_id, licenses, grants, key)
+                    allowed, permission = permission_for(license_id, licenses, grants, key, purposes=INDEX_PURPOSES)
                     if not allowed:
                         with db:
                             db.execute('DELETE FROM records WHERE file=?', (key,))
                             db.execute('DELETE FROM files WHERE key=?', (key,))
-                        report['blocked'].append({'file':key, 'license':license_id, 'permission':permission})
+                        item = {'file':key, 'license':license_id, 'permission':permission,
+                                'status':'pending-scope-review'}
+                        recorded = declared_resources.get(key)
+                        if recorded and recorded.get('checksum') == entry.get('checksum'):
+                            item['existing_app_use'] = 'owner-declared-authorized'
+                            item['declaration_id'] = declaration.get('declaration_id')
+                        report['blocked'].append(item)  # Compatibility: means full-text not enabled.
+                        report['pending_scope_review'].append(item)
                         continue
+                    rag_allowed, _ = permission_for(license_id, licenses, grants, key)
+                    if not rag_allowed:
+                        report['pending_scope_review'].append({'file':key, 'status':'indexed-rag-scope-pending', 'required_purposes':['rag_answers']})
                     packed = path.read_bytes()
                     stamp = digest(packed + encode([manifest,work,provenance,permission,SCHEMA_VERSION,anchor_maps.get(wid,{})]).encode())
                     with gzip.open(path, 'rb') as fh:
@@ -219,6 +232,8 @@ def _sync_library(app_root, output_dir, licenses=None, grants=None, pack_ids=Non
                         db.execute('DELETE FROM records WHERE file=?', (key,))
                         for source in records(data, manifest, work, key, provenance, anchor_maps.get(wid)):
                             source.metadata['permission'] = permission
+                            if not rag_allowed:
+                                source.metadata['rag_answers_allowed'] = False
                             source.license_url = source.license_url or licenses.get(license_id, {}).get('url', '')
                             db.execute('INSERT INTO records VALUES (?,?,?)', (source.source_id,key,encode(source.to_dict())))
                         db.execute('INSERT OR REPLACE INTO files VALUES (?,?)', (key,stamp))

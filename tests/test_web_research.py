@@ -131,3 +131,9 @@ def test_approved_research_expands_agent_search_immediately(tmp_path,monkeypatch
     assert ag.search_only('אורז')[0]['source_project']=='verified-web'
     ag.research('ברכת אורז')
     assert len(ag.search.bm25.docs)==1
+
+def test_index_only_local_text_never_used_in_web_rag(monkeypatch):
+    from kezohar import llm
+    monkeypatch.setattr(llm,'ask',lambda *a,**k:(_ for _ in ()).throw(AssertionError('not allowed')))
+    r=engine().answer('אורז','local','qwen',urls=[],local_sources=[{'source_id':'l','text':'אורז','metadata':{'rag_answers_allowed':False}}])
+    assert r['sources']==[]
