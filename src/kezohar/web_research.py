@@ -150,8 +150,9 @@ class LinkParser(HTMLParser):
 class FreeSearch:
     """Configured SearxNG JSON endpoint, or public DuckDuckGo HTML (best effort)."""
     def __init__(self,searx_url=None,timeout=8):
-        self.searx_url=searx_url;self.timeout=timeout;self.last_backend=""
+        self.searx_url=searx_url;self.timeout=timeout;self.last_backend="";self.last_attempts=[]
     def search(self,query,limit=5):
+        self.last_attempts=[{'backend':'searxng','status':'configured' if self.searx_url else 'not-configured'}]
         if self.searx_url:
             self.last_backend='searxng'
             url=self.searx_url.rstrip('/')+'/search?'+urllib.parse.urlencode({'q':query,'format':'json'})
@@ -164,10 +165,12 @@ class FreeSearch:
             page,_=fetch._read('https://html.duckduckgo.com/html/?'+urllib.parse.urlencode({'q':query}))
             parser=LinkParser();parser.feed(page)
             if parser.urls:
+                self.last_attempts.append({'backend':'duckduckgo-html','status':'links-found','count':len(parser.urls)})
                 self.last_backend='duckduckgo-html'
                 return parser.urls[:limit]
-        except (OSError, ResearchError):
-            pass
+            self.last_attempts.append({'backend':'duckduckgo-html','status':'challenge-page' if re.search(r'anomaly|captcha|challenge',page,re.I) else 'no-parseable-links'})
+        except (OSError, ResearchError) as exc:
+            self.last_attempts.append({'backend':'duckduckgo-html','status':'error','error':type(exc).__name__})
         # Documented public MediaWiki search API, no key/account/payment.
         topic = query.split(' הלכה site:',1)[0]
         stop = {'מה','מתי','האם','איך','על','של','עם','מותר','מברכים','ברכת','הלכה'}
@@ -186,6 +189,7 @@ class FreeSearch:
             data=json.loads(raw)
         if data.get('error'):raise ResearchError('wiki search unavailable')
         self.last_backend='wikisource-api-fallback'
+        self.last_attempts.append({'backend':'wikisource-api-fallback','status':'results','count':len(data.get('query',{}).get('search',[]))})
         return ['https://he.wikisource.org/wiki/'+urllib.parse.quote(r['title'].replace(' ','_'))
                 for r in data.get('query',{}).get('search',[])][:limit]
 
@@ -312,7 +316,7 @@ class WebResearchEngine:
                 errors.append({'url':url,'error':type(exc).__name__})
         results=rank_sources(HybridSearch(sources).search(question,top_k=limit)) if sources else []
         return {'sources':results,'errors':errors,'rejected_sources':rejected,'comparisons':compare(results),
-                'answer':evidence.INSUFFICIENT if evidence.shared_oil_waiting(question) else self.extractive_answer(results),'mode':'web-evidence','verdict':'insufficient_context' if evidence.shared_oil_waiting(question) else 'exact-extract-only','discovery_backend':getattr(self.searcher,'last_backend','custom'),'verification':{'support':'exact-excerpts','psak':'not-inferred'}}
+                'answer':evidence.INSUFFICIENT if evidence.shared_oil_waiting(question) else self.extractive_answer(results),'mode':'web-evidence','verdict':'insufficient_context' if evidence.shared_oil_waiting(question) else 'exact-extract-only','discovery_backend':getattr(self.searcher,'last_backend','custom'),'discovery_attempts':getattr(self.searcher,'last_attempts',[]),'verification':{'support':'exact-excerpts','psak':'not-inferred'}}
     def answer(self, question, base_url, model, limit=5, urls=None, timeout=15, local_sources=None, answer_model=None, source_verifier=None):
         result = self.research(question, limit=limit, urls=urls)
         result.update(human_review='required', halachic_verified=False)
@@ -341,7 +345,7 @@ class WebResearchEngine:
             verification = verifier.verify(question, generated, result['sources'])
             result['verification'] = verification
             if verification['verdict']=='ok':
-                result.update(answer=verification.get('rendered_answer',generated), mode='web-llm-verified', verdict='exact-extract-only')
+                result.update(answer=verification.get('rendered_answer',generated), mode='web-llm-verified', verdict=verification.get('support','exact-extract-only'))
             elif verification['verdict']=='no_source':
                 result.update(answer=verification.get('rendered_answer','אין לי מקור לכך.'), mode='web-llm-guarded', verdict='no_source')
             else:

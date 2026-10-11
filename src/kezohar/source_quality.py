@@ -10,7 +10,7 @@ from .hebrew import normalize
 
 def classify(source):
     title = source.get('work_title', '')
-    label = title + ' ' + unquote(urlsplit(source.get('source_url', '')).path)
+    label = title + ' ' + unquote(urlsplit(source.get('source_url', '')).path).replace('_',' ')
     # Title/path override claimed metadata: Wikisource also hosts Israeli laws.
     if (re.search(r'(?:תקנות|פקודת)\s+[א-ת]', label)
             or re.search(r'חוק\s+(?:התקשורת|העונשין|שירות|רישוי|יסוד)|צו\s+(?:הפיקוח|רישוי)', label)):
@@ -27,6 +27,7 @@ def classify(source):
         ('רב פעלים', 'responsa', 'sephardi-posek'),
         ('משנה ברורה', 'halachic-commentary', 'ashkenazi-posek'),
         ('קיצור שולחן ערוך', 'psak-code', 'ashkenazi-posek'),
+        ('קיצור שלחן ערוך', 'psak-code', 'ashkenazi-posek'),
         ('ערוך השולחן', 'halachic-commentary', 'ashkenazi-posek'),
         ('טור', 'psak-code', 'rishon'),
         ('חבל נחלתו', 'responsa', 'posek-tradition-unclassified'),
@@ -39,7 +40,10 @@ def classify(source):
     if title.startswith('סוד ישרים') and ('radzin' in source.get('author','').lower()
             or 'chassidut' in source.get('source_file','')):
         domain, kind = 'torah-study', 'mysticism'
-    elif title.startswith(('משנה ', 'תלמוד ', 'בבלי ', 'עבודה זרה', 'רמב"ם', 'רמב״ם', 'ספרי ', 'ויקרא', 'בראשית')):
+    elif source.get('category') in ('chassidut','kabbalah'):
+        domain, kind = 'torah-study', 'mysticism'
+    elif (title.startswith(('משנה ', 'תלמוד ', 'בבלי ', 'ירושלמי ', 'עבודה זרה', 'רמב"ם', 'רמב״ם', 'ספרי ', 'ויקרא', 'בראשית'))
+          or re.match(r'(?:ברכות|פסחים|שבת|נדרים|חולין|קידושין)\s+[א-ת]+\s+[אב](?:\s|$)',title)):
         domain, kind = 'torah-study', 'primary-torah-text'
     elif source.get('category') in ('halacha', 'responsa'):
         domain, kind = 'halacha', source['category']
@@ -72,6 +76,8 @@ def applicability_issue(question, text):
 
 
 def exclusion_reason(question, source, web=False):
+    from .ranking import intent_issue
+    from .semantic_claims import units_for
     quality = classify(source)
     if quality['domain'] == 'civil-law':
         return 'civil document cannot support halachic ruling'
@@ -79,7 +85,9 @@ def exclusion_reason(question, source, web=False):
         return 'mystical study is not an applicable ruling source'
     if web and quality['domain'] == 'unknown':
         return 'web document genre unverified'
-    return applicability_issue(question, source.get('text', ''))
+    if units_for(question,source):
+        return None  # pinned full text + locator resolves anaphoric wording, not token overlap
+    return intent_issue(question,source) or applicability_issue(question, source.get('text', ''))
 
 
 def web_locator_issue(title, url):

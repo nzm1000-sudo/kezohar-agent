@@ -88,6 +88,8 @@ def citation_status(row):
         return 'לא נבדק — לא התקבל פלט Qwen'
     verdict = verification.get('verdict')
     if verdict == 'ok':
+        if verification.get('support') == 'source-pinned-reformulations':
+            return 'עברה בדיקת תמיכה מוגבלת בטענה; נדרשת בדיקה הלכתית'
         return 'עבר אימות תוכנה של ציטוטים בלבד'
     if verdict == 'no_source':
         return 'אין טענה לאימות — המודל הודה שאין מקור'
@@ -117,7 +119,7 @@ def render_report(run):
     lines = ['# בדיקת קצה לקצה חיה — 20 שאלות הלכתיות', '',
              'הרצה: ' + run['started_at'] + '. מודל: `' + run['model'] + '`.', '',
              'הספרייה המקומית, מחקר הרשת והמודל המקומי הופעלו בפועל. פלט Qwen נרשם לפני מנגנון ההגנה, לצד התשובה שהמערכת החזירה. אין כאן אישור פסיקה אנושי.', '',
-             'כל התשובות מסומנות **דורשות בדיקה הלכתית אנושית**. הצלחת בדיקת תוכנה מעידה רק על התאמת ציטוט לטקסט שנשלף ועל בדיקות הסף הקיימות; היא אינה מוכיחה תחולה הלכתית או שהקטע שלם.', '',
+             'כל התשובות מסומנות **דורשות בדיקה הלכתית אנושית**. הצלחת בדיקת תוכנה מדווחת לפי המסלול: ציטוט מדויק או שקילות משפט מוגדרת למקור מקובע, וכן בדיקות הסף הקיימות. היא אינה מוכיחה תחולה הלכתית כללית או שהקטע שלם.', '',
              'מקטעים במאגר המקומי: {:,}. הגבלת זמן הפקה באבחון: {} שניות; ברירת המחדל במסלול מחקר היא 15 שניות ובמענה מקומי 4.5 שניות. ההגדרות הקיימות לא שונו.'.format(run['source_count'], run['timeout_s']), '',
              'הזמן הכולל הוא זמן תהליך האבחון: אחזור מקומי מקדים למדידה, ואחריו מסלול Agent.research שמאחזר שוב, חוקר ומפיק. הוא אינו מדידת HTTP או SSE של ה־API; זמן Qwen ומחקר הרשת נמדדים בנפרד. לא הופעל מטמון תשובות.', '',
              'המחקר משתמש בגילוי הרשת הקיים ללא מקורות ידניים או תשובות ייחוס שהוזנו למודל. מקורות רשת נשמרו בדוח לפי מדיניות הקטעים של המערכת; אין שמירת טקסטי רשת מלאים או הוספתם למאגר הפעיל.', '',
@@ -236,6 +238,7 @@ def main():
              'verdict':result.get('verdict'),'verification':result.get('verification',{}),
              'web_errors':research.get('errors',[]),'discovery_backend':research.get('discovery_backend'),
              'rejected_web_sources':research.get('rejected_sources', []),
+             'discovery_attempts':research.get('discovery_attempts', []),
              'human_review':'required','error':error}
         run['questions'].append(row)
         run['summary']=summarize(run['questions'])

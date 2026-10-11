@@ -26,10 +26,11 @@ def order_sources(sources, question=""):
         source.setdefault('halachic_authority', source.get('authority_level','') or ('maran' if source.get('work_title','').startswith('שולחן ערוך') or source.get('book_id')=='Beit_Yosef' else 'unclassified'))
         source.setdefault('evidence_support', 'not-claim-verified')
     return sorted(sources, key=lambda s: (
-        -s.get('topical_overlap',0),
         s.get('domain') != 'halacha',
         TRADITION_ORDER.get(s.get('tradition',''),1),
         s.get('halachic_authority')!='maran',
+        s.get('source_type')!='psak-code',
+        -s.get('topical_overlap',0),
         s.get('category') not in ('halacha','responsa'),
         -s.get('score',0)))
 
@@ -142,7 +143,7 @@ class Agent:
         supported = {e['source_id'] for e in v.get('evidence',[])}
         for source in retrieved:
             if source['source_id'] in supported:
-                source['evidence_support']='exact-extract-only'
+                source['evidence_support']=v.get('support','exact-extract-only')
         res = {"answer": answer, "sources": retrieved, "verdict": verdict,
                "verification": v, "mode": mode,
                "human_review": "required", "halachic_verified": False,

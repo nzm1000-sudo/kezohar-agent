@@ -58,3 +58,34 @@ def test_source_id_success_is_only_software_success_in_live_v2():
             passed+=1
             assert not v['halachic_verified'] and v['human_review']=='required'
     assert passed==4 and dataset['summary']['human_halachic_verified']==0
+
+
+def test_all_frozen_artifacts_match_manifest_and_new_calls_are_replayable():
+    manifest=json.loads(Path('bench/frozen/manifest.json').read_text())
+    for name,digest in manifest.items():
+        assert hashlib.sha256(Path(name).read_bytes()).hexdigest()==digest
+    for version in ('v3','v4'):
+        dataset=json.loads(Path('bench/frozen/halacha_2026-10-11-'+version+'.json').read_text())
+        assert len(dataset['questions'])==20 and dataset['finished_at']
+        for row in dataset['questions']:
+            if row['qwen_called']:
+                assert row['frozen_messages']==row['qwen_calls'][0]['messages']
+                assert row['raw_qwen_answer']==row['qwen_calls'][0]['answer']
+                a=replay_request(dataset,row,'model-a');b=replay_request(dataset,row,'model-b')
+                a.pop('model');b.pop('model')
+                assert a==b
+            else:
+                assert replay_request(dataset,row,'model-a') is None
+
+
+def test_final_verifier_preserves_every_live_v4_verdict_and_review_requirement():
+    from kezohar.verification import ExtractiveSourceVerifier
+    dataset=json.loads(Path('bench/frozen/halacha_2026-10-11-v4.json').read_text())
+    verifier=ExtractiveSourceVerifier()
+    for row in dataset['questions']:
+        if not row['qwen_called']:continue
+        sources=[s for s in row['selected_sources'] if s['source_id'] in row['qwen_source_ids']]
+        result=verifier.verify(row['question'],row['raw_qwen_answer'],sources)
+        assert result['verdict']==row['verification']['verdict']
+        if result['verdict']=='ok':
+            assert result['human_review']=='required' and result['halachic_verified'] is False

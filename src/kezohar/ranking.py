@@ -11,6 +11,13 @@ def topic_tokens(question):
 
 def retrieval_query(question):
     terms = topic_tokens(question)
+    from .semantic_claims import question_intent
+    intent=question_intent(question)
+    # Expand the requested case, never an answer or a predetermined ruling.
+    expansions={'travel':['תפילת','הדרך','פרסה','החזיק'],
+                'birkat-mazon':['ברכת','המזון','יתעכל','רעב'],
+                'tea':['תה','שקית','כלי','שני']}
+    terms.extend(expansions.get(intent,[]))
     if not terms:
         return question
     if any('חלב' in t for t in terms):
@@ -23,6 +30,31 @@ def retrieval_query(question):
         if len(term)>=3:
             expanded.extend(prefix+term for prefix in ('ה','ו','ב','ל','מ','וה'))
     return ' '.join(dict.fromkeys(expanded))
+
+
+def intent_issue(question, source):
+    from .semantic_claims import question_intent
+    q=question_intent(question);t=hebrew.normalize(source.get('text',''))
+    ref=source.get('reference_en','')
+    if q=='yaaleh-shachrit':
+        if (not any(w in t for w in ('יעלה ויבא','יעלה ויבוא'))
+                or not any(w in t for w in ('ראש חודש','ראש חדש','רח '))
+                or 'שחרית' not in t
+                or not any(w in t for w in ('תפל','תפיל','מודי'))):
+            return 'morning Rosh Chodesh prayer case absent'
+    if q=='meat-wait' and not ('בשר' in t and any(w in t for w in ('גבינה','חלב'))
+            and any(w in t for w in ('שש שעות','להמתינ','המתנה'))):
+        return 'explicit waiting after meat absent'
+    if q=='birkat-mazon' and not any(w in t for w in ('יתעכל','נתעכל','רעב')):
+        return 'meal blessing time requires digestion/hunger context'
+    if q=='travel':
+        subject=('תפילת הדרכ' in t or 'תפלת הדרכ' in t or 'Orach Chayim.110.' in ref
+                 or ('אומר אותה אחר שהחזיק בדרכ' in t))
+        if not subject or not any(w in t for w in ('פרסה','החזיק','יצא','יציאה')):
+            return 'travel prayer subject and timing not supplied'
+    if q=='tea' and not ('תה' in t.split() and 'כלי שני' in t):
+        return 'tea in second vessel absent'
+    return None
 
 
 def topic_overlap(text, question):
