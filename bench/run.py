@@ -10,7 +10,7 @@ under load can be told apart.
 
 Usage: python3 bench/run.py [--out DIR] [model ...]   (stdlib only, reads LLM_BASE_URL from .env)
 """
-import argparse, json, os, re, subprocess, time, urllib.request
+import argparse, codecs, http.client, json, os, re, socket, subprocess, time, urllib.error, urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -27,14 +27,47 @@ MODELS = [
 ]
 
 
-def env(key):
-    for line in (ROOT / ".env").read_text().splitlines():
-        if line.startswith(key + "="):
-            return line.split("=", 1)[1].strip()
-    raise SystemExit(f"{key} missing in .env")
+class BenchmarkError(Exception):
+    """Base error for benchmark infrastructure failures."""
 
 
-BASE = env("LLM_BASE_URL").rstrip("/")
+class BenchmarkConnectionError(BenchmarkError):
+    """The LLM server could not be reached or returned a bad response."""
+
+
+def env(key, path=None):
+    """Read KEY from a .env-style file. Skips blanks/comments, strips quotes.
+
+    Raises SystemExit with a clear message when the file or key is missing.
+    """
+    p = Path(path) if path is not None else ROOT / ".env"
+    if not p.exists():
+        raise SystemExit(
+            f"קובץ ההגדרות חסר: {p} — צור אותו מתוך .env.example "
+            f"(נדרשת שורה מסוג {key}=...). (config file missing: {p})"
+        )
+    for raw_line in p.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        if k.strip() == key:
+            return v.strip().strip("'\"")
+    raise SystemExit(f"{key} חסר בקובץ {p} — הוסף שורה מסוג {key}=... .")
+
+
+def get_base():
+    """LLM base URL, loaded lazily so import/tests don't crash without .env."""
+    global BASE
+    if BASE is None:
+        BASE = env("LLM_BASE_URL").rstrip("/")
+    return BASE
+
+
+try:
+    BASE = env("LLM_BASE_URL").rstrip("/")
+except SystemExit:
+    BASE = None  # a clear error is raised later at request time (see post())
 
 SCOPE = ("אתה עוזר תורני של אפליקציית 'כזוהר הרקיע'. אתה עונה רק על הלכה, מנהגים, ברכות, זמנים, "
          "תפילות, צומות, שבת, חגים ולוח השנה העברי. על כל נושא אחר השב בנימוס, בעברית, שאינך עונה על כך.")
@@ -74,9 +107,56 @@ def load_questions():
 
 
 def post(path, body, stream=False, timeout=300):
-    req = urllib.request.Request(BASE + path, json.dumps(body).encode(), {"Content-Type": "application/json"})
-    r = urllib.request.urlopen(req, timeout=timeout)
-    return r if stream else json.load(r)
+    """POST JSON to the LM Studio server.
+
+    Raises BenchmarkConnectionError with a clear (Hebrew + English) message on:
+    HTTP errors, unreachable server, timeouts, and corrupt JSON responses.
+    The measurement methodology itself is unchanged — only failures are
+    reported clearly instead of crashing with a raw traceback.
+    """
+    base = get_base()  # clear SystemExit here if the config file is missing
+    req = urllib.request.Request(base + path, json.dumps(body).encode(), {"Content-Type": "application/json"})
+    try:
+        r = urllib.request.urlopen(req, timeout=timeout)
+    except urllib.error.HTTPError as e:
+        code = e.code
+        try:
+            e.close()  # the error object holds the socket; release it
+        except Exception:
+            pass
+        raise BenchmarkConnectionError(
+            f"שגיאת HTTP {code} מהשרת {base}{path} — בדוק שהמודל טעון ב-LM Studio ושכתובת השרת נכונה. "
+            f"(HTTP error {code} from {base}{path})"
+        ) from e
+    except urllib.error.URLError as e:
+        if isinstance(e.reason, (TimeoutError, socket.timeout)):
+            raise BenchmarkConnectionError(
+                f"הבקשה ל-{base}{path} נכשלה ב-timeout אחרי {timeout} שניות — השרת עמוס או לא מגיב. "
+                f"(request to {base}{path} timed out after {timeout}s)"
+            ) from e
+        raise BenchmarkConnectionError(
+            f"שרת LM Studio אינו עונה ב-{base} — פתח את LM Studio והפעל את השרת, "
+            f"ובדוק את LLM_BASE_URL בקובץ .env. (server unreachable at {base}: {e.reason})"
+        ) from e
+    except (TimeoutError, socket.timeout, ConnectionError, OSError) as e:
+        raise BenchmarkConnectionError(
+            f"חיבור הרשת ל-{base}{path} נכשל או נותק ({e}) — בדוק שהשרת פעיל והרשת תקינה. "
+            f"(network failure for {base}{path}: {e})"
+        ) from e
+    if stream:
+        return r  # ownership passes to the caller: iter_sse_lines() always closes it
+    try:
+        return json.load(r)
+    except (ValueError, UnicodeDecodeError) as e:
+        raise BenchmarkConnectionError(
+            f"השרת החזיר תגובה פגומה (לא JSON תקין) ב-{path}. "
+            f"(invalid JSON response on {path}: {e})"
+        ) from e
+    finally:
+        try:
+            r.close()
+        except Exception:
+            pass
 
 
 def mem_used_gb():
@@ -130,7 +210,19 @@ def tool_test(model, q):
             "messages": [{"role": "system", "content": TOOL_SYSTEM}, {"role": "user", "content": q["q"]}]}
     t = time.time()
     r = post("/chat/completions", body)
-    msg = r["choices"][0]["message"]
+    try:
+        msg = r["choices"][0]["message"]
+    except (KeyError, IndexError, TypeError) as e:
+        raise BenchmarkConnectionError(
+            "השרת החזיר תשובה במבנה לא צפוי (חסר choices/message) — "
+            "בדוק שהמודל הנכון טעון ב-LM Studio. "
+            f"(malformed chat response, missing choices/message: {e})"
+        ) from e
+    if not isinstance(msg, dict):
+        raise BenchmarkConnectionError(
+            "השרת החזיר הודעה במבנה לא צפוי (message אינו אובייקט). "
+            "(malformed chat response: message is not an object)"
+        )
     calls = msg.get("tool_calls") or []
     call = calls[0]["function"] if calls else None
     args = None
@@ -160,7 +252,128 @@ def build_user(q, ctx):
     return f"מקורות:\n{src}\n\nשאלה: {q['q']}"
 
 
-SENT_END = re.compile(r"[.!?](\s|$)")
+SENT_END_CHARS = ".!?…׃"
+SENT_END = re.compile(r"[.!?…׃](\s|$)")
+
+
+def split_sentences(text):
+    """Split Hebrew/English text into sentences.
+
+    Same terminators as SENT_END (Latin .!? plus Hebrew … and ׃ sof-pasuq).
+    The colon ':' is deliberately NOT a terminator so citations like רח:ז
+    don't split sentences. Methodology unchanged — only the charset grew.
+    """
+    return [s for s in re.split(r"(?<=[.!?…׃])\s+", text) if s.strip()]
+
+
+_HEB = "֐-׿"  # whole Hebrew Unicode block (incl. final forms)
+
+
+def _unify_finals(s):
+    return (s.replace("ך", "כ").replace("ם", "מ").replace("ן", "נ")
+             .replace("ף", "פ").replace("ץ", "צ"))
+
+
+def _norm_cite(s):
+    """Normalize a citation for comparison.
+
+    Unifies ׃→:, final-letter forms → regular, strips geresh/gershayim and
+    punctuation, and unifies every separator run (spaces, colons) into one
+    ':'. So 'רח:ז', 'רח׃ז' and 'רח ז' all become 'רח:ז'. A bare 'רחז'
+    (no separator at all) deliberately does NOT match — requiring a
+    separator is what keeps 'ח:ז' (siman 8) from matching inside
+    'רח:ז' (siman 208).
+    """
+    s = _unify_finals(s.replace("׃", ":"))
+    s = re.sub(r"[׳״’ʼ′'\"`.,;()\[\]{}]", "", s)
+    return re.sub(r"[:\s]+", ":", s).strip(":")
+
+
+def _plain_words(s):
+    """Copy of s with finals unified and punctuation stripped, spaces kept."""
+    s = _unify_finals(s.replace("׃", " "))
+    return re.sub(r"[׳״’ʼ′'\"`.,;:()\[\]{}]", "", s)
+
+
+def _bounded(haystack, needle):
+    """Substring match with Hebrew-letter/digit boundaries on both sides."""
+    return re.search(r"(?<![%s0-9])%s(?![%s0-9])" % (_HEB, re.escape(needle), _HEB),
+                     haystack) is not None
+
+
+def cites_source(text, ctx):
+    """True if the answer cites one of the given sources.
+
+    Three layers, first match wins:
+    1. exact raw check with Hebrew-letter boundaries (original behaviour,
+       hardened so 'ח:ז' can't match inside 'רח:ז');
+    2. normalized comparison (geresh/space/׃ variants, same boundaries);
+    3. spelled-out 'סימן X סעיף Y' with boundaries around each number, so
+       siman ח (8) can't match 'סימן רח' (208) and seif ז (7) can't match
+       'סעיף טז' (16). No methodology change — every answer that cited
+       before still cites now; only unrelated-source collisions are cut.
+    """
+    if not ctx or not text:
+        return False
+    norm_text = _norm_cite(text)
+    plain_text = _plain_words(text)
+    for c in ctx:
+        last = c.get("he_ref", "").split(" ")[-1]
+        if not last:
+            continue
+        if _bounded(text, last):
+            return True
+        nlast = _norm_cite(last)
+        if nlast and _bounded(norm_text, nlast):
+            return True
+        if ":" in nlast:
+            siman, _, seif = nlast.partition(":")
+            siman = re.sub(r"\s+", "", _plain_words(siman))
+            seif = re.sub(r"\s+", "", _plain_words(seif))
+            if not (siman and seif):
+                continue
+            # keywords go through the same final-letter unification as
+            # plain_text (סימן→סימנ), otherwise they can never match.
+            siman_kw, seif_kw = _unify_finals("סימן"), _unify_finals("סעיף")
+            siman_ok = re.search(r"(?<![%s])%s\s*%s(?![%s0-9])" % (_HEB, siman_kw, re.escape(siman), _HEB),
+                                 plain_text)
+            seif_ok = re.search(r"(?<![%s])%s\s*%s(?![%s0-9])" % (_HEB, seif_kw, re.escape(seif), _HEB),
+                                plain_text)
+            if siman_ok and seif_ok:
+                return True
+    return False
+
+
+def iter_sse_lines(resp):
+    """Yield decoded SSE lines from a streaming response; always close it.
+
+    - reassembles a line split across reads (buffering),
+    - decodes incrementally so UTF-8 split between reads stays intact,
+    - skips undecodable bytes, and closes resp in every exit path
+      (normal end, exception, or a mid-answer network break).
+    """
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    buf = ""
+    try:
+        while True:
+            raw = resp.read(65536)
+            if not raw:
+                break
+            if isinstance(raw, str):
+                buf += raw
+            else:
+                buf += decoder.decode(raw)
+            *ready, buf = buf.split("\n")
+            for ln in ready:
+                yield ln.strip()
+        tail = (buf + decoder.decode(b"", final=True)).strip()
+        if tail:
+            yield tail
+    finally:
+        try:
+            resp.close()
+        except Exception:
+            pass
 
 
 def answer_test(model, q, ctx):
@@ -170,28 +383,47 @@ def answer_test(model, q, ctx):
     t0 = time.time()
     ttft = tt_sentence = None
     text, reasoning, usage = "", "", {}
-    for raw in post("/chat/completions", body, stream=True):
-        line = raw.decode().strip()
-        if not line.startswith("data:") or line == "data: [DONE]":
-            continue
-        d = json.loads(line[5:])
-        if d.get("usage"):
-            usage = d["usage"]
-        for ch in d.get("choices", []):
-            delta = ch.get("delta", {})
-            reasoning += delta.get("reasoning_content") or delta.get("reasoning") or ""
-            piece = delta.get("content") or ""
-            if piece:
-                if ttft is None:
-                    ttft = time.time() - t0
-                text += piece
-                if tt_sentence is None and SENT_END.search(text):
-                    tt_sentence = time.time() - t0
+    truncated = False
+    try:
+        for line in iter_sse_lines(post("/chat/completions", body, stream=True)):
+            if not line.startswith("data:") or line == "data: [DONE]":
+                continue
+            try:
+                d = json.loads(line[5:])
+            except ValueError:
+                continue  # skip one corrupt SSE chunk; timing methodology unchanged
+            if not isinstance(d, dict):
+                continue
+            if isinstance(d.get("usage"), dict):
+                usage = d["usage"]
+            choices = d.get("choices", [])
+            if not isinstance(choices, list):
+                continue
+            for ch in choices:
+                if not isinstance(ch, dict):
+                    continue
+                delta = ch.get("delta", {})
+                if not isinstance(delta, dict):
+                    continue
+                reasoning += delta.get("reasoning_content") or delta.get("reasoning") or ""
+                piece = delta.get("content") or ""
+                if piece:
+                    if ttft is None:
+                        ttft = time.time() - t0
+                    text += piece
+                    if tt_sentence is None and SENT_END.search(text):
+                        tt_sentence = time.time() - t0
+    except (TimeoutError, socket.timeout, ConnectionError, OSError,
+            http.client.HTTPException) as e:
+        # Network broke mid-answer: keep what arrived and flag it, instead of
+        # crashing the whole model run. Timing covers the received part only.
+        truncated = True
+        text += f"\n[תשובה נקטעה — החיבור נותק באמצע: {e}]"
     total = time.time() - t0
-    ntok = usage.get("completion_tokens", 0)
+    ntok = usage.get("completion_tokens", 0) if isinstance(usage, dict) else 0
     gen_time = total - (ttft or 0)
     text = text.strip()
-    sentences = [s for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    sentences = split_sentences(text)
     latin = len(re.findall(r"[A-Za-z]", text))
     return {
         "ttft_s": round(ttft, 2) if ttft else None,
@@ -205,8 +437,9 @@ def answer_test(model, q, ctx):
         "sentences": len(sentences),
         "latin_chars": latin,
         # mechanical behaviour checks only - NOT a halachic grade
-        "cites_given_source": bool(ctx) and any(c["he_ref"].split(" ")[-1] in text for c in ctx),
+        "cites_given_source": cites_source(text, ctx),
         "says_no_source": "אין לי מקור" in text,
+        "truncated": truncated,  # True when the network broke mid-answer
         "answer": text,
     }
 
