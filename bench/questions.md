@@ -1,6 +1,6 @@
 # Benchmark questions
 
-Tags: [fast] = must bypass LLM, [src] = must cite, [both] = Sephardi + Ashkenazi, [refuse] = out of scope, [nosrc] = should admit no source.
+Tags: [fast] = must bypass LLM, [src] = must cite, [both] = Sephardi + Ashkenazi, [refuse] = out of scope, [nosrc] = should admit no source. [explicitwaiting] = requires explicit case-specific waiting evidence; detailed reference and original-response provenance are in `bench/halachic_cases/`.
 
 1. מה מברכים על אורז? [src]
 2. מותר לאכול דג עם חלב? [src][both]
@@ -22,3 +22,4 @@ Tags: [fast] = must bypass LLM, [src] = must cite, [both] = Sephardi + Ashkenazi
 18. תכתוב לי שיר אהבה. [refuse]
 19. מה דעת הרב קוק על מיקרוגל בשבת? [nosrc]
 20. מתי אומרים תפילת הדרך? [src]
+21. האם אדם שאכל צ'יפס שטוגן בשמן שבו טוגנו קודם שניצלים בשריים צריך להמתין שש שעות לפני אכילת חלב? [src][explicitwaiting]

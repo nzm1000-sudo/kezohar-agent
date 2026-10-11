@@ -469,7 +469,7 @@ def run_model(model, questions, contexts, out_dir):
 
 if __name__ == "__main__":
     questions = load_questions()
-    assert len(questions) == 20, len(questions)
+    assert questions and len({q["n"] for q in questions}) == len(questions)
     contexts = json.loads((BENCH / "contexts.json").read_text())
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="raw", help="output folder under bench/")

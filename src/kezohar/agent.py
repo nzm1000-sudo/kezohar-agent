@@ -5,6 +5,7 @@ from .hybrid import HybridSearch
 from .ingest import load_store
 from .ranking import topic_tokens, retrieval_query, topic_overlap
 from .permissions import rag_eligible
+from . import evidence
 
 TRADITION_ORDER = {"sephardi": 0, "": 1, "ashkenazi": 2}
 
@@ -83,7 +84,7 @@ class Agent:
         # retrieval first (in code)
         retrieved = retrieved_sources if retrieved_sources is not None else self.search_only(q,top_k=top_k)
         if not retrieved:
-            res = {"answer": "אין לי מקור לכך.", "sources": [],
+            res = {"answer": evidence.INSUFFICIENT if evidence.shared_oil_waiting(q) else "אין לי מקור לכך.", "sources": [],
                    "verdict": "no_source", "mode": "sources-only",
                    "elapsed_s": round(time.time() - t0, 3)}
             self._cache[q] = (now, res)
@@ -94,6 +95,12 @@ class Agent:
             return {'answer':'מצב חיפוש: המקורות מותרים לחיפוש; היקף השימוש בהם להפקת תשובה עדיין בבירור.',
                     'sources':searchable, 'verdict':'rag-scope-pending', 'mode':'sources-only',
                     'elapsed_s':round(time.time()-t0,3)}
+        eligible = evidence.applicable_sources(q, retrieved)
+        if not eligible:
+            return {"answer": evidence.INSUFFICIENT, "sources": retrieved,
+                    "verdict": "insufficient_context", "mode": "sources-only",
+                    "elapsed_s": round(time.time() - t0, 3)}
+        retrieved = eligible
         # one LLM call
         try:
             lr = llm_client.ask(q, retrieved, self.base_url, self.model, timeout=timeout)
@@ -101,21 +108,23 @@ class Agent:
             mode = "llm"
         except llm_client.LLMUnavailable:
             # Mac offline: sources only, clearly labeled
-            res = {"answer": "מצב חיפוש (המודל אינו זמין): אלו המקורות הקרובים ביותר.",
+            res = {"answer": evidence.INSUFFICIENT if evidence.shared_oil_waiting(q) else "מצב חיפוש (המודל אינו זמין): אלו המקורות הקרובים ביותר.",
                    "sources": retrieved, "verdict": "sources-only",
                    "mode": "sources-only", "elapsed_s": round(time.time() - t0, 3)}
             self._cache[q] = (now, res)
             return dict(res)
         # safety verification
-        v = citations.verify_extractive_answer(answer, retrieved)
+        v = evidence.verify_context(q, citations.verify_extractive_answer(answer, retrieved))
         if 'אין לי מקור' in answer and answer.strip().rstrip('.')=='אין לי מקור לכך':
             v = {'verdict':'no_source', 'support':'no claim'}
+            if evidence.shared_oil_waiting(q):
+                answer = evidence.INSUFFICIENT
         elif v['verdict']=='ok' and not any(citations.check_relevance(s['text'],q)[0] for s in retrieved):
             v = {'verdict':'irrelevant', 'support':'quotation unrelated to question'}
         verdict = v["verdict"]
         if verdict not in ("ok", "no_source"):
             # do not present as certain ruling
-            answer = "אין לי מקור לכך. " + " ".join(
+            answer = evidence.INSUFFICIENT if evidence.shared_oil_waiting(q) else "אין לי מקור לכך. " + " ".join(
                 f"[{s.get('reference','')}]" for s in retrieved[:3])
             mode = "llm-guarded"
         supported = {e['source_id'] for e in v.get('evidence',[])}

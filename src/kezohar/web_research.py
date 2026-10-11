@@ -3,6 +3,7 @@
 No site reputation is treated as proof of a claim. Unknown rights: transient
 short excerpts only. Full-text persistence requires explicit scoped permission.
 """
+from . import evidence
 import argparse
 import fcntl
 import html
@@ -302,7 +303,7 @@ class WebResearchEngine:
                 errors.append({'url':url,'error':type(exc).__name__})
         results=rank_sources(HybridSearch(sources).search(question,top_k=limit)) if sources else []
         return {'sources':results,'errors':errors,'comparisons':compare(results),
-                'answer':self.extractive_answer(results),'mode':'web-evidence','verdict':'exact-extract-only','discovery_backend':getattr(self.searcher,'last_backend','custom'),'verification':{'support':'exact-excerpts','psak':'not-inferred'}}
+                'answer':evidence.INSUFFICIENT if evidence.shared_oil_waiting(question) else self.extractive_answer(results),'mode':'web-evidence','verdict':'insufficient_context' if evidence.shared_oil_waiting(question) else 'exact-extract-only','discovery_backend':getattr(self.searcher,'last_backend','custom'),'verification':{'support':'exact-excerpts','psak':'not-inferred'}}
     def answer(self, question, base_url, model, limit=5, urls=None, timeout=15, local_sources=None):
         result = self.research(question, limit=limit, urls=urls)
         local_sources = [s for s in (local_sources or []) if rag_eligible(s)]
@@ -312,15 +313,19 @@ class WebResearchEngine:
             result['sources'] = order_sources(list(unique.values()),question)[:limit]
             result['answer'] = self.extractive_answer(result['sources'])
             result['comparisons'] = compare(result['sources'])
-        if not result['sources']:
+        eligible = evidence.applicable_sources(question, result['sources'])
+        if evidence.shared_oil_waiting(question):
+            result.update(answer=evidence.INSUFFICIENT, verdict='insufficient_context', mode='web-evidence')
+        if not eligible:
             return result
+        result['sources'] = eligible
         prompt = question + '\nהחזר רק ציטוטים מדויקים מהקטעים, כל אחד במבנה: ״ציטוט״ (מראה מקום מלא). ללא דברי הסבר נוספים.'
         try:
             generated = llm.ask(prompt, result['sources'], base_url, model, timeout=timeout)['answer']
-            verification = citations.verify_extractive_answer(generated, result['sources'])
+            verification = evidence.verify_context(question, citations.verify_extractive_answer(generated, result['sources']))
             result['verification'] = verification
             if verification['verdict']=='ok':
-                result.update(answer=generated, mode='web-llm-verified')
+                result.update(answer=generated, mode='web-llm-verified', verdict='exact-extract-only')
             else:
                 result['mode']='web-llm-guarded'
         except llm.LLMUnavailable:
