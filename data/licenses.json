@@ -1,0 +1,26 @@
+{
+  "PD-ShulchanAruch-1893": {
+    "name": "Public Domain — Shulchan Aruch Lemberg editions (1893/1888)",
+    "allows_full_text": true,
+    "url": "https://www.sefaria.org/",
+    "notes": "מהדורות למברג 1893/1888 — נחלת הכלל. מותר לשמור עותק מקומי."
+  },
+  "CC-BY": {
+    "name": "Creative Commons Attribution",
+    "allows_full_text": true,
+    "url": "https://creativecommons.org/licenses/by/4.0/",
+    "notes": ""
+  },
+  "CC-BY-SA": {
+    "name": "Creative Commons Attribution-ShareAlike",
+    "allows_full_text": true,
+    "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "notes": ""
+  },
+  "RESTRICTED": {
+    "name": "Restricted / copyrighted — no full-text import",
+    "allows_full_text": false,
+    "url": "",
+    "notes": "ילקוט יוסף, חזון עובדיה וכל יצירה מוגנת — אין לייבא טקסט מלא ללא הרשאה."
+  }
+}
