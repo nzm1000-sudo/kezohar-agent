@@ -31,11 +31,6 @@ def check_validity(cited_ref, retrieved):
                 continue
             if hebrew.normalize_ref(cand) == cnorm:
                 return True, r
-            # also allow: normalized cited is substring of normalized retrieved ref or vice versa
-            rn = hebrew.normalize_ref(cand)
-            if cnorm and rn and (cnorm in rn or rn in cnorm):
-                # require at least work title token overlap to avoid cross-book mixing
-                return True, r
     return False, None
 
 def _stem(t):
@@ -102,8 +97,34 @@ def verify_answer(question, answer, retrieved):
         results.append({"ref": ref, "valid": valid, "relevant": rel, "overlap": overlap})
         any_valid = any_valid or valid
         any_relevant = any_relevant or rel
-    if not any_valid:
+    if not all(r["valid"] for r in results):
         return {"verdict": "invalid_citation", "details": "cited ref not in retrieved", "refs": results}
     if not any_relevant:
         return {"verdict": "irrelevant", "details": "source does not match question", "refs": results}
     return {"verdict": "ok", "details": "citation valid and relevant", "refs": results}
+
+
+def verify_extractive_answer(answer, retrieved):
+    """Conservative support verification: every claim must be an exact quotation.
+
+    Relevance/validity alone cannot prove entailment. Free paraphrases are rejected
+    by this web-RAG guard, until a validated semantic verifier is available.
+    """
+    pattern = re.compile(r'[״"]([^״"]+)[״"]\s*\(([^()]+)\)')
+    matches = list(pattern.finditer(answer))
+    if not matches:
+        return {"verdict":"unsupported", "support":"no exact quoted evidence"}
+    remainder = pattern.sub('', answer)
+    if remainder.strip(' \n\t.:;!?־–—'):
+        return {"verdict":"unsupported", "support":"unverified prose outside quotations"}
+    evidence = []
+    for match in matches:
+        quote, ref = match.groups()
+        matching = [s for s in retrieved if check_validity(ref,[s])[0]]
+        if not matching:
+            return {"verdict":"invalid_citation"}
+        source = next((s for s in matching if quote.strip() in s.get('text','')),None)
+        if source is None:
+            return {"verdict":"unsupported", "support":"quote not present in cited excerpt"}
+        evidence.append({"source_id":source['source_id'], "quote":quote})
+    return {"verdict":"ok", "support":"exact-extract-only", "evidence":evidence}

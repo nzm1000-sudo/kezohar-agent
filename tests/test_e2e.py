@@ -6,6 +6,12 @@ from fastapi.testclient import TestClient
 from kezohar import api, citations
 from kezohar.agent import Agent
 
+import pytest
+
+@pytest.fixture(autouse=True)
+def isolated_api_agent(monkeypatch):
+    monkeypatch.setattr(api, '_agent', _agent_offline())
+
 c = TestClient(api.app)
 
 def _agent_offline():

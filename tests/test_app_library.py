@@ -130,3 +130,15 @@ def test_incremental_fts_updates_and_revocation(library):
     app,out,write=library;sync_library(app,out,LICENSES);s=SQLiteLibrarySearch(out/'library.sqlite3');assert s.search('שבת')
     write('חנוכה');sync_library(app,out,LICENSES);assert not s.search('שבת') and s.search('חנוכה')
     sync_library(app,out,{});assert not s.search('חנוכה')
+
+def test_api_uses_disk_index_without_loading_library_jsonl(library,monkeypatch):
+    from kezohar import api
+    app,out,_=library;sync_library(app,out,LICENSES)
+    (out/'sources.jsonl').write_text('intentionally not JSON; API must query SQLite')
+    monkeypatch.setattr(api,'_agent',None)
+    monkeypatch.setenv('STORE_PATH',str(out/'empty-base.jsonl'))
+    monkeypatch.setenv('WEB_STORE_PATH',str(out/'empty-web.jsonl'))
+    monkeypatch.setenv('APP_LIBRARY_STORE_PATH',str(out/'sources.jsonl'))
+    monkeypatch.setenv('APP_LIBRARY_DB_PATH',str(out/'library.sqlite3'))
+    assert api.get_agent().search_only('שבת')
+    assert api.get_agent().search.bm25.docs==[]

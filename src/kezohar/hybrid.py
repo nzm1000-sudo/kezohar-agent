@@ -53,6 +53,10 @@ class FederatedSearch:
         self.bm25 = primary.bm25
         self.vector = primary.vector
 
+    @property
+    def source_count(self):
+        return len(self.bm25.docs)+sum(getattr(backend,'source_count',0) for backend in self.backends)
+
     def search(self, query, top_k=5):
         ranked = [self.primary.search(query, top_k=top_k*2)]
         ranked.extend(backend.search(query, top_k=top_k*2) for backend in self.backends)

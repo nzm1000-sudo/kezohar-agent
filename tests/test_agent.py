@@ -50,3 +50,17 @@ def test_sephardi_first():
     res = ag.search_only("בשר גבינה", top_k=5)
     assert res  # ordering stable; tradition field present
     assert all("tradition" in s for s in res)
+
+def test_local_answer_support_guard_rejects_inverted_claim(monkeypatch):
+    from kezohar import llm
+    monkeypatch.setattr(llm,'ask',lambda *a,**k:{'answer':'אסור לאכול אורז (שולחן ערוך, אורח חיים רח:ז).'})
+    ag=_agent_no_llm();result=ag.ask('מה מברכים על אורז?')
+    assert result['mode']=='llm-guarded' and result['verdict']=='unsupported'
+
+def test_generic_terms_and_prefix_substring_are_not_evidence():
+    from kezohar.ranking import retrieval_query, topic_overlap
+    assert 'אורז' in retrieval_query('מה מברכים על אורז?').split()
+    assert 'מברכימ' not in retrieval_query('מה מברכים על אורז?').split()
+    assert topic_overlap('מברכים על אור ביום כיפור','מה מברכים על אורז?')==0
+    assert topic_overlap('הכוסס את האורז','מה מברכים על אורז?')==1
+    assert A.order_sources([{'work_title':'קיצור שולחן ערוך','text':'אורז','score':1}], 'אורז')[0]['halachic_authority']=='unclassified'

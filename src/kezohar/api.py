@@ -21,7 +21,15 @@ def get_agent():
     if _agent is None:
         import os
         store = os.environ.get("STORE_PATH", "data/store/sources.jsonl")
-        _agent = Agent(store_path=store)
+        app_store = os.environ.get("APP_LIBRARY_STORE_PATH", "data/store/app-library/sources.jsonl")
+        web_store = os.environ.get("WEB_STORE_PATH", "data/store/web/sources.jsonl")
+        _agent = Agent(store_path=[store, web_store])
+        from pathlib import Path
+        from .library_search import SQLiteLibrarySearch
+        from .hybrid import FederatedSearch
+        app_db = os.environ.get("APP_LIBRARY_DB_PATH", str(Path(app_store).with_name("library.sqlite3")))
+        if Path(app_db).exists():
+            _agent.search = FederatedSearch(_agent.search, [SQLiteLibrarySearch(app_db)])
     return _agent
 
 def _validate_ask(body):
@@ -45,7 +53,9 @@ def _rate_ok(ip, limit=30, window=60):
     _hits[ip] = arr
     return True
 
-def _ask_result(question, top_k=5, lat=None, lon=None, location=None):
+def _ask_result(question, top_k=5, lat=None, lon=None, location=None, research=False):
+    if research:
+        return get_agent().research(question, top_k=top_k)
     return get_agent().ask(question, top_k=top_k, lat=lat, lon=lon, location=location)
 
 def _sse_events(result):
@@ -57,6 +67,19 @@ def _sse_events(result):
         yield "event: answer\n" + "data: " + json.dumps({"sentence": s}, ensure_ascii=False) + "\n\n"
     yield "event: done\n" + "data: " + json.dumps({"verdict": result.get("verdict"), "mode": result.get("mode"), "elapsed_s": result.get("elapsed_s")}, ensure_ascii=False) + "\n\n"
 
+def _stream_local(question, top_k=5, lat=None, lon=None, location=None):
+    """Yield source event before starting inference; retrieved passages are reused."""
+    ag = get_agent()
+    fast = fastpath.is_out_of_scope(question) or fastpath.handle(question,
+        lat=lat or fastpath.DEFAULT_LAT, lon=lon or fastpath.DEFAULT_LON,
+        location=location or fastpath.DEFAULT_LOCATION) is not None
+    sources = [] if fast else ag.search_only(question,top_k=top_k)
+    yield 'event: sources\ndata: '+json.dumps({'sources':sources},ensure_ascii=False)+'\n\n'
+    result=ag.ask(question,top_k=top_k,lat=lat,lon=lon,location=location,retrieved_sources=sources)
+    events=iter(_sse_events(result))
+    next(events)  # Source event was already delivered.
+    yield from events
+
 if HAVE_FASTAPI:
     app = FastAPI(title="Kezohar Agent")
 
@@ -65,7 +88,7 @@ if HAVE_FASTAPI:
         ok, models = llm_client.check_health(config.llm_base_url())
         return {"status": "ok", "uptime_s": round(time.time() - _started, 1),
                 "llm_ok": ok, "llm_models": models if ok else [],
-                "store_docs": len(get_agent().search.bm25.docs)}
+                "store_docs": getattr(get_agent().search,"source_count",len(get_agent().search.bm25.docs))}
 
     @app.post("/search")
     async def search(req: Request):
@@ -75,6 +98,19 @@ if HAVE_FASTAPI:
             return JSONResponse({"error": "missing query"}, status_code=400)
         top_k = int(body.get("top_k", 5))
         return {"results": get_agent().search_only(q, top_k=top_k)}
+
+    @app.post("/research")
+    def research(body: dict, req: Request):
+        if not _rate_ok(req.client.host if req.client else "?"):
+            return JSONResponse({"error": "rate limit"}, status_code=429)
+        q, err = _validate_ask(body)
+        if err:
+            return JSONResponse({"error": err}, status_code=400)
+        try:
+            limit = max(1, min(int(body.get("top_k", 5)), 8))
+        except (TypeError, ValueError):
+            return JSONResponse({"error": "invalid top_k"}, status_code=400)
+        return get_agent().research(q, top_k=limit)
 
     @app.post("/ask")
     async def ask(req: Request):
@@ -89,9 +125,13 @@ if HAVE_FASTAPI:
         if err:
             return JSONResponse({"error": err}, status_code=400)
         stream = body.get("stream", False)
+        if stream and body.get('research') is not True:
+            return StreamingResponse(_stream_local(q,top_k=int(body.get('top_k',5)),
+                lat=body.get('lat'),lon=body.get('lon'),location=body.get('location')),
+                media_type='text/event-stream')
         res = _ask_result(q, top_k=int(body.get("top_k", 5)),
                           lat=body.get("lat"), lon=body.get("lon"),
-                          location=body.get("location"))
+                          location=body.get("location"), research=body.get("research") is True)
         if stream:
             return StreamingResponse(_sse_events(res), media_type="text/event-stream")
         return res
