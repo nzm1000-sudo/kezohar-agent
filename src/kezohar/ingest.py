@@ -73,6 +73,15 @@ def prepare_source(raw, licenses):
             source_url=raw.get("source_url", ""),
             version=raw.get("version", ""),
             ingested_at=utcnow_iso(),
+            book_id=raw.get("book_id", ""),
+            book_title=raw.get("book_title", ""),
+            category=raw.get("category", ""),
+            source_project=raw.get("source_project", ""),
+            source_file=raw.get("source_file", ""),
+            authority_level=raw.get("authority_level", ""),
+            reference_en=raw.get("reference_en", ""),
+            verification_status=raw.get("verification_status", ""),
+            provenance=raw.get("provenance", ""),
         ))
     return out, ""
 

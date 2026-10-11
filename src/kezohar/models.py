@@ -21,6 +21,16 @@ class Source:
     source_url: str = ""
     version: str = ""
     ingested_at: str = ""
+    # --- App Library Ingestion extensions (all optional, backward compatible) ---
+    book_id: str = ""
+    book_title: str = ""
+    category: str = ""
+    source_project: str = ""
+    source_file: str = ""
+    authority_level: str = ""
+    reference_en: str = ""
+    verification_status: str = ""
+    provenance: str = ""
 
     def to_dict(self):
         return asdict(self)

@@ -20,7 +20,65 @@
   "RESTRICTED": {
     "name": "Restricted / copyrighted — no full-text import",
     "allows_full_text": false,
+    "app_enabled": false,
+    "status": "blocked",
     "url": "",
     "notes": "ילקוט יוסף, חזון עובדיה וכל יצירה מוגנת — אין לייבא טקסט מלא ללא הרשאה."
+  },
+  "public-domain": {
+    "name": "Public Domain",
+    "allows_full_text": true,
+    "app_enabled": true,
+    "status": "verified-enabled",
+    "url": "https://www.sefaria.org/",
+    "notes": "נחלת הכלל — מותר טקסט מלא, ייחוס נשמר."
+  },
+  "cc-by": {
+    "name": "Creative Commons Attribution",
+    "allows_full_text": true,
+    "app_enabled": true,
+    "status": "verified-enabled",
+    "url": "https://creativecommons.org/licenses/by/4.0/",
+    "notes": "מותר טקסט מלא בכפוף לייחוס."
+  },
+  "cc-by-sa": {
+    "name": "Creative Commons Attribution-ShareAlike",
+    "allows_full_text": true,
+    "app_enabled": true,
+    "status": "verified-enabled",
+    "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "notes": "מותר טקסט מלא בכפוף לייחוס ושיתוף זהה."
+  },
+  "uxlc-free": {
+    "name": "UXLC Tanach.us free use",
+    "allows_full_text": true,
+    "app_enabled": true,
+    "status": "verified-enabled",
+    "url": "https://www.tanach.us/Tanach.xml",
+    "notes": "כתר לנינגרד — שימוש חופשי, ייחוס נשמר."
+  },
+  "cc-by-nc": {
+    "name": "Creative Commons Attribution-NonCommercial",
+    "allows_full_text": false,
+    "app_enabled": false,
+    "status": "pending-review",
+    "url": "https://creativecommons.org/licenses/by-nc/4.0/",
+    "notes": "מושבת עד לאישור: היקף NC ליצירת תשובות RAG לא אומת."
+  },
+  "cc-by-nc-sa": {
+    "name": "Creative Commons Attribution-NonCommercial-ShareAlike",
+    "allows_full_text": false,
+    "app_enabled": false,
+    "status": "pending-review",
+    "url": "http://www.toratemetfreeware.com/online/a_wellcome.html",
+    "notes": "מושבת עד לאישור: היקף NC+SA ליצירת תשובות RAG לא אומת (כולל חק לישראל, ילקוט יוסף במאגר תורת אמת)."
+  },
+  "author-permission": {
+    "name": "Author permission (declared, evidence not in repo)",
+    "allows_full_text": false,
+    "app_enabled": false,
+    "status": "declared-unverified",
+    "url": "",
+    "notes": "בעל האפליקציה מצהיר שיש בידיו אישור כתוב (למשל עונג שבת); המסמך אינו ב-repo וההיקף (חיפוש/אינדוקס/יצירת תשובות RAG) אינו מתועד — מושבת עד לאישור היקף."
   }
 }
