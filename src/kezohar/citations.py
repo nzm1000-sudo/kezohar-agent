@@ -1,5 +1,6 @@
 """Citation verification: Validity / Relevance / Support are separate."""
 import re
+import json
 from . import hebrew
 
 REF_PATTERNS = [
@@ -128,3 +129,51 @@ def verify_extractive_answer(answer, retrieved):
             return {"verdict":"unsupported", "support":"quote not present in cited excerpt"}
         evidence.append({"source_id":source['source_id'], "quote":quote})
     return {"verdict":"ok", "support":"exact-extract-only", "evidence":evidence}
+
+
+def verify_source_id_answer(answer, retrieved):
+    """Strict JSON quotation protocol. Render references only from stored metadata.
+
+    No model-authored claims, locators or authors are accepted. Exact text support
+    is unchanged; structured quoting also handles internal Hebrew abbreviations.
+    """
+    def unique_pairs(pairs):
+        obj = {}
+        for key, value in pairs:
+            if key in obj:
+                raise ValueError('duplicate JSON key')
+            obj[key] = value
+        return obj
+    try:
+        payload = json.loads(answer, object_pairs_hook=unique_pairs)
+    except (ValueError, TypeError):
+        return {'verdict': 'unsupported', 'support': 'invalid quotation JSON'}
+    if payload == {'status': 'no_source'}:
+        return {'verdict': 'no_source', 'support': 'no claim', 'rendered_answer': 'אין לי מקור לכך.'}
+    if not isinstance(payload, dict) or set(payload) != {'quotes'}:
+        return {'verdict': 'unsupported', 'support': 'unexpected claims or fields'}
+    quotes = payload['quotes']
+    if not isinstance(quotes, list) or not 1 <= len(quotes) <= 5:
+        return {'verdict': 'unsupported', 'support': 'one to five exact quotes required'}
+    index = {}
+    for source in retrieved:
+        sid = source.get('source_id')
+        if sid in index and source != index[sid]:
+            return {'verdict': 'invalid_citation', 'support': 'ambiguous source id'}
+        index[sid] = source
+    evidence, rendered = [], []
+    for item in quotes:
+        if (not isinstance(item, dict) or set(item) != {'source_id', 'quote'}
+                or not all(isinstance(v, str) for v in item.values())):
+            return {'verdict': 'unsupported', 'support': 'unexpected quote fields'}
+        source = index.get(item['source_id'])
+        if not source or not source.get('reference'):
+            return {'verdict': 'invalid_citation', 'support': 'source id or stored locator absent'}
+        quote = item['quote']
+        if not quote.strip() or quote != quote.strip() or quote not in source.get('text', ''):
+            return {'verdict': 'unsupported', 'support': 'quote not present in cited excerpt'}
+        evidence.append({'source_id': item['source_id'], 'quote': quote})
+        rendered.append('״' + quote + '״ (' + source['reference'] + ').')
+    return {'verdict': 'ok', 'support': 'exact-extract-only', 'evidence': evidence,
+            'rendered_answer': '\n'.join(rendered), 'human_review': 'required',
+            'halachic_verified': False}

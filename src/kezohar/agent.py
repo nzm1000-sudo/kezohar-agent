@@ -7,16 +7,19 @@ from .verification import ExtractiveSourceVerifier
 from .ranking import topic_tokens, retrieval_query, topic_overlap
 from .permissions import rag_eligible
 from . import evidence
+from .source_quality import classify, exclusion_reason
 
 TRADITION_ORDER = {"sephardi": 0, "": 1, "ashkenazi": 2}
 
 def order_sources(sources, question=""):
     """Maran/Sephardi first, then others — stable within groups."""
+    sources = [s for s in sources if not exclusion_reason(question, s)]
     if question:
         terms = topic_tokens(question)
         if terms:
             sources = [s for s in sources if topic_overlap(s.get('text',''),question)>0]
     for source in sources:
+        source.update(classify(source))
         source['topical_overlap'] = topic_overlap(source.get('text',''),question) if question else 0
         source.setdefault('search_relevance', source.get('score',0))
         source.setdefault('source_reliability', source.get('metadata',{}).get('source_reliability','import-provenance-only'))
@@ -24,6 +27,7 @@ def order_sources(sources, question=""):
         source.setdefault('evidence_support', 'not-claim-verified')
     return sorted(sources, key=lambda s: (
         -s.get('topical_overlap',0),
+        s.get('domain') != 'halacha',
         TRADITION_ORDER.get(s.get('tradition',''),1),
         s.get('halachic_authority')!='maran',
         s.get('category') not in ('halacha','responsa'),
@@ -106,8 +110,9 @@ class Agent:
                     'elapsed_s':round(time.time()-t0,3)}
         eligible = self.source_verifier.eligible_sources(q, retrieved)
         if not eligible:
-            return {"answer": evidence.INSUFFICIENT, "sources": retrieved,
+            return {"answer": evidence.INSUFFICIENT if evidence.shared_oil_waiting(q) else 'אין במקורות שנמצאו ראיה מספקת למקרה שנשאל. נדרשים מקור מתאים ובדיקת ההקשר.', "sources": retrieved,
                     "verdict": "insufficient_context", "mode": "sources-only",
+                    "human_review": "required", "halachic_verified": False,
                     "elapsed_s": round(time.time() - t0, 3)}
         retrieved = eligible
         # one LLM call
@@ -124,6 +129,8 @@ class Agent:
             return dict(res)
         # safety verification
         v = self.source_verifier.verify(q, answer, retrieved)
+        if v['verdict'] in ('ok', 'no_source'):
+            answer = v.get('rendered_answer', answer)
         if v['verdict'] == 'no_source' and evidence.shared_oil_waiting(q):
             answer = evidence.INSUFFICIENT
         verdict = v["verdict"]
@@ -138,6 +145,7 @@ class Agent:
                 source['evidence_support']='exact-extract-only'
         res = {"answer": answer, "sources": retrieved, "verdict": verdict,
                "verification": v, "mode": mode,
+               "human_review": "required", "halachic_verified": False,
                "elapsed_s": round(time.time() - t0, 3)}
         self._cache[q] = (now, res)
         return dict(res)

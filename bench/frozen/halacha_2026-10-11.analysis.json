@@ -1,0 +1,953 @@
+{
+  "baseline_dataset_sha256": "47f7bcb4874428fe99bc6681ba3577c8b36936ddc655c055d9359283405e03a4",
+  "assessment_kind": "editorial evidence audit; not halachic reference answers",
+  "retrieval_counts": {
+    "candidate": 10,
+    "missing": 5,
+    "partial": 5
+  },
+  "questions": [
+    {
+      "number": 1,
+      "question": "מה מברכים על אורז?",
+      "retrieval_assessment": "candidate",
+      "model_issue": "ציטוט ופרשנות",
+      "note": "בית יוסף דן במפורש באורז, אך כולל דעות והבחנות בין צורות הכנה. Qwen יצר ברכות כגון ״נרות״ וקבע מסקנה בלי לשמר את הדיון. חסרה בחירת קטע פסיקה מסכם; אי אפשר לייחס הכול להיעדר מקור.",
+      "anchor_source_id": "8f362638bf11878a",
+      "actual_qwen_source_ids": [
+        "cda843fd6aab88c1",
+        "948f079f8ef21ea7",
+        "8f362638bf11878a"
+      ],
+      "sources": [
+        {
+          "source_id": "cda843fd6aab88c1",
+          "reference": "בית יוסף · סימן אורח חיים · סימן ר״ח · קטע 12",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "halachic-commentary",
+            "halachic_authority": "maran",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "948f079f8ef21ea7",
+          "reference": "בית יוסף · סימן אורח חיים · סימן ר״ח · קטע 10",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "halachic-commentary",
+            "halachic_authority": "maran",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "8f362638bf11878a",
+          "reference": "בית יוסף · סימן אורח חיים · סימן ר״ח · קטע 10",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "halachic-commentary",
+            "halachic_authority": "maran",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 2,
+      "question": "האם אדם שאכל צ'יפס שטוגן בשמן שבו טוגנו קודם שניצלים בשריים צריך להמתין שש שעות לפני אכילת חלב?",
+      "retrieval_assessment": "missing",
+      "model_issue": "שער ראיות עצר הפקה",
+      "note": "נשלפו המתנה לאחר בשר ממש, שומן בפרשת קרבנות ואף ״גוש חלב״ כשם מקום; לא מקור למקרה השמן המשותף. המקור הראשוני המתועד בתיק הרגרסיה הוא PDF שאינו נתמך ב־PublicFetcher; הוא לא הוזן למודל בהרצה.",
+      "anchor_source_id": null,
+      "actual_qwen_source_ids": [],
+      "sources": [],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 3,
+      "question": "האם לספרדים מותר לאכול דג עם חלב?",
+      "retrieval_assessment": "missing",
+      "model_issue": "הפניה וגם תחולת המקור",
+      "note": "שלושת מקורות הקלט עוסקים בנאמנות וכשרות חלב ודגים בלי סימן, ולא באכילתם יחד. Qwen קיצר הפניות ויקיטקסט כך שלא תאמו למטא־דאטה. תיקון ההפניה לבדו לא יהפוך את הקטע לפסיקה על התערובת.",
+      "anchor_source_id": null,
+      "actual_qwen_source_ids": [
+        "6cdc84f6c4b01d02",
+        "c1bbd6e4809e96d2",
+        "d9bcd0d20e86b41b"
+      ],
+      "sources": [
+        {
+          "source_id": "6cdc84f6c4b01d02",
+          "reference": "עבודה זרה לט ב – ויקיטקסט — https://he.wikisource.org/wiki/%D7%A2%D7%91%D7%95%D7%93%D7%94_%D7%96%D7%A8%D7%94_%D7%9C%D7%98_%D7%91",
+          "classification": {
+            "domain": "torah-study",
+            "source_type": "primary-torah-text",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": "fish/milk combination not established"
+        },
+        {
+          "source_id": "c1bbd6e4809e96d2",
+          "reference": "עבודה זרה לט א – ויקיטקסט — https://he.wikisource.org/wiki/%D7%A2%D7%91%D7%95%D7%93%D7%94_%D7%96%D7%A8%D7%94_%D7%9C%D7%98_%D7%90",
+          "classification": {
+            "domain": "torah-study",
+            "source_type": "primary-torah-text",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": "fish/milk combination not established"
+        },
+        {
+          "source_id": "d9bcd0d20e86b41b",
+          "reference": "רמב\"ם הלכות מאכלות אסורות ג – ויקיטקסט — https://he.wikisource.org/wiki/%D7%A8%D7%9E%D7%91%22%D7%9D_%D7%94%D7%9C%D7%9B%D7%95%D7%AA_%D7%9E%D7%90%D7%9B%D7%9C%D7%95%D7%AA_%D7%90%D7%A1%D7%95%D7%A8%D7%95%D7%AA_%D7%92",
+          "classification": {
+            "domain": "torah-study",
+            "source_type": "primary-torah-text",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": "fish/milk combination not established"
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 4,
+      "question": "כמה זמן צריך להמתין אחרי אכילת בשר לפני אכילת חלב?",
+      "retrieval_assessment": "candidate",
+      "model_issue": "אי־ציות לפורמט",
+      "note": "יו״ד פט:א נמסר במפורש עם דין ההמתנה. הפלט הוא פרפרזה בלי ציטוטים מדויקים; יש גם הגה ומנהגים שדורשים הפרדה בין מסורות.",
+      "anchor_source_id": "a66ea6c2f6145764",
+      "actual_qwen_source_ids": [
+        "4c425f641cdafdc5",
+        "a66ea6c2f6145764",
+        "b2a5fdc87ba59b43"
+      ],
+      "sources": [
+        {
+          "source_id": "4c425f641cdafdc5",
+          "reference": "שולחן ערוך, יורה דעה · סימן 89 · סעיף 1",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "maran",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "a66ea6c2f6145764",
+          "reference": "שולחן ערוך, יורה דעה פט:א",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "maran",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "b2a5fdc87ba59b43",
+          "reference": "מצוה:לאכול בשר הפסח עם מצה ומרור – ויקיטקסט — https://he.wikisource.org/wiki/%D7%9E%D7%A6%D7%95%D7%94%3A%D7%9C%D7%90%D7%9B%D7%95%D7%9C_%D7%91%D7%A9%D7%A8_%D7%94%D7%A4%D7%A1%D7%97_%D7%A2%D7%9D_%D7%9E%D7%A6%D7%94_%D7%95%D7%9E%D7%A8%D7%95%D7%A8",
+          "classification": {
+            "domain": "unknown",
+            "source_type": "unclassified",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": null
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 5,
+      "question": "שכחתי יעלה ויבוא בשחרית של ראש חודש, האם צריך לחזור להתפלל?",
+      "retrieval_assessment": "candidate",
+      "model_issue": "אי־ציות לפורמט",
+      "note": "בן איש חי, שבלי הלקט ושולחן ערוך תכב:א כוללים במפורש שחרית ויעלה ויבוא. Qwen השיב בפרפרזה ולא במבנה הציטוט הנדרש.",
+      "anchor_source_id": "fcd456ee2fcfdfb6",
+      "actual_qwen_source_ids": [
+        "8bdc120198ad0864",
+        "c3253939d6e108a5",
+        "fcd456ee2fcfdfb6"
+      ],
+      "sources": [
+        {
+          "source_id": "8bdc120198ad0864",
+          "reference": "בן איש חי · פרק הלכות ב · ויקרא · פרק י״ב · פסקה 1",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "c3253939d6e108a5",
+          "reference": "שבלי הלקט · סימן סימן קע״א · פסקה 2",
+          "classification": {
+            "domain": "unknown",
+            "source_type": "unclassified",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "fcd456ee2fcfdfb6",
+          "reference": "שולחן ערוך, אורח חיים תכב:א",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "maran",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 6,
+      "question": "שכחתי יעלה ויבוא בערבית של ראש חודש, האם צריך לחזור להתפלל?",
+      "retrieval_assessment": "candidate",
+      "model_issue": "אי־ציות לפורמט",
+      "note": "בן איש חי ושבלי הלקט כוללים במפורש ערבית. Qwen הוסיף דיון והפניות לספרים בלבד, בלי מראי מקום מלאים ומבלי לצטט את התנאים.",
+      "anchor_source_id": "8bdc120198ad0864",
+      "actual_qwen_source_ids": [
+        "8bdc120198ad0864",
+        "bd81ecf0e04ecd67",
+        "c3253939d6e108a5"
+      ],
+      "sources": [
+        {
+          "source_id": "8bdc120198ad0864",
+          "reference": "בן איש חי · פרק הלכות ב · ויקרא · פרק י״ב · פסקה 1",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "bd81ecf0e04ecd67",
+          "reference": "שבלי הלקט · סימן סימן קע״ז · פסקה 2",
+          "classification": {
+            "domain": "unknown",
+            "source_type": "unclassified",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "c3253939d6e108a5",
+          "reference": "שבלי הלקט · סימן סימן קע״א · פסקה 2",
+          "classification": {
+            "domain": "unknown",
+            "source_type": "unclassified",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": null
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 7,
+      "question": "האם ספרדים מברכים על הלל בראש חודש?",
+      "retrieval_assessment": "candidate",
+      "model_issue": "הרחבה לא נתמכת",
+      "note": "קטע חבל נחלתו מציין במפורש מנהגי ספרדים ואשכנזים. המקורות המקומיים עוסקים ביעלה ויבוא ובחנוכה, ו־Qwen הוסיף תיאור לא נתמך של סדר תפילה כמו שבת. עדיין חסר מקור ספרדי ראשוני מסכם.",
+      "anchor_source_id": "53a65ff40299ec8b",
+      "actual_qwen_source_ids": [
+        "53a65ff40299ec8b",
+        "fcd456ee2fcfdfb6",
+        "af4863aca6a22df3"
+      ],
+      "sources": [
+        {
+          "source_id": "53a65ff40299ec8b",
+          "reference": "חבל נחלתו כ יט – ויקיטקסט — https://he.wikisource.org/wiki/%D7%97%D7%91%D7%9C_%D7%A0%D7%97%D7%9C%D7%AA%D7%95_%D7%9B_%D7%99%D7%98",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "responsa",
+            "halachic_authority": "posek-tradition-unclassified",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "fcd456ee2fcfdfb6",
+          "reference": "שולחן ערוך, אורח חיים תכב:א",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "maran",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "af4863aca6a22df3",
+          "reference": "בן איש חי · פרק הלכות שנה א · הלכות חנוכה · פרק כ״ח · פסקה 1",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 8,
+      "question": "שכחתי לספור ספירת העומר במשך יום שלם, האם אפשר להמשיך לספור בברכה?",
+      "retrieval_assessment": "partial",
+      "model_issue": "ערבוב תנאים וייחוס",
+      "note": "אבודרהם דן בהפסקת יום, אך כולל דעות שונות; חיי אדם שנשלף עוסק בספירת ימים ושבועות, והקטע מהאינטרנט הוא שאלה על קטן שהגדיל. Qwen ייחס לחיי אדם דברים מהאבודרהם וערבב לילה שנשכח עם יום שלם. אין כאן מקור ספרדי מסכם מתאים.",
+      "anchor_source_id": "91a6b3310f316dce",
+      "actual_qwen_source_ids": [
+        "9c2a7bab5219490d",
+        "91a6b3310f316dce",
+        "c06d808286d48171"
+      ],
+      "sources": [
+        {
+          "source_id": "9c2a7bab5219490d",
+          "reference": "חיי אדם · כלל שבת ומועדים · כלל קל״א · סימן 1",
+          "classification": {
+            "domain": "unknown",
+            "source_type": "unclassified",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "91a6b3310f316dce",
+          "reference": "אבודרהם · חלק פסח · שאר תפילות החג · פסקה 23",
+          "classification": {
+            "domain": "unknown",
+            "source_type": "unclassified",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "c06d808286d48171",
+          "reference": "חבל נחלתו ו יב – ויקיטקסט — https://he.wikisource.org/wiki/%D7%97%D7%91%D7%9C_%D7%A0%D7%97%D7%9C%D7%AA%D7%95_%D7%95_%D7%99%D7%91",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "responsa",
+            "halachic_authority": "posek-tradition-unclassified",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 9,
+      "question": "מה סדר הדלקת נרות חנוכה?",
+      "retrieval_assessment": "partial",
+      "model_issue": "הימנעות מטענה",
+      "note": "כף החיים עוסק במיקום השמש ובכיוון ההדלקה, אך יתר הקלט אינו נותן סדר שלם. Qwen הודה שאין מקור; זו הימנעות, לא תשובה מאומתת ולא כשל של ציטוט מומצא.",
+      "anchor_source_id": "b6509ffe9c4e2188",
+      "actual_qwen_source_ids": [
+        "2347a42a97a7d6c8",
+        "b6509ffe9c4e2188",
+        "9311ab0e4435eec8"
+      ],
+      "sources": [
+        {
+          "source_id": "2347a42a97a7d6c8",
+          "reference": "סדר היום · חלק סדר חנוכה והקריאות · פסקה 6",
+          "classification": {
+            "domain": "unknown",
+            "source_type": "unclassified",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "b6509ffe9c4e2188",
+          "reference": "כף החיים על שולחן ערוך אורח חיים · סימן 673 · סעיף קטן 41",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "halachic-commentary",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "9311ab0e4435eec8",
+          "reference": "סדר הדלקת נרות חנוכה/תפילות נוספות – ויקיטקסט — https://he.wikisource.org/wiki/%D7%A1%D7%93%D7%A8_%D7%94%D7%93%D7%9C%D7%A7%D7%AA_%D7%A0%D7%A8%D7%95%D7%AA_%D7%97%D7%A0%D7%95%D7%9B%D7%94/%D7%AA%D7%A4%D7%99%D7%9C%D7%95%D7%AA_%D7%A0%D7%95%D7%A1%D7%A4%D7%95%D7%AA",
+          "classification": {
+            "domain": "unknown",
+            "source_type": "unclassified",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": null
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 10,
+      "question": "האם מותר לבשל ביום טוב לצורך יום המחרת?",
+      "retrieval_assessment": "candidate",
+      "model_issue": "אי־ציות לפורמט",
+      "note": "שולחן ערוך תקג:א ובן איש חי עוסקים במפורש בבישול למחר. Qwen הוסיף ״אין לי מקור״ לצד פרפרזה של ההלכות; המשפט אינו הופך את שאר הטענות למאומתות.",
+      "anchor_source_id": "b5284f517b2aeddb",
+      "actual_qwen_source_ids": [
+        "b5284f517b2aeddb",
+        "1bf97ac931b98e51",
+        "6bf8b537e153931f"
+      ],
+      "sources": [
+        {
+          "source_id": "b5284f517b2aeddb",
+          "reference": "שולחן ערוך, אורח חיים תקג:א",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "maran",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "1bf97ac931b98e51",
+          "reference": "בן איש חי · פרק הלכות שנה א · במדבר · פרק ט״ז · פסקה 1",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "6bf8b537e153931f",
+          "reference": "בן איש חי · פרק הלכות שנה א · צו · פרק נ״ה · פסקה 1",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 11,
+      "question": "האם מותר לטלטל טלפון נייד בשבת לצורך מקומו?",
+      "retrieval_assessment": "partial",
+      "model_issue": "תחולה מודרנית חסרה",
+      "note": "הקלט למודל כלל הלכות כלליות של כלי שמלאכתו לאיסור וחסרון כיס, בלי מקור לסיווג טלפון. התקנות האזרחיות נמצאו בגילוי הרשת אך לא נכללו בקלט Qwen. המודל עצמו ציין שחסר מקור מפורש, ובכל זאת כתב פרפרזות שאינן ציטוטים.",
+      "anchor_source_id": "0cab3ff16a13eb85",
+      "actual_qwen_source_ids": [
+        "674a07a5b47dee63",
+        "0cab3ff16a13eb85",
+        "b4d21c5deafa1223"
+      ],
+      "sources": [
+        {
+          "source_id": "674a07a5b47dee63",
+          "reference": "בית יוסף · סימן אורח חיים · סימן ש״ח · קטע 4",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "halachic-commentary",
+            "halachic_authority": "maran",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "0cab3ff16a13eb85",
+          "reference": "שולחן ערוך, אורח חיים שח:ג",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "maran",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "b4d21c5deafa1223",
+          "reference": "כף החיים על שולחן ערוך אורח חיים · סימן 308 · סעיף קטן 57",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "halachic-commentary",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 12,
+      "question": "האם מותר לברור אוכל מתוך פסולת ביד בשבת לצורך אכילה מיד?",
+      "retrieval_assessment": "candidate",
+      "model_issue": "ייחוס לא מקורקע",
+      "note": "עונג שבת ד:א מספק במפורש את שלושת התנאים. Qwen ייחס למרן טקסט כשבפועל מקור הקלט הראשון הוא הטור. הופעת הפניה בספר מצוטט אינה מוכיחה שהסעיף עצמו נבדק.",
+      "anchor_source_id": "b84e23d9b6893085",
+      "actual_qwen_source_ids": [
+        "256b2fd9eb20aa3b",
+        "b84e23d9b6893085",
+        "b1f912a3c05a2b41"
+      ],
+      "sources": [
+        {
+          "source_id": "256b2fd9eb20aa3b",
+          "reference": "טור · סימן אורח חיים · סימן שי״ט · סעיף 1",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "rishon",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "b84e23d9b6893085",
+          "reference": "עונג שבת · פרק פרק ד׳ · דיני בורר · הלכה א'",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "b1f912a3c05a2b41",
+          "reference": "בן איש חי · פרק הלכות ב · בשלח · פרק י״ד · פסקה 1",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 13,
+      "question": "האם מותר להכין תה בשבת בכלי שני?",
+      "retrieval_assessment": "candidate",
+      "model_issue": "אי־ציות לפורמט ורעש",
+      "note": "עונג שבת ט:ח עוסק במפורש בשקית תה בכלי שני ובהחמרה בכלי שלישי. Qwen כתב פרפרזה בלי הפניות. סוד ישרים ובישול ביום טוב הם מסיחים שאינם מקור למקרה.",
+      "anchor_source_id": "fd19a4a9dc7e6f9a",
+      "actual_qwen_source_ids": [
+        "fd19a4a9dc7e6f9a",
+        "79733efd34cf1bc2",
+        "b5284f517b2aeddb"
+      ],
+      "sources": [
+        {
+          "source_id": "fd19a4a9dc7e6f9a",
+          "reference": "עונג שבת · פרק פרק ט׳ · דיני בישול · הלכה ח'",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "79733efd34cf1bc2",
+          "reference": "סוד ישרים · פרק פורים · פרק ג׳ · פסקה 2",
+          "classification": {
+            "domain": "torah-study",
+            "source_type": "mysticism",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": "mystical study is not an applicable ruling source"
+        },
+        {
+          "source_id": "b5284f517b2aeddb",
+          "reference": "שולחן ערוך, אורח חיים תקג:א",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "maran",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 14,
+      "question": "האם מותר להוסיף מים רותחים למיחם בשבת?",
+      "retrieval_assessment": "missing",
+      "model_issue": "כיוון פעולה שגוי",
+      "note": "הקלט דן במים היוצאים מהמיחם לתבשיל או לטרמוס, ולא בהכנסת מים למיחם. Qwen זיהה את החסר אך הוסיף טענות על המקרים האחרים. ההימנעות מורחבת ולכן אינה עוברת את חוזה הציטוטים.",
+      "anchor_source_id": null,
+      "actual_qwen_source_ids": [
+        "e27696d3ee37f986",
+        "a765eee85bf341c6",
+        "bb5172dabc2b1031"
+      ],
+      "sources": [
+        {
+          "source_id": "e27696d3ee37f986",
+          "reference": "עונג שבת · פרק פרק ט׳ · דיני בישול · הלכה ט\"ו",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": "water into urn absent; reverse direction is insufficient"
+        },
+        {
+          "source_id": "a765eee85bf341c6",
+          "reference": "עונג שבת · פרק פרק ב׳ · דיני הטמנה · הלכה ט\"ו",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": "water into urn absent; reverse direction is insufficient"
+        },
+        {
+          "source_id": "bb5172dabc2b1031",
+          "reference": "עונג שבת · פרק פרק י״ח · דיני זורע · הלכה ו'",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": "water into urn absent; reverse direction is insufficient"
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 15,
+      "question": "האם מברכים שהחיינו על פרי חדש לפני ברכת העץ או אחריה?",
+      "retrieval_assessment": "missing",
+      "model_issue": "הימנעות מטענה",
+      "note": "המקורות עוסקים בפרי עונתי ובסוגי פירות, לא בסדר שתי הברכות. המודל הודה שאין מקור; אין כאן טענה לאימות.",
+      "anchor_source_id": null,
+      "actual_qwen_source_ids": [
+        "1a49e802219c7666",
+        "18ac86233a6c18cd",
+        "1bcd018a37792fe0"
+      ],
+      "sources": [
+        {
+          "source_id": "1a49e802219c7666",
+          "reference": "לקט יושר · דף חלק א (אורח חיים) · דף מ״ג · ענין 2",
+          "classification": {
+            "domain": "unknown",
+            "source_type": "unclassified",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "18ac86233a6c18cd",
+          "reference": "בית יוסף · סימן אורח חיים · סימן רכ״ה · קטע 4",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "halachic-commentary",
+            "halachic_authority": "maran",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": "order of blessings absent"
+        },
+        {
+          "source_id": "1bcd018a37792fe0",
+          "reference": "שו\"ת רב פעלים · סימן חלק ב · אורח חיים · סימן ל׳ · פסקה 1",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "ruling-candidate",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": "order of blessings absent"
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 16,
+      "question": "האם מברכים על פירות שאוכלים בתוך סעודה עם לחם?",
+      "retrieval_assessment": "partial",
+      "model_issue": "תנאי הסעודה חסרים",
+      "note": "נשלפו כלל מאכלים להשביע, פירות לפני הסעודה ופרפרת. לא נבחר קטע מסכם העוסק בפרי בתוך סעודת לחם ובמטרת אכילתו. Qwen נמנע מהכרעה אך כתב הסבר חופשי.",
+      "anchor_source_id": "3f21f025371c600c",
+      "actual_qwen_source_ids": [
+        "7e2d773cf73faa07",
+        "3f21f025371c600c",
+        "caa050d66e0c2929"
+      ],
+      "sources": [
+        {
+          "source_id": "7e2d773cf73faa07",
+          "reference": "קיצור שלחן ערוך · סימן 43 · סעיף 1",
+          "classification": {
+            "domain": "unknown",
+            "source_type": "unclassified",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "3f21f025371c600c",
+          "reference": "משנה ברורה · סימן סימן קע״ו · סעיף קטן 2",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "halachic-commentary",
+            "halachic_authority": "ashkenazi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "caa050d66e0c2929",
+          "reference": "טור · סימן אורח חיים · סימן קע״ו · סעיף 1",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "rishon",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 17,
+      "question": "אכלתי לחם ושכחתי לברך ברכת המזון, עד מתי אפשר לברך?",
+      "retrieval_assessment": "candidate",
+      "model_issue": "שימוש במסיחים",
+      "note": "שולחן ערוך קפד:ה עוסק במפורש בזמן ברכת המזון. Qwen העתיק מילים בלי מסגרת הציטוט והוסיף שאלות על לחם שרוף והמתנת בשר מתוך המקורות הלא רלוונטיים.",
+      "anchor_source_id": "0eae057b287626f7",
+      "actual_qwen_source_ids": [
+        "a66ea6c2f6145764",
+        "0eae057b287626f7",
+        "e292a4fe7baafe32"
+      ],
+      "sources": [
+        {
+          "source_id": "a66ea6c2f6145764",
+          "reference": "שולחן ערוך, יורה דעה פט:א",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "maran",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "0eae057b287626f7",
+          "reference": "שולחן ערוך, אורח חיים קפד:ה",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "maran",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "e292a4fe7baafe32",
+          "reference": "כף החיים על שולחן ערוך אורח חיים · סימן 274 · סעיף קטן 4",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "halachic-commentary",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 18,
+      "question": "שכחתי להבדיל במוצאי שבת, עד מתי אפשר להבדיל?",
+      "retrieval_assessment": "candidate",
+      "model_issue": "השמטת הסתייגות",
+      "note": "השולחן ערוך והבן איש חי עוסקים במפורש בתשלומי הבדלה. Qwen ציין דעות שונות אך השמיט מהבן איש חי את ההסתייגות של שם ומלכות לאחר מוצאי שבת. נדרשת בדיקה אנושית של המסורות והתנאים.",
+      "anchor_source_id": "806844476ecacf83",
+      "actual_qwen_source_ids": [
+        "af6465a9be0f59a4",
+        "806844476ecacf83",
+        "a233a09d67a77259"
+      ],
+      "sources": [
+        {
+          "source_id": "af6465a9be0f59a4",
+          "reference": "שולחן ערוך, אורח חיים · סימן 299 · סעיף 6",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "maran",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "806844476ecacf83",
+          "reference": "בן איש חי · פרק הלכות ב · ויצא · פרק כ״ג · פסקה 1",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "psak-code",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "a233a09d67a77259",
+          "reference": "קיצור שלחן ערוך · סימן 96 · סעיף 15",
+          "classification": {
+            "domain": "unknown",
+            "source_type": "unclassified",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": null
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 19,
+      "question": "מתי אומרים תפילת הדרך בנסיעה?",
+      "retrieval_assessment": "missing",
+      "model_issue": "שאלת הזמן לא נענתה",
+      "note": "הקטע מערוך השולחן מציין חיוב בכל סוג נסיעה, לא מתי לומר. המקורות האחרים עוסקים בערב ראש השנה ובהלל. Qwen זיהה שחסר זמן מדויק; ההפקה נשארה פרפרזה עם הפניה מקוצרת.",
+      "anchor_source_id": null,
+      "actual_qwen_source_ids": [
+        "17508628c3c0fbd8",
+        "2d6ab6d76577b78a",
+        "e248da3766bc4cc0"
+      ],
+      "sources": [
+        {
+          "source_id": "17508628c3c0fbd8",
+          "reference": "מטה אפרים · סימן סימן תקפ״א · סעיף 57",
+          "classification": {
+            "domain": "unknown",
+            "source_type": "unclassified",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": "travel prayer timing absent"
+        },
+        {
+          "source_id": "2d6ab6d76577b78a",
+          "reference": "ערוך השולחן אורח חיים קי – ויקיטקסט — https://he.wikisource.org/wiki/%D7%A2%D7%A8%D7%95%D7%9A_%D7%94%D7%A9%D7%95%D7%9C%D7%97%D7%9F_%D7%90%D7%95%D7%A8%D7%97_%D7%97%D7%99%D7%99%D7%9D_%D7%A7%D7%99",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "halachic-commentary",
+            "halachic_authority": "ashkenazi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": "travel prayer timing absent"
+        },
+        {
+          "source_id": "e248da3766bc4cc0",
+          "reference": "משנה ברורה · סימן סימן תקפ״ד · סעיף קטן 2",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "halachic-commentary",
+            "halachic_authority": "ashkenazi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": "travel prayer timing absent"
+        }
+      ],
+      "human_halachic_verified": false
+    },
+    {
+      "number": 20,
+      "question": "האם נשים חייבות בקידוש בליל שבת?",
+      "retrieval_assessment": "partial",
+      "model_issue": "סטייה להבדלה",
+      "note": "המקורות מציינים חיוב נשים בקידוש במסגרת דיון בהבדלה ובקטן המוציא נשים. מדובר בתמיכה עקיפה, ללא הסעיף הישיר הרצוי. Qwen הרחיב למחלוקת על הבדלה שאינה השאלה, והוסיף פרשנות ללא ציטוטים מאומתים.",
+      "anchor_source_id": "62768e863cded74d",
+      "actual_qwen_source_ids": [
+        "44f93be1e5bff500",
+        "62768e863cded74d",
+        "a7db18419c74a267"
+      ],
+      "sources": [
+        {
+          "source_id": "44f93be1e5bff500",
+          "reference": "כף החיים על שולחן ערוך אורח חיים · סימן 296 · סעיף קטן 54",
+          "classification": {
+            "domain": "halacha",
+            "source_type": "halachic-commentary",
+            "halachic_authority": "sephardi-posek",
+            "classification_basis": "curated work title"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "62768e863cded74d",
+          "reference": "תשובות רבי עקיבא איגר · סימן סימן ז׳ · פסקה 35",
+          "classification": {
+            "domain": "unknown",
+            "source_type": "unclassified",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": null
+        },
+        {
+          "source_id": "a7db18419c74a267",
+          "reference": "חיי אדם · כלל שבת ומועדים · כלל ח׳ · סימן 12",
+          "classification": {
+            "domain": "unknown",
+            "source_type": "unclassified",
+            "halachic_authority": "unclassified",
+            "classification_basis": "genre only; authority unverified"
+          },
+          "exclusion_reason": null
+        }
+      ],
+      "human_halachic_verified": false
+    }
+  ]
+}

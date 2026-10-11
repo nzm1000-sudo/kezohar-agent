@@ -63,7 +63,7 @@ def test_generic_terms_and_prefix_substring_are_not_evidence():
     assert 'מברכימ' not in retrieval_query('מה מברכים על אורז?').split()
     assert topic_overlap('מברכים על אור ביום כיפור','מה מברכים על אורז?')==0
     assert topic_overlap('הכוסס את האורז','מה מברכים על אורז?')==1
-    assert A.order_sources([{'work_title':'קיצור שולחן ערוך','text':'אורז','score':1}], 'אורז')[0]['halachic_authority']=='unclassified'
+    assert A.order_sources([{'work_title':'קיצור שולחן ערוך','text':'אורז','score':1}], 'אורז')[0]['halachic_authority']=='ashkenazi-posek'
 
 def test_search_only_grant_never_reaches_llm(monkeypatch):
     from kezohar.models import Source

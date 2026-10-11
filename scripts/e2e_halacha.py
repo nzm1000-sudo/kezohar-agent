@@ -17,7 +17,7 @@ import ipaddress
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
-from kezohar import api, config
+from kezohar import api, config, llm
 from kezohar.web_research import WebResearchEngine
 
 
@@ -30,7 +30,8 @@ def write_json(path, value):
 def source_description(source):
     return {key: source.get(key, '') for key in
             ('source_id', 'work_title', 'author', 'reference', 'reference_en', 'source_url',
-             'source_project', 'source_file', 'tradition', 'license', 'version', 'text')}
+             'source_project', 'source_file', 'tradition', 'license', 'version', 'text',
+             'book_id', 'category', 'authority_level', 'domain', 'source_type', 'metadata')}
 
 
 class RecordedModel:
@@ -47,11 +48,13 @@ class RecordedModel:
 
     def generate(self, question, sources, timeout=90):
         call = {'source_ids': [s['source_id'] for s in sources], 'timeout_s': timeout}
+        call['messages'] = llm.build_messages(question, sources)
         self.calls.append(call)
         start = time.perf_counter()
         try:
             result = self.delegate.generate(question, sources, timeout=timeout)
-            call.update(answer=result['answer'], completed=True)
+            call.update(answer=result['answer'], completed=True,
+                        finish_reason=result.get('finish_reason'), usage=result.get('usage', {}))
             return result
         except Exception as exc:
             # Error class only: do not log server addresses, credentials or request bodies.
@@ -96,6 +99,9 @@ def summarize(rows):
     return {'tested': len(rows),
             'qwen_completed': sum(row['qwen_completed'] for row in rows),
             'qwen_called': sum(row['qwen_called'] for row in rows),
+            'generation_gated': sum(not row['qwen_called'] for row in rows),
+            'qwen_outputs_blocked': sum(row['qwen_completed'] and row['verification'].get('verdict') not in ('ok','no_source') for row in rows),
+            'model_no_source': sum(row['qwen_completed'] and row['verification'].get('verdict') == 'no_source' for row in rows),
             'citation_software_passed': sum(row['qwen_completed'] and row['verification'].get('verdict') == 'ok' for row in rows),
             'citation_verdicts': dict(Counter(row['verification'].get('verdict', 'not-run') for row in rows)),
             'qwen_received_web_sources': sum(bool({s['source_id'] for s in row['web_sources']} & set(row['qwen_source_ids'])) for row in rows),
@@ -128,6 +134,12 @@ def render_report(run):
                           row['local_s'],row['web_s'],row['qwen_s'],row['total_s']), '',
                       'אימות ציטוטים: **{}**. מצב המערכת: `{}` / `{}`.'.format(citation_status(row),row['mode'],row['verdict']), ''])
         lines.extend(['פירוט בדיקת התוכנה: `' + json.dumps(row.get('verification', {}), ensure_ascii=False) + '`.', ''])
+        if row.get('qwen_calls'):
+            lines.extend(['סיום הפקה: ' + ', '.join(str(c.get('finish_reason','לא תועד')) for c in row['qwen_calls']) + '.', ''])
+        if row.get('rejected_web_sources'):
+            lines.extend(['מסמכי רשת שנדחו לפני שימוש או שמירה:', ''])
+            for rejected in row['rejected_web_sources']:
+                lines.append('- {} — `{}`. {}'.format(rejected['title'],rejected['reason'],rejected['url']))
         if row['qwen_s'] > 15:
             lines.extend(['**הפקת Qwen חרגה ממגבלת 15 השניות הרגילה של מסלול המחקר.**', ''])
         for title, key in [('מקורות מקומיים שנמצאו','local_sources'),('מקורות רשת שנמצאו','web_sources')]:
@@ -142,6 +154,10 @@ def render_report(run):
                     lines.append('  מראה מקום קנוני: `{}`.'.format(s['reference_en']))
                 if s['source_url']:
                     lines.append('  [עמוד המקור]({}).'.format(s['source_url']))
+                if isinstance(s.get('metadata'),dict) and s['metadata'].get('domain'):
+                    lines.append('  סיווג: `{}` / `{}`; סמכות: `{}`; דיוק ההפניה: `{}`.'.format(
+                        s['metadata']['domain'],s['metadata'].get('source_type'),
+                        s['metadata'].get('halachic_authority'),s['metadata'].get('locator_status','לא תועד')))
         lines.extend(['', 'מקורות שהועברו בפועל ל־Qwen: ' + (', '.join('`'+sid+'`' for sid in row['qwen_source_ids']) or 'לא הועברו'), '',
                       '### פלט Qwen המקורי בהרצה זו', ''])
         if row['raw_qwen_answer'] is not None:
@@ -219,6 +235,7 @@ def main():
              'qwen_calls':calls,'answer':result.get('answer',''),'mode':result.get('mode'),
              'verdict':result.get('verdict'),'verification':result.get('verification',{}),
              'web_errors':research.get('errors',[]),'discovery_backend':research.get('discovery_backend'),
+             'rejected_web_sources':research.get('rejected_sources', []),
              'human_review':'required','error':error}
         run['questions'].append(row)
         run['summary']=summarize(run['questions'])

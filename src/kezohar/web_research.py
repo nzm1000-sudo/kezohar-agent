@@ -258,7 +258,7 @@ class WebResearchEngine:
         if store_path and Path(__file__).resolve().parents[2] not in Path(store_path).resolve().parents:
             raise ValueError('web store must be inside agent project')
     def research(self,question,limit=5,urls=None):
-        limit=max(1,min(int(limit),8)); errors=[];sources=[];seen=set()
+        limit=max(1,min(int(limit),8)); errors=[];sources=[];seen=set();rejected=[]
         if not question.strip() or len(question)>2000:raise ValueError('invalid question')
         try:
             urls=urls if urls is not None else self.searcher.search(question+' הלכה '+ ' OR '.join('site:'+h for h in self.sites),limit*2)
@@ -276,6 +276,12 @@ class WebResearchEngine:
                 if final in seen and final!=url:continue
                 seen.add(final)
                 parser=PageParser();parser.feed(page);doc=parser.document()
+                from .source_quality import classify, exclusion_reason, web_locator_issue
+                reason=web_locator_issue(doc['title'],final) or exclusion_reason(question, {'work_title':doc['title'], 'source_url':final,
+                                                   'text':doc['text']}, web=True)
+                if reason:
+                    rejected.append({'url':final,'title':doc['title'],'reason':reason})
+                    continue
                 relevant=passages(doc['text'],question)
                 if not relevant or not doc['title']:continue
                 profile=self.sites[urllib.parse.urlsplit(final).hostname]
@@ -283,7 +289,7 @@ class WebResearchEngine:
                 # Rights-unknown sites contribute a short transient excerpt, never the full page.
                 snippet=short_excerpt(relevant[0],question) if not allowed else relevant[0][:1500]
                 kind='ruling-candidate' if re.search(r'הלכה|פסק|שו״ת|שו"ת|שאלות ותשובות',doc['title']+' '+snippet) else 'general-article'
-                source=Source(source_id=stable_id('web',final,hebrew.normalize(question)),work_title=doc['title'],reference=doc['title']+' — '+final,
+                source=Source(source_id=stable_id('web',final,snippet),work_title=doc['title'],reference=doc['title']+' — '+final,
                     text=snippet,normalized_text=hebrew.normalize(snippet),author=doc['author'],
                     source_url=final,license=profile.get('license','unknown'),tradition=profile.get('tradition',''),
                     source_project='verified-web',verification_status='excerpt-verified',ingested_at=utcnow_iso(),
@@ -295,6 +301,9 @@ class WebResearchEngine:
                               'published_at':doc['published_at'],'references_in_page':citations.extract_refs(snippet),
                               'page_sha256':__import__('hashlib').sha256(doc['text'].encode()).hexdigest(),
                               'rights_mode':'licensed' if allowed else 'transient-25-word-excerpt'})
+                source.metadata.update(classify(source.to_dict()))
+                source.metadata['locator_granularity']='page-title-and-url; unit locator not independently established'
+                source.metadata['locator_status']='page-title-url-matched' if urllib.parse.urlsplit(final).hostname=='he.wikisource.org' else 'fetched-page-only'
                 # Full-text store still contains only relevant exact passages, not boilerplate.
                 if allowed and self.store_path:
                     save_verified(source,self.store_path)
@@ -302,10 +311,11 @@ class WebResearchEngine:
             except Exception as exc:
                 errors.append({'url':url,'error':type(exc).__name__})
         results=rank_sources(HybridSearch(sources).search(question,top_k=limit)) if sources else []
-        return {'sources':results,'errors':errors,'comparisons':compare(results),
+        return {'sources':results,'errors':errors,'rejected_sources':rejected,'comparisons':compare(results),
                 'answer':evidence.INSUFFICIENT if evidence.shared_oil_waiting(question) else self.extractive_answer(results),'mode':'web-evidence','verdict':'insufficient_context' if evidence.shared_oil_waiting(question) else 'exact-extract-only','discovery_backend':getattr(self.searcher,'last_backend','custom'),'verification':{'support':'exact-excerpts','psak':'not-inferred'}}
     def answer(self, question, base_url, model, limit=5, urls=None, timeout=15, local_sources=None, answer_model=None, source_verifier=None):
         result = self.research(question, limit=limit, urls=urls)
+        result.update(human_review='required', halachic_verified=False)
         local_sources = [s for s in (local_sources or []) if rag_eligible(s)]
         if local_sources:
             from .agent import order_sources
@@ -319,6 +329,9 @@ class WebResearchEngine:
         if evidence.shared_oil_waiting(question):
             result.update(answer=evidence.INSUFFICIENT, verdict='insufficient_context', mode='web-evidence')
         if not eligible:
+            result.update(answer=evidence.INSUFFICIENT if evidence.shared_oil_waiting(question) else 'אין במקורות שנמצאו ראיה מספקת למקרה שנשאל. נדרשים מקור מתאים ובדיקת ההקשר.',
+                          verdict='insufficient_context',
+                          verification={'verdict':'insufficient_context','support':'no eligible source; generation blocked'})
             return result
         result['sources'] = eligible
         from .answer_models import ConfiguredAnswerModel
@@ -328,9 +341,12 @@ class WebResearchEngine:
             verification = verifier.verify(question, generated, result['sources'])
             result['verification'] = verification
             if verification['verdict']=='ok':
-                result.update(answer=generated, mode='web-llm-verified', verdict='exact-extract-only')
+                result.update(answer=verification.get('rendered_answer',generated), mode='web-llm-verified', verdict='exact-extract-only')
+            elif verification['verdict']=='no_source':
+                result.update(answer=verification.get('rendered_answer','אין לי מקור לכך.'), mode='web-llm-guarded', verdict='no_source')
             else:
                 result['mode']='web-llm-guarded'
+                result['verdict']=verification['verdict']
         except llm.LLMUnavailable:
             result['mode']='web-sources-only'
         return result
