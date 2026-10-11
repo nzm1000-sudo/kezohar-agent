@@ -90,12 +90,13 @@ class Results:
                               'details': str(report.longrepr) if report.longrepr else ''})
 
 results = Results()
-exit_code = pytest.main(['tests/phase4_isolated/test_contracts.py', 'tests/phase4_isolated/test_regressions.py', '-q', '--tb=short',
+exit_code = pytest.main(['tests/phase4_isolated/test_contracts.py', 'tests/phase4_isolated/test_regressions.py',
+                        'tests/phase4_isolated/test_followup_regressions.py', '-q', '--tb=short',
                         '--log-file='+str(RUN/'pytest.log'),
                         '--basetemp='+str(RUN/'pytest-temp'),
                         '-o', 'cache_dir='+str(RUN/'pytest-cache'),
                         '--junitxml='+str(RUN/'junit.xml')], plugins=[results])
-(RUN/'results.json').write_text(json.dumps({'base_commit':'67782f4', 'exit_code':exit_code,
+(RUN/'results.json').write_text(json.dumps({'base_commit':'3663235', 'exit_code':exit_code,
     'blocked_external_attempts':len(blocked), 'tests':results.rows}, ensure_ascii=False, indent=2))
 print('ISOLATED_REPORT_DIRECTORY='+str(RUN))
 sys.exit(exit_code)

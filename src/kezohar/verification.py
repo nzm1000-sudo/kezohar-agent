@@ -16,6 +16,7 @@ class ExtractiveSourceVerifier:
             and not exclusion_reason(question, s)])
 
     def verify(self, question, answer, sources):
+        initial_catalog_revision = catalog_revision()
         try: current_snapshots = snapshots(sources)
         except ValueError:
             return {'verdict':'invalid_citation','support':'ambiguous source identity',
@@ -71,8 +72,14 @@ class ExtractiveSourceVerifier:
                 result.update(verdict='irrelevant', support='cited quotation unrelated to question')
                 result['checks']['source_applicability']='failed'
                 return result
+            if catalog_revision() != initial_catalog_revision:
+                return {'verdict':'review_required', 'support':'evidence catalog changed during verification',
+                        'checks':dict(result['checks'], claim_support='not-proved'),
+                        'human_review':'required', 'halachic_verified':False}
             result.update(human_review='required', halachic_verified=False)
             result['source_snapshots']={sid:current_snapshots[sid] for sid in cited}
-            result['catalog_revision']=catalog_revision()
+            # Bind to the catalog checked BEFORE reading units; a later update
+            # also invalidates this proof at the independent display boundary.
+            result['catalog_revision']=initial_catalog_revision
             result['checks']['source_applicability']='passed-necessary-checks'
         return result

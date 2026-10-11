@@ -1,0 +1,298 @@
+"""Continuation: synthetic security/context cases, no real rulings or models."""
+import copy
+import json
+from concurrent.futures import ThreadPoolExecutor
+import pytest
+from test_contracts import (sandbox, source, agent, FixedAnswer, Q, TEXT, complete,
+                            quote, request, events, memory, MemoryAgent, backend)
+from kezohar import api, evidence
+from kezohar.hybrid import rrf_fuse, FederatedSearch
+from kezohar.verification import ExtractiveSourceVerifier
+from kezohar.answer_composition import VerifiedAnswerComposer
+from kezohar.source_snapshot import fingerprint
+from kezohar.conversation_state import ConversationConflict
+
+UNIT = 'בדיקת סמל אלפא: רק כאשר דגל בדיקה פעיל, מציגים אלפא; אם כבוי אין להציג.'
+FULL = 'הקדמה סינתטית נפרדת.\n' + UNIT + '\nפרק נפרד על סמל ביתא: מציגים ביתא רק כשמצב ביתא פעיל.'
+
+
+def reviewed(tmp_path, s):
+    start = s['text'].index(UNIT)
+    unit = {'unit_id': 'synthetic-reviewed-unit', 'source_id': s['source_id'],
+            'source_snapshot': fingerprint(s), 'version': s['version'],
+            'reference': s['reference'], 'quote': UNIT,
+            'start': start, 'end': start + len(UNIT),
+            'review': {'status': 'complete-context-reviewed', 'reviewer': 'synthetic-test-reviewer',
+                       'rationale': 'Synthetic independent alpha rule; both flag conditions retained.',
+                       'essential_conditions': ['דגל פעיל', 'אין להציג כשהדגל כבוי']}}
+    path = tmp_path / 'catalog.json'
+    path.write_text(json.dumps({'rules': [], 'quotation_units': [unit]}, ensure_ascii=False))
+    return path, unit
+
+
+def unit_output(s, text=UNIT, protocol='json'):
+    return (json.dumps({'quotes': [{'source_id': s['source_id'], 'quote': text}]}, ensure_ascii=False)
+            if protocol == 'json' else '״' + text + '״ (' + s['reference'] + ').')
+
+
+@pytest.mark.parametrize('protocol', ['json', 'legacy'])
+def test_reviewed_short_complete_unit_without_unrelated_long_section(tmp_path, protocol):
+    s = source(text=FULL); reviewed(tmp_path, s)
+    v = ExtractiveSourceVerifier().verify('סמל אלפא', unit_output(s, protocol=protocol), [s])
+    assert v['verdict'] == 'ok' and v['evidence'][0]['quote'] == UNIT
+    displayed = VerifiedAnswerComposer().compose({'answer': v.get('rendered_answer', UNIT),
+        'verdict': 'ok', 'verification': v, 'sources': [s]})
+    assert displayed['structured_answer']['quotations'][0]['text'] == UNIT
+    assert displayed['human_review'] == 'required' and not displayed['halachic_verified']
+
+
+@pytest.mark.parametrize('text', ['מציגים אלפא', UNIT, UNIT.split(';')[0]])
+def test_unreviewed_or_condition_truncated_short_units_rejected(text):
+    s = source(text=FULL)
+    assert ExtractiveSourceVerifier().verify('סמל אלפא', unit_output(s, text), [s])['verdict'] != 'ok'
+
+
+@pytest.mark.parametrize('change', [
+    {'version': 'second-edition'}, {'text': FULL + '\nתנאי נוסף: נדרש דגל גמא.'},
+    {'reference': 'בדיקה בלבד ב:ב'}, {'author': 'changed'},
+    {'metadata': {'rag_answers_allowed': False}},
+    {'metadata': {'rag_answers_allowed': True, 'permission_revision': 'updated'}},
+    {'source_id': 'alias'}, {'metadata': {'locator_status': 'ambiguous-file-fields'}}])
+def test_short_unit_approval_invalidated_by_any_source_or_permission_change(tmp_path, change):
+    s = source(text=FULL); reviewed(tmp_path, s)
+    changed = dict(s, **change)
+    assert ExtractiveSourceVerifier().verify('סמל אלפא', unit_output(changed), [changed])['verdict'] != 'ok'
+
+
+@pytest.mark.parametrize('mutation', ['no-review', 'model-review', 'no-reviewer', 'no-rationale',
+                                      'no-conditions', 'bad-condition', 'bad-offset', 'duplicate-id'])
+def test_incomplete_review_cannot_approve_short_unit(tmp_path, mutation):
+    s = source(text=FULL); path, unit = reviewed(tmp_path, s)
+    if mutation == 'no-review': unit.pop('review')
+    elif mutation == 'model-review': unit['review']['status'] = 'model-says-complete'
+    elif mutation == 'no-reviewer': unit['review']['reviewer'] = ''
+    elif mutation == 'no-rationale': unit['review']['rationale'] = ''
+    elif mutation == 'no-conditions': unit['review'].pop('essential_conditions')
+    elif mutation == 'bad-condition': unit['review']['essential_conditions'] = [None]
+    elif mutation == 'bad-offset': unit['end'] -= 1
+    units = [unit, copy.deepcopy(unit)] if mutation == 'duplicate-id' else [unit]
+    path.write_text(json.dumps({'rules': [], 'quotation_units': units}))
+    assert ExtractiveSourceVerifier().verify('סמל אלפא', unit_output(s), [s])['verdict'] != 'ok'
+
+
+@pytest.mark.parametrize('raw', ['{broken', 'null', '[]', '{"quotation_units":null}',
+                               '{"rules":{},"quotation_units":[]}',
+                               '{"rules":[],"quotation_units":[],"quotation_units":[]}'])
+def test_invalid_catalog_does_not_reuse_old_short_quote_approval(tmp_path, raw):
+    s = source(text=FULL); path, _ = reviewed(tmp_path, s)
+    v = ExtractiveSourceVerifier().verify('סמל אלפא', unit_output(s), [s])
+    assert v['verdict'] == 'ok'
+    path.write_text(raw)
+    assert ExtractiveSourceVerifier().verify('סמל אלפא', unit_output(s), [s])['verdict'] != 'ok'
+    r = VerifiedAnswerComposer().compose({'answer': UNIT, 'verification': v, 'sources': [s]})
+    assert r['verdict'] == 'invalid_citation' and not r['structured_answer']['quotations']
+
+
+def test_short_unit_catalog_revocation_invalidates_answer_cache_and_display(tmp_path):
+    s = source(text=FULL); path, _ = reviewed(tmp_path, s)
+    a = agent([s], FixedAnswer(unit_output(s)))
+    first = a.ask('סמל אלפא'); assert first['verdict'] == 'ok'
+    assert a.ask('סמל אלפא').get('cached') and len(a.answer_model.calls) == 1
+    path.write_text(json.dumps({'rules': [], 'quotation_units': []}))
+    second = a.ask('סמל אלפא')
+    assert second['verdict'] == 'unsupported' and not second.get('cached')
+    assert len(a.answer_model.calls) == 2
+    r = VerifiedAnswerComposer().compose(first)
+    assert r['verdict'] == 'invalid_citation' and not r['structured_answer']['sources']
+
+
+def test_review_does_not_approve_further_shortening_or_metadata_self_approval(tmp_path):
+    s = source(text=FULL); reviewed(tmp_path, s)
+    shortened = UNIT.split(';')[0]
+    assert ExtractiveSourceVerifier().verify('סמל אלפא', unit_output(s, shortened), [s])['verdict'] != 'ok'
+    (tmp_path / 'catalog.json').write_text(json.dumps({'rules': []}))
+    s['metadata']['quotation_units'] = [{'quote': UNIT, 'review': 'approved'}]
+    assert ExtractiveSourceVerifier().verify('סמל אלפא', unit_output(s), [s])['verdict'] != 'ok'
+
+
+@pytest.mark.parametrize('stream', [False, True])
+def test_short_reviewed_unit_json_sse_render_same_verified_locator(tmp_path, monkeypatch, stream):
+    s = source(text=FULL); reviewed(tmp_path, s)
+    a = agent([s], FixedAnswer(unit_output(s))); monkeypatch.setattr(api, '_agent', a)
+    response = request('/ask', {'question': 'סמל אלפא', 'stream': stream})
+    result = events(response.text)[-1][1] if stream else response.json()
+    assert result['verdict'] == 'ok' and not result['halachic_verified']
+    assert result['structured_answer']['quotations'][0]['text'] == UNIT
+    assert result['structured_answer']['sources'][0]['reference'] == s['reference']
+
+
+@pytest.mark.parametrize('stream', [False, True])
+def test_review_revoked_during_generation_cannot_escape_in_json_or_sse(tmp_path, monkeypatch, stream):
+    s = source(text=FULL); path, _ = reviewed(tmp_path, s)
+    model = FixedAnswer(unit_output(s), hook=lambda: path.write_text(json.dumps({'rules': []})))
+    a = agent([s], model); monkeypatch.setattr(api, '_agent', a)
+    response = request('/ask', {'question': 'סמל אלפא', 'stream': stream})
+    result = events(response.text)[-1][1] if stream else response.json()
+    assert result['verdict'] == 'unsupported' and not result['structured_answer']['quotations']
+    assert result['verification_layers']['overall'] == 'not-approved'
+
+
+@pytest.mark.parametrize('change', [{'version': 'new-edition'}, {'text': TEXT + ' נוסף'},
+                                  {'metadata': {'rag_answers_allowed': True, 'permission_revision': 'new'}}])
+def test_cached_full_quote_reverified_against_new_source_snapshot(change):
+    a = agent(model=FixedAnswer(output=quote(source())))
+    assert a.ask('בדיקת מקור סינתטי')['verdict'] == 'ok'
+    assert a.ask('בדיקת מקור סינתטי').get('cached')
+    for key, value in change.items(): setattr(a.search.bm25.docs[0], key, value)
+    r = a.ask('בדיקת מקור סינתטי')
+    assert not r.get('cached') and len(a.answer_model.calls) == 2
+    if 'text' in change:
+        assert r['verdict'] == 'unsupported'
+    else:
+        assert r['verdict'] == 'ok'  # Fresh verification, never reuse old evidence.
+        assert r['verification']['source_snapshots']['s1'] == fingerprint(a.search.bm25.docs[0].to_dict())
+
+
+@pytest.mark.parametrize('damage', [{'text': TEXT + ' conflict'}, {'version': 'conflict-edition'},
+                                  {'metadata': {'rag_answers_allowed': False}}])
+def test_collision_quarantines_only_bad_id_and_marks_partial(damage):
+    bad = source('bad'); other = dict(bad, **damage); good = source('good')
+    fused = rrf_fuse([[bad, good], [other]])
+    assert [s['source_id'] for s in fused] == ['good'] and fused.status['partial']
+    assert all(e.get('source_id') != 'good' for e in fused.errors)
+    a = agent([bad, other, good])
+    results = a.search.search('בדיקת מקור סינתטי')
+    assert [s['source_id'] for s in results] == ['good'] and results.status['partial']
+    assert a.knowledge.source_by_id('bad') is None
+    assert a.knowledge.source_by_id('good')['source_id'] == 'good'
+
+
+@pytest.mark.parametrize('stream', [False, True])
+def test_json_sse_partial_collision_keeps_healthy_search_sources_visible(monkeypatch, stream):
+    a = agent([source('bad'), source('bad', version='conflict'), source('good')])
+    monkeypatch.setattr(api, '_agent', a)
+    r = request('/ask', {'question': Q, 'circumstances': complete(), 'stream': stream})
+    stream_events = events(r.text) if stream else []
+    result = stream_events[-1][1] if stream else r.json()
+    assert result['verdict'] == 'partial_search' and result['search_status']['partial']
+    visible = stream_events[0][1] if stream else result
+    assert visible['search_status']['partial']
+    assert {s['source_id'] for s in visible['sources']} == {'good'}
+    assert not a.answer_model.calls and not result['halachic_verified']
+    search = request('/search', {'query': 'בדיקת מקור סינתטי'}).json()
+    assert search['search_status']['partial'] and {s['source_id'] for s in search['results']} == {'good'}
+    assert request('/sources/good', method='GET').status_code == 200
+    assert request('/sources/bad', method='GET').status_code == 404
+
+
+def test_failed_federated_backend_does_not_hide_healthy_backend(monkeypatch):
+    failed = backend([])
+    def fail(*args, **kwargs): raise OSError('synthetic backend unavailable')
+    failed.search = fail
+    a = agent([source('good')]); a.search = FederatedSearch(a.search, [failed])
+    monkeypatch.setattr(api, '_agent', a)
+    result = request('/search', {'query': 'בדיקת מקור סינתטי'}).json()
+    assert result['search_status']['partial'] and result['search_status']['errors']
+    assert {s['source_id'] for s in result['results']} == {'good'}
+
+
+@pytest.mark.parametrize('owner', ['', ' ', None, 123, 'x' * 257])
+def test_invalid_trusted_owner_rejected_on_all_memory_operations(tmp_path, owner):
+    store = memory(tmp_path); cid = store.create('victim'); revision, state = store.load('victim', cid)
+    for op in (lambda: store.create(owner), lambda: store.load(owner, cid),
+               lambda: store.save(owner, cid, revision, state), lambda: store.delete(owner, cid),
+               lambda: store.turn(MemoryAgent(), owner, cid, Q)):
+        with pytest.raises(ValueError): op()
+    assert store.load('victim', cid) == (revision, state)
+
+
+@pytest.mark.parametrize('attacker', ['other', 'victim ', "victim' OR 1=1 --", 'VICTIM'])
+def test_cross_owner_read_update_turn_and_delete_all_blocked(tmp_path, attacker):
+    store = memory(tmp_path); cid = store.create('victim'); m = MemoryAgent()
+    store.turn(m, 'victim', cid, Q + ' PRIVATE_VICTIM_CONDITION', circumstances=complete())
+    before = store.load('victim', cid); count = len(m.calls)
+    with pytest.raises(KeyError): store.load(attacker, cid)
+    with pytest.raises(ConversationConflict): store.save(attacker, cid, before[0], before[1])
+    with pytest.raises(KeyError): store.turn(m, attacker, cid, 'ATTACKER_UPDATE', circumstances=complete())
+    assert not store.delete(attacker, cid)
+    assert store.load('victim', cid) == before and len(m.calls) == count
+
+
+def test_concurrent_owners_and_same_owner_conversations_are_independent(tmp_path):
+    store = memory(tmp_path); owners = ['owner-a', 'owner-b', 'owner-a']
+    cids = [store.create(o) for o in owners]
+    def turn(i):
+        m = MemoryAgent()
+        store.turn(m, owners[i], cids[i], Q + f' PRIVATE_MARKER_{i}', circumstances=complete())
+        return store.load(owners[i], cids[i])
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        states = list(pool.map(turn, range(3)))
+    for i, (revision, state) in enumerate(states):
+        text = json.dumps(state)
+        assert revision == 1 and f'PRIVATE_MARKER_{i}' in text
+        assert all(f'PRIVATE_MARKER_{j}' not in text for j in range(3) if j != i)
+    assert store.delete('owner-a', cids[0])
+    assert store.load('owner-b', cids[1]) == states[1]
+    assert store.load('owner-a', cids[2]) == states[2]
+
+
+def test_loaded_memory_is_not_shared_mutable_state(tmp_path):
+    store = memory(tmp_path); cid = store.create('owner'); before = store.load('owner', cid)
+    changed = store.load('owner', cid)[1]
+    changed['free_conditions'].append('UNSAVED'); changed['user_facts']['injected'] = 'UNSAVED'
+    assert store.load('owner', cid) == before
+    with pytest.raises(KeyError): store.load('owner', "' OR 1=1 --")
+
+
+@pytest.mark.parametrize('stream', [False, True])
+def test_client_owner_fields_do_not_expose_private_memory_via_api(tmp_path, monkeypatch, stream):
+    store = memory(tmp_path); cid = store.create('victim')
+    store.turn(MemoryAgent(), 'victim', cid, Q + ' PRIVATE_MEMORY_MARKER', circumstances=complete())
+    before = store.load('victim', cid)
+    monkeypatch.setattr(api, '_agent', agent())
+    response = request('/ask', {'question': Q, 'circumstances': complete(), 'stream': stream,
+                               'owner': 'victim', 'conversation_id': cid})
+    assert 'PRIVATE_MEMORY_MARKER' not in response.text
+    assert store.load('victim', cid) == before
+    assert request('/conversations/' + cid, method='GET').status_code == 404
+
+
+@pytest.mark.parametrize('raw', [b'null', b'42', b'{"question":null,"stream":true}',
+    b'{"question":[],"stream":true}', b'{"question":"A","stream":true,"stream":false}',
+    b'{"question":"A","stream":true,"circumstances":{"unsupported":"x"}}',
+    b'{"question":"A","stream":true,"top_k":false}', b'\xff', b'{"stream":true,'])
+def test_malformed_sse_request_returns_json_error_before_any_agent(monkeypatch, raw):
+    monkeypatch.setattr(api, 'get_agent', lambda: pytest.fail('malformed SSE reached agent'))
+    r = request('/ask', raw=raw)
+    assert r.status_code == 400 and r.headers['content-type'].startswith('application/json')
+    assert 'event:' not in r.text and not r.json()['halachic_verified']
+
+
+def test_synthetic_separation_rule_does_not_prove_waiting_rule(monkeypatch):
+    # Generic symbols only: this is not execution of T20's real religious fixture.
+    s = source(text='סמל אלפא חייב בהפרדה מסמל ביתא, רק כשהדגל פעיל.')
+    monkeypatch.setattr(evidence, 'shared_oil_waiting', lambda q: q == 'סמל אלפא TEST_WAITING')
+    monkeypatch.setattr(evidence, 'explicit_oil_waiting', lambda text: 'EXPLICIT_WAITING_PROOF' in text)
+    v = ExtractiveSourceVerifier()
+    assert v.eligible_sources('סמל אלפא TEST_WAITING', [s]) == []
+    assert v.verify('סמל אלפא TEST_WAITING', quote(s), [s])['verdict'] == 'insufficient_context'
+    for output in ('UNSUPPORTED_FIRM_RULING', 'INVENTED_TERM (UNLOCATED_AUTHORITY)',
+                   json.dumps({'quotes': [{'source_id': 'invented', 'quote': s['text']}]})):
+        assert v.verify('סמל אלפא', output, [s])['verdict'] != 'ok'
+
+@pytest.mark.parametrize('protocol', ['json', 'legacy'])
+def test_catalog_change_between_quote_check_and_snapshot_binding_fails_closed(tmp_path, monkeypatch, protocol):
+    from kezohar import citations
+    s = source(text=FULL); path, _ = reviewed(tmp_path, s)
+    name = 'verify_source_id_answer' if protocol == 'json' else 'verify_extractive_answer'
+    original = getattr(citations, name)
+    def change_after_check(*args, **kwargs):
+        result = original(*args, **kwargs)
+        assert result['verdict'] == 'ok'
+        path.write_text(json.dumps({'rules': []}))
+        return result
+    monkeypatch.setattr(citations, name, change_after_check)
+    v = ExtractiveSourceVerifier().verify('סמל אלפא', unit_output(s, protocol=protocol), [s])
+    assert v['verdict'] != 'ok'
+    result = VerifiedAnswerComposer().compose({'answer': 'אין בסיס מאומת.', 'verification': v, 'sources': [s]})
+    assert not result['structured_answer']['quotations'] and not result['halachic_verified']

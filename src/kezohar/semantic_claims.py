@@ -6,11 +6,10 @@ locator. Unknown wording is human-review-required, never accepted by token overl
 """
 import hashlib
 import json
-import os
-from pathlib import Path
 from .hebrew import normalize
 from .evidence import shared_oil_waiting
 from .source_snapshot import admissible
+from .quotation_units import catalog_data
 
 
 def question_intent(question):
@@ -26,12 +25,10 @@ def question_intent(question):
 
 
 def load_catalog():
-    path=Path(os.environ.get('CLAIM_CATALOG_PATH','data/claim_reformulations.json'))
-    if not path.exists():return []  # quote-only remains available, fail closed for paraphrases
-    return json.loads(path.read_text(encoding='utf-8'))['rules']
+    return catalog_data().get('rules', [])
 
 def catalog_revision():
-    return hashlib.sha256(json.dumps(load_catalog(),sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+    return hashlib.sha256(json.dumps(catalog_data(),sort_keys=True,ensure_ascii=False).encode()).hexdigest()
 
 
 def units_for(question, source):

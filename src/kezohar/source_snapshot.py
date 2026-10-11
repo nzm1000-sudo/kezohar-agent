@@ -31,9 +31,11 @@ def snapshots(sources):
     return {sid: fingerprint(source) for sid, source in unique_sources(sources).items()}
 
 def complete_quote(quote, source):
-    # Substrings can omit conditions before or after a quote. Bounded approved
-    # claim-unit quotations have their own separate verifier.
-    return bool(quote.strip()) and quote == source.get('text', '').strip()
+    # A substring is allowed only after independent contextual review pinned to
+    # the full current snapshot. Literal overlap never establishes completeness.
+    from .quotation_units import reviewed_complete_quote
+    return bool(quote.strip()) and (quote == source.get('text', '').strip()
+                                   or reviewed_complete_quote(quote, source))
 
 def public_sources(sources):
     result=[]

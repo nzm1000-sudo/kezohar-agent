@@ -1,0 +1,1075 @@
+{
+  "base_commit": "3663235",
+  "exit_code": 0,
+  "blocked_external_attempts": 0,
+  "tests": [
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T01_fast_refuse_no_retrieval_generation_or_persistence",
+      "outcome": "passed",
+      "duration_s": 0.002462167000000015,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T02_missing_and_conflicting_slots_stop_before_search",
+      "outcome": "passed",
+      "duration_s": 0.00035687500000003425,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T03_json_and_sse_effective_questions_match_three_traditions",
+      "outcome": "passed",
+      "duration_s": 0.022415041999999996,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T04_reuse_retrieval_and_verify_actual_sent_sources",
+      "outcome": "passed",
+      "duration_s": 0.0016335419999999878,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T05_research_mock_fetch_failure_keeps_local_verified_source",
+      "outcome": "passed",
+      "duration_s": 0.005498832999999981,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T06_utf8_limit_drops_whole_sources",
+      "outcome": "passed",
+      "duration_s": 0.00585870799999999,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T07_all_oversized_sources_stop_without_generation",
+      "outcome": "passed",
+      "duration_s": 0.005586541999999972,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T08_fake_deadline_prevents_start_and_rejects_late_output",
+      "outcome": "passed",
+      "duration_s": 0.00027454199999998874,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T09_zero_one_and_second_call_no_retry",
+      "outcome": "passed",
+      "duration_s": 0.0004498330000000106,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T10_budget_failure_and_context_changes_do_not_poison_cache",
+      "outcome": "passed",
+      "duration_s": 0.004613250000000013,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T11_exact_quote_identity_not_general_entailment",
+      "outcome": "passed",
+      "duration_s": 0.0004758750000000145,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T12_fabricated_or_colliding_id_blocked",
+      "outcome": "passed",
+      "duration_s": 0.0002890830000000233,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T13_budget_dropped_source_cannot_be_cited",
+      "outcome": "passed",
+      "duration_s": 0.047905750000000025,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T14_changed_or_condition_truncated_quote_blocked",
+      "outcome": "passed",
+      "duration_s": 0.0009389169999999836,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T15_fluent_similar_uncatalogued_claim_not_approved",
+      "outcome": "passed",
+      "duration_s": 0.00033695899999997003,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T16_changed_text_locator_or_edition_invalidates_unit",
+      "outcome": "passed",
+      "duration_s": 0.001505791000000034,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T17_added_claim_and_omitted_condition_rejected",
+      "outcome": "passed",
+      "duration_s": 0.0011686659999999849,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T18_search_only_ambiguous_excluded_copyright_alone_allowed",
+      "outcome": "passed",
+      "duration_s": 0.0004657080000000091,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T19_civil_title_or_path_cannot_be_used_as_ruling",
+      "outcome": "passed",
+      "duration_s": 0.00036366699999995644,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T20_original_qwen_waiting_fixture",
+      "outcome": "skipped",
+      "duration_s": 5.099999999996774e-05,
+      "details": "('/Users/nitz/kezohar-agent/tests/phase4_isolated/test_contracts.py', 266, 'Skipped: T20 historical Qwen fixture is real halachic content; synthetic-only authorization excludes it')"
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T21_foreign_owner_load_denied",
+      "outcome": "passed",
+      "duration_s": 0.0029217919999999786,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T22_foreign_owner_turn_denied_before_agent",
+      "outcome": "passed",
+      "duration_s": 0.0019496250000000104,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T23_foreign_save_delete_leave_original_unchanged",
+      "outcome": "passed",
+      "duration_s": 0.0020299590000000256,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T24_parallel_owners_and_conversations_isolated",
+      "outcome": "passed",
+      "duration_s": 0.009802833999999983,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T25_known_followup_updates_only_selected_slot",
+      "outcome": "passed",
+      "duration_s": 0.002693041000000007,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T26_unparsed_free_condition_not_silently_lost",
+      "outcome": "passed",
+      "duration_s": 0.0030789999999999984,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T27_concurrent_revision_compare_and_swap",
+      "outcome": "passed",
+      "duration_s": 0.0036450829999999934,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T28_whole_turn_pruning_provenance_and_scoped_delete",
+      "outcome": "passed",
+      "duration_s": 0.004375332999999926,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T29_normalization_expansion_does_not_mutate_source",
+      "outcome": "passed",
+      "duration_s": 0.000449542000000025,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T30_fts_core_terms_before_prefixes_and_refs_only_hints",
+      "outcome": "passed",
+      "duration_s": 0.002278916999999936,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T31_rrf_dedup_and_collision_not_silently_replaced",
+      "outcome": "passed",
+      "duration_s": 0.00045724999999996463,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T32_backend_failure_has_explicit_status_and_deadline",
+      "outcome": "passed",
+      "duration_s": 0.0004909589999999575,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T33_embedding_namespace_changes_and_fts_survives",
+      "outcome": "passed",
+      "duration_s": 0.0004586669999999682,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T34_two_configured_fixed_providers_leave_corpus_and_vectors_unchanged",
+      "outcome": "passed",
+      "duration_s": 0.024080125000000008,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T35_graph_proposals_never_proof_review_needs_witness",
+      "outcome": "passed",
+      "duration_s": 0.004044874999999948,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T36_graph_changed_or_revoked_source_not_current_proof",
+      "outcome": "passed",
+      "duration_s": 0.0035551670000000257,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T37_locator_requires_same_edition_full_proof_review_reversible",
+      "outcome": "passed",
+      "duration_s": 0.00428358299999998,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T38_source_endpoint_status_collision_and_revoked_permission",
+      "outcome": "passed",
+      "duration_s": 0.009843541000000067,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T39_invalid_json_types_and_fastapi_fallback_parity",
+      "outcome": "passed",
+      "duration_s": 0.00534612500000009,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T40_sse_order_layers_graph_and_rejected_claim_hidden",
+      "outcome": "passed",
+      "duration_s": 0.003214250000000085,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_quote_cannot_skip_preceding_or_following_condition[json]",
+      "outcome": "passed",
+      "duration_s": 0.0006297089999999228,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_quote_cannot_skip_preceding_or_following_condition[legacy]",
+      "outcome": "passed",
+      "duration_s": 0.0007938749999999439,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_claim_unit_requires_current_edition_identity_and_permissions[change0]",
+      "outcome": "passed",
+      "duration_s": 0.0009305829999999293,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_claim_unit_requires_current_edition_identity_and_permissions[change1]",
+      "outcome": "passed",
+      "duration_s": 0.0009212090000000339,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_claim_unit_requires_current_edition_identity_and_permissions[change2]",
+      "outcome": "passed",
+      "duration_s": 0.0009344159999999935,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_claim_unit_requires_current_edition_identity_and_permissions[change3]",
+      "outcome": "passed",
+      "duration_s": 0.0012168750000000061,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_claim_unit_requires_current_edition_identity_and_permissions[change4]",
+      "outcome": "passed",
+      "duration_s": 0.0007777910000000832,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_claim_unit_requires_current_edition_identity_and_permissions[change5]",
+      "outcome": "passed",
+      "duration_s": 0.001075084000000004,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_legacy_unversioned_and_duplicate_evidence_units_fail_closed",
+      "outcome": "passed",
+      "duration_s": 0.0007014170000000375,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_snapshot_changes_invalidate_display_even_for_exact_same_quote",
+      "outcome": "passed",
+      "duration_s": 0.0014619999999999633,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_other_stored_source_fields_are_part_of_snapshot_identity[tradition]",
+      "outcome": "passed",
+      "duration_s": 8.937499999994714e-05,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_other_stored_source_fields_are_part_of_snapshot_identity[authority_level]",
+      "outcome": "passed",
+      "duration_s": 9.11670000000031e-05,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_other_stored_source_fields_are_part_of_snapshot_identity[category]",
+      "outcome": "passed",
+      "duration_s": 9.333300000002875e-05,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_other_stored_source_fields_are_part_of_snapshot_identity[source_file]",
+      "outcome": "passed",
+      "duration_s": 8.887500000009929e-05,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_other_stored_source_fields_are_part_of_snapshot_identity[section]",
+      "outcome": "passed",
+      "duration_s": 9.35830000000637e-05,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_other_stored_source_fields_are_part_of_snapshot_identity[normalized_text]",
+      "outcome": "passed",
+      "duration_s": 9.033400000002523e-05,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_catalog_change_invalidates_display_and_cached_answer",
+      "outcome": "passed",
+      "duration_s": 0.003648833999999934,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_generation_cannot_use_snapshot_changed_during_call[change0]",
+      "outcome": "passed",
+      "duration_s": 0.0010833749999999975,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_generation_cannot_use_snapshot_changed_during_call[change1]",
+      "outcome": "passed",
+      "duration_s": 0.0011607500000000437,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_generation_cannot_use_snapshot_changed_during_call[change2]",
+      "outcome": "passed",
+      "duration_s": 0.0010438750000000274,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_generation_cannot_use_snapshot_changed_during_call[change3]",
+      "outcome": "passed",
+      "duration_s": 0.001067249999999964,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_revoked_permission_invalidates_cached_source_answer",
+      "outcome": "passed",
+      "duration_s": 0.0019131669999999934,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_rejected_cached_answer_cannot_expose_newly_revoked_sources",
+      "outcome": "passed",
+      "duration_s": 0.0015985000000000582,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_empty_answer_cache_invalidated_by_corpus_update",
+      "outcome": "passed",
+      "duration_s": 0.0017198749999999263,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_free_conditions_survive_unrecognized_turns_and_history_pruning",
+      "outcome": "passed",
+      "duration_s": 0.0039288330000000204,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_conflicting_original_wording_and_updated_slot_require_clarification",
+      "outcome": "passed",
+      "duration_s": 0.006146749999999979,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_conflict_is_order_independent_and_never_exposes_either_text[changed0]",
+      "outcome": "passed",
+      "duration_s": 0.00014533299999996974,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_conflict_is_order_independent_and_never_exposes_either_text[changed1]",
+      "outcome": "passed",
+      "duration_s": 0.00012924999999996967,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_conflict_is_order_independent_and_never_exposes_either_text[changed2]",
+      "outcome": "passed",
+      "duration_s": 0.00012941700000002054,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_conflict_is_order_independent_and_never_exposes_either_text[changed3]",
+      "outcome": "passed",
+      "duration_s": 0.00013583399999994583,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_single_backend_conflicts_are_not_lost_by_bm25_deduplication",
+      "outcome": "passed",
+      "duration_s": 0.0031624580000000346,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_nested_identity_error_cannot_be_hidden_by_other_backend",
+      "outcome": "passed",
+      "duration_s": 0.0004515000000000491,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_partial_search_visible_in_json_sse_and_no_source_admission",
+      "outcome": "passed",
+      "duration_s": 0.006064041999999992,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_empty_partial_search_is_not_no_source_or_cached",
+      "outcome": "passed",
+      "duration_s": 0.0004943329999999024,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_deadline_after_primary_stops_new_work_and_rejects_late_sources",
+      "outcome": "passed",
+      "duration_s": 0.0005906250000000668,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_supported_sqlite_backend_rejects_before_opening_database",
+      "outcome": "passed",
+      "duration_s": 0.0013953340000000258,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_no_new_web_fetch_after_virtual_deadline",
+      "outcome": "passed",
+      "duration_s": 0.002525667000000009,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_expired_research_does_not_call_searcher_or_fetcher",
+      "outcome": "passed",
+      "duration_s": 6.712500000005672e-05,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_expired_generation_does_not_prepare_prompt",
+      "outcome": "passed",
+      "duration_s": 9.583299999993411e-05,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_source_revalidation_stops_before_next_lookup_after_deadline",
+      "outcome": "passed",
+      "duration_s": 0.00014862500000001333,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_expired_sqlite_lookup_does_not_open_database",
+      "outcome": "passed",
+      "duration_s": 0.0015570830000000146,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_json_rejected_before_agent_creation[{bad-/ask]",
+      "outcome": "passed",
+      "duration_s": 0.0009623330000000374,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_json_rejected_before_agent_creation[{bad-/research]",
+      "outcome": "passed",
+      "duration_s": 0.0009257089999999968,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_json_rejected_before_agent_creation[{bad-/search]",
+      "outcome": "passed",
+      "duration_s": 0.0006708330000000373,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_json_rejected_before_agent_creation[[]-/ask]",
+      "outcome": "passed",
+      "duration_s": 0.000655416999999936,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_json_rejected_before_agent_creation[[]-/research]",
+      "outcome": "passed",
+      "duration_s": 0.000647417000000039,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_json_rejected_before_agent_creation[[]-/search]",
+      "outcome": "passed",
+      "duration_s": 0.0007245419999999392,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_json_rejected_before_agent_creation[{\"question\":\"A\",\"question\":\"B\"}-/ask]",
+      "outcome": "passed",
+      "duration_s": 0.0007537080000000751,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_json_rejected_before_agent_creation[{\"question\":\"A\",\"question\":\"B\"}-/research]",
+      "outcome": "passed",
+      "duration_s": 0.0006457909999999512,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_json_rejected_before_agent_creation[{\"question\":\"A\",\"question\":\"B\"}-/search]",
+      "outcome": "passed",
+      "duration_s": 0.0005895409999999712,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_json_rejected_before_agent_creation[{\"query\":NaN}-/ask]",
+      "outcome": "passed",
+      "duration_s": 0.0007029170000000251,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_json_rejected_before_agent_creation[{\"query\":NaN}-/research]",
+      "outcome": "passed",
+      "duration_s": 0.0005467089999999786,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_json_rejected_before_agent_creation[{\"query\":NaN}-/search]",
+      "outcome": "passed",
+      "duration_s": 0.0006704170000000342,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_options_json_sse_and_fallback_have_same_rejection[top_k-True]",
+      "outcome": "passed",
+      "duration_s": 0.0008826660000000874,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_options_json_sse_and_fallback_have_same_rejection[top_k-1.5]",
+      "outcome": "passed",
+      "duration_s": 0.0008654999999999635,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_options_json_sse_and_fallback_have_same_rejection[top_k-0]",
+      "outcome": "passed",
+      "duration_s": 0.0011290000000000466,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_options_json_sse_and_fallback_have_same_rejection[stream-true]",
+      "outcome": "passed",
+      "duration_s": 0.0009464999999999613,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_options_json_sse_and_fallback_have_same_rejection[research-1]",
+      "outcome": "passed",
+      "duration_s": 0.000907167000000042,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_options_json_sse_and_fallback_have_same_rejection[lat-31]",
+      "outcome": "passed",
+      "duration_s": 0.001001625000000006,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_options_json_sse_and_fallback_have_same_rejection[lon-181]",
+      "outcome": "passed",
+      "duration_s": 0.0010864170000000062,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_options_json_sse_and_fallback_have_same_rejection[location-value7]",
+      "outcome": "passed",
+      "duration_s": 0.001131583000000047,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_invalid_options_json_sse_and_fallback_have_same_rejection[circumstances-value8]",
+      "outcome": "passed",
+      "duration_s": 0.0008298749999999799,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_pending_sources_redacted_in_search_normal_answer_and_sse",
+      "outcome": "passed",
+      "duration_s": 0.006848124999999983,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_sse_and_json_agree_after_permission_changes_during_generation",
+      "outcome": "passed",
+      "duration_s": 0.006971290999999935,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_sse_revalidates_permissions_between_sources_event_and_generation",
+      "outcome": "passed",
+      "duration_s": 0.002376542000000037,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_rejected_claim_not_leaked_via_verification_diagnostics",
+      "outcome": "passed",
+      "duration_s": 0.008284167000000009,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_revoked_source_not_leaked_via_reasoning_diagnostics",
+      "outcome": "passed",
+      "duration_s": 0.003313290999999996,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_dropped_source_regression_uses_real_synthetic_corpus_membership",
+      "outcome": "passed",
+      "duration_s": 0.055240333000000086,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_unknown_or_stale_supplied_source_blocked_before_generation",
+      "outcome": "passed",
+      "duration_s": 0.001165875000000094,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_oversized_preserved_memory_fails_without_silent_truncation",
+      "outcome": "passed",
+      "duration_s": 0.0033586249999999485,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_regressions.py::test_federated_error_diagnostics_are_thread_local",
+      "outcome": "passed",
+      "duration_s": 0.0012495000000000145,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_reviewed_short_complete_unit_without_unrelated_long_section[json]",
+      "outcome": "passed",
+      "duration_s": 0.0010259589999999097,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_reviewed_short_complete_unit_without_unrelated_long_section[legacy]",
+      "outcome": "passed",
+      "duration_s": 0.0008900840000000132,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_unreviewed_or_condition_truncated_short_units_rejected[\\u05de\\u05e6\\u05d9\\u05d2\\u05d9\\u05dd \\u05d0\\u05dc\\u05e4\\u05d0]",
+      "outcome": "passed",
+      "duration_s": 0.000334207999999947,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_unreviewed_or_condition_truncated_short_units_rejected[\\u05d1\\u05d3\\u05d9\\u05e7\\u05ea \\u05e1\\u05de\\u05dc \\u05d0\\u05dc\\u05e4\\u05d0: \\u05e8\\u05e7 \\u05db\\u05d0\\u05e9\\u05e8 \\u05d3\\u05d2\\u05dc \\u05d1\\u05d3\\u05d9\\u05e7\\u05d4 \\u05e4\\u05e2\\u05d9\\u05dc, \\u05de\\u05e6\\u05d9\\u05d2\\u05d9\\u05dd \\u05d0\\u05dc\\u05e4\\u05d0; \\u05d0\\u05dd \\u05db\\u05d1\\u05d5\\u05d9 \\u05d0\\u05d9\\u05df \\u05dc\\u05d4\\u05e6\\u05d9\\u05d2.]",
+      "outcome": "passed",
+      "duration_s": 0.00030291600000009744,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_unreviewed_or_condition_truncated_short_units_rejected[\\u05d1\\u05d3\\u05d9\\u05e7\\u05ea \\u05e1\\u05de\\u05dc \\u05d0\\u05dc\\u05e4\\u05d0: \\u05e8\\u05e7 \\u05db\\u05d0\\u05e9\\u05e8 \\u05d3\\u05d2\\u05dc \\u05d1\\u05d3\\u05d9\\u05e7\\u05d4 \\u05e4\\u05e2\\u05d9\\u05dc, \\u05de\\u05e6\\u05d9\\u05d2\\u05d9\\u05dd \\u05d0\\u05dc\\u05e4\\u05d0]",
+      "outcome": "passed",
+      "duration_s": 0.00028570800000005114,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_short_unit_approval_invalidated_by_any_source_or_permission_change[change0]",
+      "outcome": "passed",
+      "duration_s": 0.0005333330000000247,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_short_unit_approval_invalidated_by_any_source_or_permission_change[change1]",
+      "outcome": "passed",
+      "duration_s": 0.0004642920000000883,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_short_unit_approval_invalidated_by_any_source_or_permission_change[change2]",
+      "outcome": "passed",
+      "duration_s": 0.00040845800000000043,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_short_unit_approval_invalidated_by_any_source_or_permission_change[change3]",
+      "outcome": "passed",
+      "duration_s": 0.0005983750000000398,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_short_unit_approval_invalidated_by_any_source_or_permission_change[change4]",
+      "outcome": "passed",
+      "duration_s": 0.00040399999999995995,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_short_unit_approval_invalidated_by_any_source_or_permission_change[change5]",
+      "outcome": "passed",
+      "duration_s": 0.0010586250000000907,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_short_unit_approval_invalidated_by_any_source_or_permission_change[change6]",
+      "outcome": "passed",
+      "duration_s": 0.0005029579999999978,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_short_unit_approval_invalidated_by_any_source_or_permission_change[change7]",
+      "outcome": "passed",
+      "duration_s": 0.00035925000000003315,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_incomplete_review_cannot_approve_short_unit[no-review]",
+      "outcome": "passed",
+      "duration_s": 0.0007140829999999765,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_incomplete_review_cannot_approve_short_unit[model-review]",
+      "outcome": "passed",
+      "duration_s": 0.0005791250000000137,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_incomplete_review_cannot_approve_short_unit[no-reviewer]",
+      "outcome": "passed",
+      "duration_s": 0.0005112080000000407,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_incomplete_review_cannot_approve_short_unit[no-rationale]",
+      "outcome": "passed",
+      "duration_s": 0.0005690829999999147,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_incomplete_review_cannot_approve_short_unit[no-conditions]",
+      "outcome": "passed",
+      "duration_s": 0.0008000420000000563,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_incomplete_review_cannot_approve_short_unit[bad-condition]",
+      "outcome": "passed",
+      "duration_s": 0.0005676249999999605,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_incomplete_review_cannot_approve_short_unit[bad-offset]",
+      "outcome": "passed",
+      "duration_s": 0.0007312080000000387,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_incomplete_review_cannot_approve_short_unit[duplicate-id]",
+      "outcome": "passed",
+      "duration_s": 0.0009013330000000597,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_invalid_catalog_does_not_reuse_old_short_quote_approval[{broken]",
+      "outcome": "passed",
+      "duration_s": 0.0011744580000000449,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_invalid_catalog_does_not_reuse_old_short_quote_approval[null]",
+      "outcome": "passed",
+      "duration_s": 0.001091249999999988,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_invalid_catalog_does_not_reuse_old_short_quote_approval[[]]",
+      "outcome": "passed",
+      "duration_s": 0.001207832999999936,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_invalid_catalog_does_not_reuse_old_short_quote_approval[{\"quotation_units\":null}]",
+      "outcome": "passed",
+      "duration_s": 0.00137337500000001,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_invalid_catalog_does_not_reuse_old_short_quote_approval[{\"rules\":{},\"quotation_units\":[]}]",
+      "outcome": "passed",
+      "duration_s": 0.0012969170000000085,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_invalid_catalog_does_not_reuse_old_short_quote_approval[{\"rules\":[],\"quotation_units\":[],\"quotation_units\":[]}]",
+      "outcome": "passed",
+      "duration_s": 0.0010481250000000664,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_short_unit_catalog_revocation_invalidates_answer_cache_and_display",
+      "outcome": "passed",
+      "duration_s": 0.003542582999999988,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_review_does_not_approve_further_shortening_or_metadata_self_approval",
+      "outcome": "passed",
+      "duration_s": 0.0007269579999999998,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_short_reviewed_unit_json_sse_render_same_verified_locator[False]",
+      "outcome": "passed",
+      "duration_s": 0.0036705419999999434,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_short_reviewed_unit_json_sse_render_same_verified_locator[True]",
+      "outcome": "passed",
+      "duration_s": 0.004973374999999947,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_review_revoked_during_generation_cannot_escape_in_json_or_sse[False]",
+      "outcome": "passed",
+      "duration_s": 0.0036329170000000133,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_review_revoked_during_generation_cannot_escape_in_json_or_sse[True]",
+      "outcome": "passed",
+      "duration_s": 0.00403995800000001,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_cached_full_quote_reverified_against_new_source_snapshot[change0]",
+      "outcome": "passed",
+      "duration_s": 0.003338000000000063,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_cached_full_quote_reverified_against_new_source_snapshot[change1]",
+      "outcome": "passed",
+      "duration_s": 0.00248037500000009,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_cached_full_quote_reverified_against_new_source_snapshot[change2]",
+      "outcome": "passed",
+      "duration_s": 0.00344362499999995,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_collision_quarantines_only_bad_id_and_marks_partial[damage0]",
+      "outcome": "passed",
+      "duration_s": 0.00042754099999997575,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_collision_quarantines_only_bad_id_and_marks_partial[damage1]",
+      "outcome": "passed",
+      "duration_s": 0.0004022920000000818,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_collision_quarantines_only_bad_id_and_marks_partial[damage2]",
+      "outcome": "passed",
+      "duration_s": 0.00040362500000001855,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_json_sse_partial_collision_keeps_healthy_search_sources_visible[False]",
+      "outcome": "passed",
+      "duration_s": 0.0057798329999999565,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_json_sse_partial_collision_keeps_healthy_search_sources_visible[True]",
+      "outcome": "passed",
+      "duration_s": 0.0061352499999999255,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_failed_federated_backend_does_not_hide_healthy_backend",
+      "outcome": "passed",
+      "duration_s": 0.0016957499999999959,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_invalid_trusted_owner_rejected_on_all_memory_operations[]",
+      "outcome": "passed",
+      "duration_s": 0.002284459000000072,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_invalid_trusted_owner_rejected_on_all_memory_operations[ ]",
+      "outcome": "passed",
+      "duration_s": 0.0021622919999999546,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_invalid_trusted_owner_rejected_on_all_memory_operations[None]",
+      "outcome": "passed",
+      "duration_s": 0.0019873339999999518,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_invalid_trusted_owner_rejected_on_all_memory_operations[123]",
+      "outcome": "passed",
+      "duration_s": 0.002260708999999972,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_invalid_trusted_owner_rejected_on_all_memory_operations[xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]",
+      "outcome": "passed",
+      "duration_s": 0.0017310420000000715,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_cross_owner_read_update_turn_and_delete_all_blocked[other]",
+      "outcome": "passed",
+      "duration_s": 0.00259970899999995,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_cross_owner_read_update_turn_and_delete_all_blocked[victim ]",
+      "outcome": "passed",
+      "duration_s": 0.002720791999999972,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_cross_owner_read_update_turn_and_delete_all_blocked[victim' OR 1=1 --]",
+      "outcome": "passed",
+      "duration_s": 0.00287737499999996,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_cross_owner_read_update_turn_and_delete_all_blocked[VICTIM]",
+      "outcome": "passed",
+      "duration_s": 0.002863583000000003,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_concurrent_owners_and_same_owner_conversations_are_independent",
+      "outcome": "passed",
+      "duration_s": 0.014027707999999972,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_loaded_memory_is_not_shared_mutable_state",
+      "outcome": "passed",
+      "duration_s": 0.0018125410000000564,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_client_owner_fields_do_not_expose_private_memory_via_api[False]",
+      "outcome": "passed",
+      "duration_s": 0.007027499999999964,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_client_owner_fields_do_not_expose_private_memory_via_api[True]",
+      "outcome": "passed",
+      "duration_s": 0.007729917000000031,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_malformed_sse_request_returns_json_error_before_any_agent[null]",
+      "outcome": "passed",
+      "duration_s": 0.0005549579999999388,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_malformed_sse_request_returns_json_error_before_any_agent[42]",
+      "outcome": "passed",
+      "duration_s": 0.0004987910000000539,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_malformed_sse_request_returns_json_error_before_any_agent[{\"question\":null,\"stream\":true}]",
+      "outcome": "passed",
+      "duration_s": 0.0005253749999999391,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_malformed_sse_request_returns_json_error_before_any_agent[{\"question\":[],\"stream\":true}]",
+      "outcome": "passed",
+      "duration_s": 0.0007571670000000585,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_malformed_sse_request_returns_json_error_before_any_agent[{\"question\":\"A\",\"stream\":true,\"stream\":false}]",
+      "outcome": "passed",
+      "duration_s": 0.0005267909999999709,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_malformed_sse_request_returns_json_error_before_any_agent[{\"question\":\"A\",\"stream\":true,\"circumstances\":{\"unsupported\":\"x\"}}]",
+      "outcome": "passed",
+      "duration_s": 0.0005047919999999761,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_malformed_sse_request_returns_json_error_before_any_agent[{\"question\":\"A\",\"stream\":true,\"top_k\":false}]",
+      "outcome": "passed",
+      "duration_s": 0.0007669580000000398,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_malformed_sse_request_returns_json_error_before_any_agent[\\xff]",
+      "outcome": "passed",
+      "duration_s": 0.0004530839999999925,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_malformed_sse_request_returns_json_error_before_any_agent[{\"stream\":true,]",
+      "outcome": "passed",
+      "duration_s": 0.0007051670000000065,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_synthetic_separation_rule_does_not_prove_waiting_rule",
+      "outcome": "passed",
+      "duration_s": 0.0006372909999999843,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_catalog_change_between_quote_check_and_snapshot_binding_fails_closed[json]",
+      "outcome": "passed",
+      "duration_s": 0.0007719170000000108,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_followup_regressions.py::test_catalog_change_between_quote_check_and_snapshot_binding_fails_closed[legacy]",
+      "outcome": "passed",
+      "duration_s": 0.0007202499999999779,
+      "details": ""
+    }
+  ]
+}
