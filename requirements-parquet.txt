@@ -1,0 +1,2 @@
+# Optional offline import dependency; the API only needs the resulting SQLite DB.
+pyarrow>=17,<21

@@ -17,6 +17,7 @@ def classify(source):
         return {'domain': 'civil-law', 'source_type': 'civil-regulation',
                 'halachic_authority': 'none', 'classification_basis': 'civil title/path'}
     registry = (
+        ('קיצור שולחן ערוך – ילקוט יוסף', 'psak-code', 'sephardi-posek'),
         ('שולחן ערוך', 'psak-code', 'maran'),
         ('בית יוסף', 'halachic-commentary', 'maran'),
         ('בן איש חי', 'psak-code', 'sephardi-posek'),

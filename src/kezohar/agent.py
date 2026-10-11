@@ -26,6 +26,7 @@ def order_sources(sources, question=""):
         source.setdefault('halachic_authority', source.get('authority_level','') or ('maran' if source.get('work_title','').startswith('שולחן ערוך') or source.get('book_id')=='Beit_Yosef' else 'unclassified'))
         source.setdefault('evidence_support', 'not-claim-verified')
     return sorted(sources, key=lambda s: (
+        not rag_eligible(s),
         s.get('domain') != 'halacha',
         TRADITION_ORDER.get(s.get('tradition',''),1),
         s.get('halachic_authority')!='maran',

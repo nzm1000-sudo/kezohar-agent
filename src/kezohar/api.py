@@ -28,8 +28,11 @@ def get_agent():
         from .library_search import SQLiteLibrarySearch
         from .hybrid import FederatedSearch
         app_db = os.environ.get("APP_LIBRARY_DB_PATH", str(Path(app_store).with_name("library.sqlite3")))
-        if Path(app_db).exists():
-            _agent.search = FederatedSearch(_agent.search, [SQLiteLibrarySearch(app_db)])
+        user_db = os.environ.get("USER_LIBRARY_DB_PATH", "data/store/user-library/library.sqlite3")
+        backends = [SQLiteLibrarySearch(path) for path in dict.fromkeys((app_db, user_db))
+                    if Path(path).exists()]
+        if backends:
+            _agent.search = FederatedSearch(_agent.search, backends)
     return _agent
 
 def _validate_ask(body):

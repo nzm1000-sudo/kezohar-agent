@@ -1,0 +1,17 @@
+{
+  "verified": true,
+  "status": "user-authorized-private-local-import",
+  "file_sha256": "b5e085e47dadb871996665f20916109561d4a579d807db2020dab4ac79f163b3",
+  "work": "קיצור שולחן ערוך – ילקוט יוסף",
+  "recorded_on": "2026-10-11",
+  "evidence": "המשתמש סיפק את 0000.parquet וביקש במפורש לשלבו במאגר Kezohar Agent, לחיפוש ולהפקת תשובות במודל המקומי, בלי פרסום או Push.",
+  "evidence_type": "explicit-user-instruction-for-supplied-file",
+  "verification_note": "תיעוד הוראת המשתמש לשימוש מקומי בקובץ המסוים בלבד; אינו הצהרה שעיינו ברישיון הפצה, באישור חתום של המחבר או במהדורה מודפסת. הקובץ עצמו אינו כולל רישיון או מהדורה מזוהים.",
+  "scope": {
+    "local_storage": true,
+    "search_index": true,
+    "rag_answers": true
+  },
+  "redistribution_allowed": false,
+  "restrictions": ["שימוש מקומי בפרויקט בלבד; אין פרסום, הפצה או Push", "אין תיקון מספור מתוך ניחוש; שיוך לא חד-משמעי מוחרג מהפקת תשובות"]
+}
