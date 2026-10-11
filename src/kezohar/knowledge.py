@@ -2,6 +2,7 @@
 from .ingest import load_store
 from .hybrid import HybridSearch
 from .models import Source
+from .source_snapshot import fingerprint, unique_sources
 
 
 class KnowledgeBase:
@@ -10,13 +11,13 @@ class KnowledgeBase:
             self.search = search_engine
             return
         if sources is None:
-            unique = {}
+            loaded = []
             paths = store_path if isinstance(store_path, (list, tuple)) else [store_path]
             for path in paths:
                 if path:
                     for source in load_store(path):
-                        unique[source.source_id] = source
-            sources = list(unique.values())
+                        loaded.append(source)
+            sources = loaded  # retain conflicting IDs for fail-closed resolution
         self.search = HybridSearch(sources)
 
     def status(self):
@@ -33,7 +34,9 @@ class KnowledgeBase:
         return {'source_count': count, 'vector_status': state,
                 'vector_index': spec.manifest() if spec is not None else None}
 
-    def source_by_id(self, source_id):
+    def source_by_id(self, source_id, request_budget=None):
+        from .retrieval_budget import accepts_budget
+        if request_budget:request_budget.check('source lookup')
         primary=getattr(self.search,'primary',self.search)
         matches=[]
         for source in getattr(getattr(primary,'bm25',None),'docs',[]):
@@ -41,21 +44,25 @@ class KnowledgeBase:
         for backend in getattr(self.search,'backends',[]):
             lookup=getattr(backend,'source_by_id',None)
             if lookup is not None:
-                source=lookup(source_id)
+                if request_budget:request_budget.check('source lookup backend')
+                opts={'request_budget':request_budget} if request_budget and accepts_budget(lookup) else {}
+                source=lookup(source_id,**opts)
+                if request_budget:request_budget.check('source lookup backend return')
                 if source is not None:matches.append(source)
         if not matches:return None
         # An ID collision must not silently serve a different text or locator.
-        identities={(s.get('work_title'),s.get('reference'),s.get('text')) for s in matches}
+        identities={fingerprint(s) for s in matches}
         return matches[0] if len(identities)==1 else None
 
     def upsert_verified(self, sources):
         """Update the small verified-source corpus, preserving app disk backends."""
         primary = getattr(self.search, 'primary', self.search)
-        merged = {s.source_id: s for s in primary.bm25.docs}
-        merged.update({s['source_id']: Source.from_dict(s) for s in sources})
+        replacements=unique_sources(sources)
+        merged=[s for s in primary.bm25.docs if s.source_id not in replacements]
+        merged.extend(Source.from_dict(s) for s in replacements.values())
         # Preserve embedding provider/disablement; no dependency on answer settings.
         vector = primary.vector.empty_copy() if primary.vector is not None else False
-        updated = HybridSearch(list(merged.values()), vector_store=vector)
+        updated = HybridSearch(merged, vector_store=vector)
         if hasattr(self.search, 'primary'):
             self.search.primary = updated
             self.search.bm25, self.search.vector = updated.bm25, updated.vector

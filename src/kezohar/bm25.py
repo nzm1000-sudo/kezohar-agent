@@ -49,6 +49,13 @@ class BM25Index:
         return score
 
     def search(self, query, top_k=5):
+        from .source_snapshot import fingerprint
+        from .hybrid import SearchResults
+        identities={};conflicts=set()
+        for source in self.docs:
+            digest=fingerprint(source.to_dict());sid=source.source_id
+            if sid in identities and identities[sid]!=digest:conflicts.add(sid)
+            identities[sid]=digest
         qtoks = hebrew.tokens(query)
         if not qtoks or not self.docs:
             return []
@@ -59,6 +66,7 @@ class BM25Index:
             candidates.update(self.postings.get(token, ()))
         for i in sorted(candidates):
             s = self.docs[i]
+            if s.source_id in conflicts:continue
             sc = self._score_one(qtoks, i)
             if sc <= 0:
                 continue
@@ -79,4 +87,4 @@ class BM25Index:
             payload = s.to_dict()
             payload.update(score=r["score"], backend="bm25")
             out.append(payload)
-        return out
+        return SearchResults(out,[{'stage':'identity','source_id':sid,'error':'conflicting-source-snapshots'} for sid in sorted(conflicts)])

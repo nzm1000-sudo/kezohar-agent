@@ -1,10 +1,27 @@
 """Request-local limits. No global model settings or retry loops."""
 import time
 from .llm import LLMUnavailable, build_messages
+from .source_snapshot import fingerprint, admissible
 
 
 class BudgetExceeded(LLMUnavailable):
     pass
+
+class SourceChanged(LLMUnavailable):
+    pass
+
+def revalidate_sources(sources,resolver,request_budget=None):
+    from .retrieval_budget import accepts_budget
+    current=[]
+    for source in sources:
+        if request_budget:request_budget.check('source revalidation lookup')
+        opts={'request_budget':request_budget} if request_budget and accepts_budget(resolver) else {}
+        current.append(resolver(source['source_id'],**opts))
+        if request_budget:request_budget.check('source revalidation return')
+    if any(s is None or not admissible(s) or fingerprint(s)!=fingerprint(old)
+           for s,old in zip(current,sources)):
+        raise SourceChanged('source identity or permission changed before generation')
+    return sources  # retain retrieval annotations only after security identity matches
 
 
 class RequestBudget:
@@ -23,6 +40,11 @@ class RequestBudget:
     def remaining(self):
         return max(0.0, self.seconds - (time.monotonic() - self.started))
 
+    def check(self, stage):
+        if self.remaining()<=0:
+            self.reason='request deadline exhausted before '+stage
+            raise BudgetExceeded(self.reason)
+
     def report(self):
         return {'elapsed_s': round(time.monotonic() - self.started, 3),
                 'deadline_s': self.seconds, 'model_calls': self.calls,
@@ -36,6 +58,7 @@ class RequestBudget:
         chosen = []
         seen = set()
         for source in sources:
+            self.check('context preparation')
             sid = source['source_id']
             if sid in seen: continue
             seen.add(sid)
@@ -51,10 +74,11 @@ class RequestBudget:
 
 
 class BudgetedAnswerModel:
-    def __init__(self, model, budget):
+    def __init__(self, model, budget, source_resolver=None):
         self.model = model
         self.budget = budget
         self.sent_sources = []
+        self.source_resolver=source_resolver
 
     @property
     def identity(self):
@@ -62,6 +86,7 @@ class BudgetedAnswerModel:
 
     def generate(self, question, sources, timeout=4.5):
         budget = self.budget
+        budget.check('generation preparation')
         self.sent_sources = budget.fit(question, sources)
         if not self.sent_sources:
             budget.reason = 'no complete source fits context budget'
@@ -69,6 +94,10 @@ class BudgetedAnswerModel:
         if budget.calls >= budget.max_calls or budget.remaining() <= 0:
             budget.reason = 'model-call or time budget exhausted'
             raise BudgetExceeded(budget.reason)
+        if self.source_resolver:
+            budget.check('source permission revalidation')
+            self.sent_sources=revalidate_sources(self.sent_sources,self.source_resolver,budget)
+        budget.check('model call')
         budget.calls += 1
         result = self.model.generate(question, self.sent_sources, timeout=min(timeout, budget.remaining()))
         # A provider can return after its timeout; late output must not be used.

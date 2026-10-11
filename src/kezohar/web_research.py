@@ -42,7 +42,8 @@ DEFAULT_SITES = {
 class ResearchError(Exception):
     pass
 
-def public_url(url, allowed_hosts=None):
+def public_url(url, allowed_hosts=None, request_budget=None):
+    if request_budget:request_budget.check('URL/DNS validation')
     parts = urllib.parse.urlsplit(url)
     host = (parts.hostname or '').lower()
     if parts.scheme not in ('http','https') or not host or parts.username or parts.password or parts.port not in (None,80,443):
@@ -53,14 +54,16 @@ def public_url(url, allowed_hosts=None):
         addresses = socket.getaddrinfo(host, parts.port or (443 if parts.scheme=='https' else 80), type=socket.SOCK_STREAM)
     except OSError:
         raise ResearchError('DNS unavailable')
+    if request_budget:request_budget.check('DNS return')
     if not addresses or any(not ipaddress.ip_address(a[4][0]).is_global for a in addresses):
         raise ResearchError('non-public address blocked')
     return urllib.parse.urlunsplit((parts.scheme,parts.netloc,parts.path or '/',parts.query,''))
 
 class SafeRedirect(urllib.request.HTTPRedirectHandler):
-    def __init__(self, hosts, check=None): self.hosts=hosts;self.check=check
+    def __init__(self, hosts, check=None, request_budget=None):
+        self.hosts=hosts;self.check=check;self.request_budget=request_budget
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        public_url(newurl,self.hosts)
+        public_url(newurl,self.hosts,self.request_budget)
         if self.check and not self.check(req.full_url, newurl):
             raise ResearchError("redirect robots policy not established")
         return super().redirect_request(req,fp,code,msg,headers,newurl)
@@ -76,24 +79,28 @@ class PublicFetcher:
             return urllib.parse.urlsplit(new).path=='/robots.txt' and urllib.parse.urlsplit(old).netloc==urllib.parse.urlsplit(new).netloc
         robots = self.robots.get(origin)
         return robots is not None and robots.can_fetch(USER_AGENT,new)
-    def _read(self,url):
-        public_url(url,self.hosts)
+    def _read(self,url,request_budget=None):
+        public_url(url,self.hosts,request_budget)
         req=urllib.request.Request(url,headers={'User-Agent':USER_AGENT,'Accept':'text/html,text/plain'})
-        with self.opener.open(req,timeout=self.timeout) as response:
-            final=public_url(response.geturl(),self.hosts)
+        opener=(urllib.request.build_opener(SafeRedirect(self.hosts,self._redirect_allowed,request_budget))
+                if request_budget else self.opener)
+        if request_budget:request_budget.check('page request')
+        with opener.open(req,timeout=min(self.timeout,request_budget.remaining()) if request_budget else self.timeout) as response:
+            final=public_url(response.geturl(),self.hosts,request_budget)
             kind=response.headers.get_content_type()
             if kind not in ('text/html','text/plain','application/xhtml+xml'):
                 raise ResearchError('unsupported page type')
             raw=response.read(MAX_PAGE_BYTES+1)
+            if request_budget:request_budget.check('page read return')
             if len(raw)>MAX_PAGE_BYTES:raise ResearchError('page too large')
             return raw.decode(response.headers.get_content_charset() or 'utf-8', errors='replace'),final
-    def __call__(self,url):
-        url=public_url(url,self.hosts);parts=urllib.parse.urlsplit(url)
+    def __call__(self,url,request_budget=None):
+        url=public_url(url,self.hosts,request_budget);parts=urllib.parse.urlsplit(url)
         origin=parts.scheme+'://'+parts.netloc
         if origin not in self.robots:
             parser=urllib.robotparser.RobotFileParser()
             try:
-                text,_=self._read(origin+'/robots.txt');parser.parse(text.splitlines())
+                text,_=self._read(origin+'/robots.txt',request_budget);parser.parse(text.splitlines())
             except urllib.error.HTTPError as exc:
                 if exc.code==404:parser.parse([])
                 else:raise ResearchError('robots unavailable')
@@ -104,9 +111,15 @@ class PublicFetcher:
         delay=max(1,robots.crawl_delay(USER_AGENT) or 0)
         if delay>10:raise ResearchError('crawl delay exceeds research budget')
         remaining=delay-(time.monotonic()-self.last.get(origin,0))
-        if remaining>0:time.sleep(remaining)
+        if remaining>0:
+            if request_budget and remaining>=request_budget.remaining():
+                request_budget.reason='crawl delay exceeds request deadline'
+                from .request_budget import BudgetExceeded
+                raise BudgetExceeded(request_budget.reason)
+            time.sleep(remaining)
+        if request_budget:request_budget.check('page fetch after crawl delay')
         self.last[origin]=time.monotonic()
-        page,final=self._read(url)
+        page,final=self._read(url,request_budget)
         if final!=url and not robots.can_fetch(USER_AGENT,final):
             raise ResearchError('robots disallow redirect target')
         return page,final
@@ -151,18 +164,21 @@ class FreeSearch:
     """Configured SearxNG JSON endpoint, or public DuckDuckGo HTML (best effort)."""
     def __init__(self,searx_url=None,timeout=8):
         self.searx_url=searx_url;self.timeout=timeout;self.last_backend="";self.last_attempts=[]
-    def search(self,query,limit=5):
+    def search(self,query,limit=5,request_budget=None):
+        if request_budget:request_budget.check('web search')
         self.last_attempts=[{'backend':'searxng','status':'configured' if self.searx_url else 'not-configured'}]
         if self.searx_url:
             self.last_backend='searxng'
             url=self.searx_url.rstrip('/')+'/search?'+urllib.parse.urlencode({'q':query,'format':'json'})
             req=urllib.request.Request(url,headers={'User-Agent':USER_AGENT})
-            with urllib.request.urlopen(req,timeout=self.timeout) as response:
+            if request_budget:request_budget.check('Searx request')
+            with urllib.request.urlopen(req,timeout=min(self.timeout,request_budget.remaining()) if request_budget else self.timeout) as response:
                 data=json.loads(response.read(MAX_PAGE_BYTES+1))
+            if request_budget:request_budget.check('Searx return')
             return [r['url'] for r in data.get('results',[]) if r.get('url')][:limit]
         try:
             fetch=PublicFetcher({'html.duckduckgo.com'},timeout=self.timeout)
-            page,_=fetch._read('https://html.duckduckgo.com/html/?'+urllib.parse.urlencode({'q':query}))
+            page,_=fetch._read('https://html.duckduckgo.com/html/?'+urllib.parse.urlencode({'q':query}),request_budget)
             parser=LinkParser();parser.feed(page)
             if parser.urls:
                 self.last_attempts.append({'backend':'duckduckgo-html','status':'links-found','count':len(parser.urls)})
@@ -172,6 +188,7 @@ class FreeSearch:
         except (OSError, ResearchError) as exc:
             self.last_attempts.append({'backend':'duckduckgo-html','status':'error','error':type(exc).__name__})
         # Documented public MediaWiki search API, no key/account/payment.
+        if request_budget:request_budget.check('web search fallback')
         topic = query.split(' הלכה site:',1)[0]
         stop = {'מה','מתי','האם','איך','על','של','עם','מותר','מברכים','ברכת','הלכה'}
         terms = [t for t in re.findall(r'[א-תA-Za-z]+',hebrew.strip_niqqud(topic))
@@ -181,12 +198,14 @@ class FreeSearch:
         url='https://he.wikisource.org/w/api.php?'+urllib.parse.urlencode({
             'action':'query','list':'search','srsearch':' OR '.join(terms[:6]),
             'srlimit':max(1,min(limit,20)),'format':'json'})
-        public_url(url, {'he.wikisource.org'})
-        opener=urllib.request.build_opener(SafeRedirect({'he.wikisource.org'}))
-        with opener.open(urllib.request.Request(url,headers={'User-Agent':USER_AGENT}),timeout=self.timeout) as response:
+        public_url(url, {'he.wikisource.org'},request_budget)
+        opener=urllib.request.build_opener(SafeRedirect({'he.wikisource.org'},request_budget=request_budget))
+        if request_budget:request_budget.check('wiki search request')
+        with opener.open(urllib.request.Request(url,headers={'User-Agent':USER_AGENT}),timeout=min(self.timeout,request_budget.remaining()) if request_budget else self.timeout) as response:
             raw=response.read(MAX_PAGE_BYTES+1)
             if len(raw)>MAX_PAGE_BYTES:raise ResearchError('search response too large')
             data=json.loads(raw)
+        if request_budget:request_budget.check('wiki search return')
         if data.get('error'):raise ResearchError('wiki search unavailable')
         self.last_backend='wikisource-api-fallback'
         self.last_attempts.append({'backend':'wikisource-api-fallback','status':'results','count':len(data.get('query',{}).get('search',[]))})
@@ -255,11 +274,16 @@ class WebResearchEngine:
         self.grants=grants or {};self.store_path=store_path
         if store_path and Path(__file__).resolve().parents[2] not in Path(store_path).resolve().parents:
             raise ValueError('web store must be inside agent project')
-    def research(self,question,limit=5,urls=None):
+    def research(self,question,limit=5,urls=None,request_budget=None):
+        from .request_budget import BudgetExceeded
+        from .retrieval_budget import accepts_budget
         limit=max(1,min(int(limit),8)); errors=[];sources=[];seen=set();rejected=[]
         if not question.strip() or len(question)>2000:raise ValueError('invalid question')
         try:
-            urls=urls if urls is not None else self.searcher.search(question+' הלכה '+ ' OR '.join('site:'+h for h in self.sites),limit*2)
+            if request_budget:request_budget.check('web discovery')
+            options={'request_budget':request_budget} if request_budget and accepts_budget(self.searcher.search) else {}
+            urls=urls if urls is not None else self.searcher.search(question+' הלכה '+ ' OR '.join('site:'+h for h in self.sites),limit*2,**options)
+            if request_budget:request_budget.check('web discovery return')
         except Exception as exc:
             return {'sources':[],'errors':[{'stage':'search','error':type(exc).__name__}], 'comparisons':[],
                     'answer':'אין לי מקור לכך. חיפוש האינטרנט אינו זמין.','mode':'web-sources-only'}
@@ -269,7 +293,10 @@ class WebResearchEngine:
             if host not in self.sites or url in seen:continue
             seen.add(url)
             try:
-                page,final=self.fetcher(url)
+                if request_budget:request_budget.check('web page fetch')
+                options={'request_budget':request_budget} if request_budget and accepts_budget(self.fetcher) else {}
+                page,final=self.fetcher(url,**options)
+                if request_budget:request_budget.check('web page fetch return')
                 if urllib.parse.urlsplit(final).hostname not in self.sites:raise ResearchError('redirect outside source registry')
                 if final in seen and final!=url:continue
                 seen.add(final)
@@ -304,21 +331,31 @@ class WebResearchEngine:
                 source.metadata['locator_status']='page-title-url-matched' if urllib.parse.urlsplit(final).hostname=='he.wikisource.org' else 'fetched-page-only'
                 # Full-text store still contains only relevant exact passages, not boilerplate.
                 if allowed and self.store_path:
+                    if request_budget:request_budget.check('web persistence')
                     save_verified(source,self.store_path)
                 sources.append(source)
+            except BudgetExceeded:
+                errors.append({'stage':'fetch','error':'deadline-exhausted'})
+                break
             except Exception as exc:
                 errors.append({'url':url,'error':type(exc).__name__})
         results=rank_sources(HybridSearch(sources).search(question,top_k=limit)) if sources else []
         return {'sources':results,'errors':errors,'rejected_sources':rejected,'comparisons':compare(results,question),
                 'answer':evidence.INSUFFICIENT if evidence.shared_oil_waiting(question) else self.extractive_answer(results),'mode':'web-evidence','verdict':'insufficient_context' if evidence.shared_oil_waiting(question) else 'exact-extract-only','discovery_backend':getattr(self.searcher,'last_backend','custom'),'discovery_attempts':getattr(self.searcher,'last_attempts',[]),'verification':{'support':'exact-excerpts','psak':'not-inferred'}}
-    def answer(self, question, base_url, model, limit=5, urls=None, timeout=15, local_sources=None, answer_model=None, source_verifier=None):
-        result = self.research(question, limit=limit, urls=urls)
+    def answer(self, question, base_url, model, limit=5, urls=None, timeout=15, local_sources=None, answer_model=None, source_verifier=None, request_budget=None, source_resolver=None):
+        from .retrieval_budget import accepts_budget
+        result = self.research(question, limit=limit, urls=urls,request_budget=request_budget)
+        result['search_status']={'partial':bool(result.get('errors')), 'errors':result.get('errors',[])}
         result.update(human_review='required', halachic_verified=False)
         local_sources = [s for s in (local_sources or []) if rag_eligible(s)]
         if local_sources:
             from .agent import order_sources
-            unique = {s['source_id']:s for s in list(local_sources)+result['sources']}
-            result['sources'] = order_sources(list(unique.values()),question)[:limit]
+            from .hybrid import rrf_fuse
+            merged=rrf_fuse([local_sources,result['sources']],top_k=limit)
+            result['sources'] = order_sources(merged,question)[:limit]
+            if merged.errors:
+                result['search_status']['partial']=True
+                result['search_status']['errors'].extend(merged.errors)
             result['answer'] = self.extractive_answer(result['sources'])
             result['comparisons'] = compare(result['sources'],question)
         from .verification import ExtractiveSourceVerifier
@@ -335,10 +372,30 @@ class WebResearchEngine:
         from .answer_models import ConfiguredAnswerModel
         generator = answer_model if answer_model is not None else ConfiguredAnswerModel(base_url, model)
         try:
+            if request_budget:request_budget.check('web answer generation')
+            from .request_budget import revalidate_sources
+            local_ids={s['source_id'] for s in local_sources}
+            if source_resolver:
+                revalidate_sources([s for s in result['sources'] if s['source_id'] in local_ids],source_resolver,request_budget)
             generated = generator.generate(question, result['sources'], timeout=timeout)['answer']
             if hasattr(generator,'sent_sources'):
                 result['sources']=generator.sent_sources
-            verification = verifier.verify(question, generated, result['sources'])
+            from .source_snapshot import fingerprint, admissible
+            current=[];stale=False
+            for source in result['sources']:
+                if request_budget:request_budget.check('web source revalidation')
+                opts={'request_budget':request_budget} if request_budget and source_resolver and accepts_budget(source_resolver) else {}
+                fresh=source_resolver(source['source_id'],**opts) if source_resolver and source['source_id'] in local_ids else source
+                if request_budget:request_budget.check('web source revalidation return')
+                if fresh is None or fingerprint(fresh)!=fingerprint(source):stale=True
+                if fresh and fresh.get('source_project')=='verified-web' and fresh.get('metadata',{}).get('persistence_allowed'):
+                    allowed,_=permission_for(self.sites[urllib.parse.urlsplit(fresh['source_url']).hostname].get('license',''),
+                                             self.licenses,self.grants,fresh['source_url'])
+                    if not allowed:stale=True;fresh=None
+                if fresh and admissible(fresh):current.append(fresh)
+            result['sources']=current
+            verification = ({'verdict':'invalid_citation','support':'source or permission changed during generation'} if stale else
+                            verifier.verify(question, generated, current))
             result['verification'] = verification
             if verification['verdict']=='ok':
                 result.update(answer=verification.get('rendered_answer',generated), mode='web-llm-verified', verdict=verification.get('support','exact-extract-only'))

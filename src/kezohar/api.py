@@ -2,6 +2,7 @@
 import json
 import time
 import re
+import math
 
 try:
     from fastapi import FastAPI, Request
@@ -12,6 +13,7 @@ except Exception:
 
 from . import config, fastpath, llm as llm_client
 from .agent import Agent
+from .source_snapshot import public_sources, admissible
 
 _agent = None
 _started = time.time()
@@ -40,12 +42,63 @@ def get_agent():
     return _agent
 
 def _validate_ask(body):
-    q = (body.get("question") or body.get("q") or "").strip()
+    if not isinstance(body,dict):return None,'JSON object required'
+    q = body.get('question',body.get('q',''))
+    if not isinstance(q,str):return None,'question must be a string'
+    q=q.strip()
     if not q:
         return None, "missing question"
     if len(q) > 2000:
         return None, "question too long"
     return q, ""
+
+def _decode_body(raw):
+    if len(raw)>32000:raise ValueError('request body too large')
+    def unique(pairs):
+        value={}
+        for k,v in pairs:
+            if k in value:raise ValueError('duplicate JSON key')
+            value[k]=v
+        return value
+    def bad_constant(value):raise ValueError('non-finite JSON number')
+    try:return json.loads(raw,object_pairs_hook=unique,parse_constant=bad_constant)
+    except (ValueError,UnicodeError):raise ValueError('bad json') from None
+
+def _validate_body(body, search=False):
+    if not isinstance(body,dict):raise ValueError('JSON object required')
+    if search:
+        q=body.get('query',body.get('q',''))
+        if not isinstance(q,str) or not q.strip():raise ValueError('query must be a nonempty string')
+        q=q.strip()
+        if len(q)>2000:raise ValueError('query too long')
+    else:
+        q,error=_validate_ask(body)
+        if error:raise ValueError(error)
+    top=body.get('top_k',5)
+    if isinstance(top,str) and top.isascii() and top.isdigit():top=int(top)
+    if type(top) is not int or top<1:raise ValueError('invalid top_k')
+    opts={'top_k':min(top,100 if search else 8)}
+    if not search:
+        from .question_understanding import analyze
+        analyze(q,body.get('circumstances'))
+        opts['circumstances']=body.get('circumstances')
+        for flag in ('stream','research'):
+            if type(body.get(flag,False)) is not bool:raise ValueError('invalid '+flag)
+            opts[flag]=body.get(flag,False)
+        for name,bound in (('lat',90),('lon',180)):
+            value=body.get(name)
+            if value is not None and (type(value) not in (int,float) or not math.isfinite(value) or abs(value)>bound):
+                raise ValueError('invalid '+name)
+            opts[name]=value
+        location=body.get('location')
+        if location is not None and (not isinstance(location,str) or not location.strip() or len(location)>120):
+            raise ValueError('invalid location')
+        opts['location']=location
+    return q,opts
+
+def _error(message):
+    return {'error':message,'human_review':'required','halachic_verified':False,
+            'verification_status':'not-approved','permissions':'not-checked'}
 
 # rate limit: simple in-memory token bucket per ip
 _hits = {}
@@ -61,15 +114,26 @@ def _rate_ok(ip, limit=30, window=60):
     return True
 
 def _ask_result(question, top_k=5, lat=None, lon=None, location=None, research=False, circumstances=None):
-    return get_agent().converse(question,circumstances=circumstances,research=research,
+    result=get_agent().converse(question,circumstances=circumstances,research=research,
                                top_k=top_k,lat=lat,lon=lon,location=location)
+    return dict(result,sources=public_sources(result.get('sources',[])))
+
+def _search_result(q,top_k=5):
+    from .request_budget import RequestBudget, BudgetExceeded
+    from .hybrid import SearchResults
+    budget=RequestBudget()
+    try:results=get_agent().search_only(q,top_k=top_k,request_budget=budget)
+    except BudgetExceeded:
+        results=SearchResults([], [{'stage':'retrieval','error':'deadline-exhausted'}])
+    return {'results':public_sources(results),'search_status':getattr(results,'status',{'partial':False,'errors':[]}),
+            'budget':budget.report(),'halachic_verified':False}
 
 def _source_result(source_id):
     from .permissions import rag_eligible
     if len(source_id)>256:return 400,{'error':'invalid source id'}
     source=get_agent().knowledge.source_by_id(source_id)
     if source is None:return 404,{'error':'source unavailable'}
-    if not rag_eligible(source) or source.get('metadata',{}).get('locator_status')=='ambiguous-file-fields':
+    if not admissible(source):
         return 409,{'error':'source locator or RAG permission requires review'}
     return 200,{'source':{k:source.get(k,'') for k in ('source_id','work_title','author','reference',
                       'version','text','source_url','attribution','license','verification_status')},
@@ -77,7 +141,8 @@ def _source_result(source_id):
 
 def _sse_events(result):
     # event 1: sources first (<1s target), then answer sentences
-    yield "event: sources\n" + "data: " + json.dumps({"sources": result.get("sources", [])}, ensure_ascii=False) + "\n\n"
+    yield "event: sources\n" + "data: " + json.dumps({"sources": public_sources(result.get("sources", [])),
+        'search_status':result.get('search_status',{'partial':False,'errors':[]})}, ensure_ascii=False) + "\n\n"
     if result.get('clarifications'):
         yield 'event: clarification\ndata: '+json.dumps({'clarifications':result['clarifications'],
             'question_analysis':result.get('question_analysis',{})},ensure_ascii=False)+'\n\n'
@@ -91,6 +156,8 @@ def _sse_events(result):
         'structured_answer':result.get('structured_answer'),
         'orchestration':result.get('orchestration'),
         'source_relationships':result.get('source_relationships',[]),
+        'verification':result.get('verification'), 'search_status':result.get('search_status',{'partial':False,'errors':[]}),
+        'error':result.get('error'),
         'human_review':result.get('human_review'),'halachic_verified':result.get('halachic_verified')}, ensure_ascii=False) + "\n\n"
 
 def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumstances=None):
@@ -107,8 +174,13 @@ def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumst
         lat=lat or fastpath.DEFAULT_LAT, lon=lon or fastpath.DEFAULT_LON,
         location=location or fastpath.DEFAULT_LOCATION) is not None
     effective=effective_question(question,analysis)
-    sources = [] if fast else ag.search_only(effective,top_k=top_k)
-    yield 'event: sources\ndata: '+json.dumps({'sources':sources},ensure_ascii=False)+'\n\n'
+    from .request_budget import BudgetExceeded
+    try:sources = [] if fast else ag.search_only(effective,top_k=top_k,request_budget=budget)
+    except BudgetExceeded:
+        yield from _sse_events(ag.converse(question,circumstances=circumstances,request_budget=budget))
+        return
+    yield 'event: sources\ndata: '+json.dumps({'sources':public_sources(sources),
+        'search_status':getattr(sources,'status',{'partial':False,'errors':[]})},ensure_ascii=False)+'\n\n'
     result=ag.converse(question,circumstances=circumstances,top_k=top_k,lat=lat,lon=lon,location=location,retrieved_sources=sources,request_budget=budget)
     events=iter(_sse_events(result))
     next(events)  # Source event was already delivered.
@@ -128,12 +200,9 @@ if HAVE_FASTAPI:
 
     @app.post("/search")
     async def search(req: Request):
-        body = await req.json()
-        q = (body.get("query") or body.get("q") or "").strip()
-        if not q:
-            return JSONResponse({"error": "missing query"}, status_code=400)
-        top_k = int(body.get("top_k", 5))
-        return {"results": get_agent().search_only(q, top_k=top_k)}
+        try:q,opts=_validate_body(_decode_body(await req.body()),search=True)
+        except ValueError as exc:return JSONResponse(_error(str(exc)),status_code=400)
+        return _search_result(q,**opts)
 
     @app.get('/sources/{source_id}')
     def source_record(source_id: str):
@@ -141,22 +210,15 @@ if HAVE_FASTAPI:
         return JSONResponse(result,status_code=status)
 
     @app.post("/research")
-    def research(body: dict, req: Request):
+    async def research(req: Request):
         if not _rate_ok(req.client.host if req.client else "?"):
             return JSONResponse({"error": "rate limit"}, status_code=429)
-        q, err = _validate_ask(body)
-        if err:
-            return JSONResponse({"error": err}, status_code=400)
         try:
-            from .question_understanding import analyze
-            analyze(q,body.get('circumstances'))
+            q,opts=_validate_body(_decode_body(await req.body()))
         except ValueError as exc:
-            return JSONResponse({'error':str(exc)},status_code=400)
-        try:
-            limit = max(1, min(int(body.get("top_k", 5)), 8))
-        except (TypeError, ValueError):
-            return JSONResponse({"error": "invalid top_k"}, status_code=400)
-        return get_agent().converse(q,circumstances=body.get('circumstances'),research=True,top_k=limit)
+            return JSONResponse(_error(str(exc)),status_code=400)
+        opts.pop('stream');opts['research']=True
+        return _ask_result(q,**opts)
 
     @app.post("/ask")
     async def ask(req: Request):
@@ -164,27 +226,15 @@ if HAVE_FASTAPI:
         if not _rate_ok(ip):
             return JSONResponse({"error": "rate limit"}, status_code=429)
         try:
-            body = await req.json()
-        except Exception:
-            return JSONResponse({"error": "bad json"}, status_code=400)
-        q, err = _validate_ask(body if isinstance(body, dict) else {})
-        if err:
-            return JSONResponse({"error": err}, status_code=400)
-        try:
-            from .question_understanding import analyze
-            analyze(q,body.get('circumstances'))
-            limit=max(1,min(int(body.get('top_k',5)),8))
-        except (ValueError,TypeError) as exc:
-            return JSONResponse({'error':str(exc)},status_code=400)
-        stream = body.get("stream", False)
-        if stream and body.get('research') is not True:
-            return StreamingResponse(_stream_local(q,top_k=limit,
-                lat=body.get('lat'),lon=body.get('lon'),location=body.get('location'),circumstances=body.get('circumstances')),
+            q,opts=_validate_body(_decode_body(await req.body()))
+        except ValueError as exc:
+            return JSONResponse(_error(str(exc)),status_code=400)
+        stream=opts.pop('stream')
+        if stream and not opts['research']:
+            opts.pop('research')
+            return StreamingResponse(_stream_local(q,**opts),
                 media_type='text/event-stream')
-        res = _ask_result(q, top_k=limit,
-                          lat=body.get("lat"), lon=body.get("lon"),
-                          location=body.get("location"), research=body.get("research") is True,
-                          circumstances=body.get('circumstances'))
+        res = _ask_result(q,**opts)
         if stream:
             return StreamingResponse(_sse_events(res), media_type="text/event-stream")
         return res
@@ -216,33 +266,30 @@ def run_stdio_fallback(port=None):
             else:
                 self._send(404, {"error": "not found"})
         def do_POST(self):
-            n = int(self.headers.get("Content-Length", 0))
-            raw = self.rfile.read(n).decode("utf-8") if n else "{}"
             try:
-                body = json.loads(raw)
-            except Exception:
-                return self._send(400, {"error": "bad json"})
+                n=int(self.headers.get('Content-Length',0))
+                if n<0 or n>32000:raise ValueError('request body too large')
+                body=_decode_body(self.rfile.read(n) if n else b'{}')
+                if self.path not in ('/search','/ask','/research'):return self._send(404,_error('not found'))
+                q,opts=_validate_body(body,search=self.path=='/search')
+            except (ValueError,UnicodeError) as exc:
+                return self._send(400,_error(str(exc)))
             if self.path == "/search":
-                q = (body.get("query") or "").strip()
-                if not q:
-                    return self._send(400, {"error": "missing query"})
-                return self._send(200, {"results": get_agent().search_only(q)})
-            if self.path == "/ask":
-                q, err = _validate_ask(body)
-                if err:
-                    return self._send(400, {"error": err})
-                try:
-                    res = _ask_result(q,circumstances=body.get('circumstances'),research=body.get('research') is True)
-                except ValueError as exc:
-                    return self._send(400,{'error':str(exc)})
-                if body.get("stream"):
+                return self._send(200,_search_result(q,**opts))
+            if self.path in ('/ask','/research'):
+                stream=opts.pop('stream')
+                if self.path=='/research':opts['research']=True;stream=False
+                if stream:
                     self.send_response(200)
                     self.send_header("Content-Type", "text/event-stream")
                     self.end_headers()
-                    for ev in _sse_events(res):
+                    if not opts['research']:
+                        opts.pop('research');output=_stream_local(q,**opts)
+                    else:output=_sse_events(_ask_result(q,**opts))
+                    for ev in output:
                         self.wfile.write(ev.encode("utf-8"))
                     return
-                return self._send(200, res)
+                return self._send(200,_ask_result(q,**opts))
             return self._send(404, {"error": "not found"})
     print(f"kezohar-agent fallback on :{port}")
     HTTPServer(("127.0.0.1", port), H).serve_forever()

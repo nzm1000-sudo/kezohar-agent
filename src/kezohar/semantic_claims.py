@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 from .hebrew import normalize
 from .evidence import shared_oil_waiting
+from .source_snapshot import admissible
 
 
 def question_intent(question):
@@ -29,15 +30,24 @@ def load_catalog():
     if not path.exists():return []  # quote-only remains available, fail closed for paraphrases
     return json.loads(path.read_text(encoding='utf-8'))['rules']
 
+def catalog_revision():
+    return hashlib.sha256(json.dumps(load_catalog(),sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+
 
 def units_for(question, source):
+    if not admissible(source): return []
     intent=question_intent(question)
     if intent not in ('rice','yaaleh-shachrit','tea','travel','meat-wait'):
         return []  # in particular, meat itself never proves the shared-oil case
     digest=hashlib.sha256(source.get('text','').encode()).hexdigest()
-    return [r for r in load_catalog() if r['intent']==intent
+    rules=load_catalog()
+    ids=[r.get('evidence_id') for r in rules]
+    return [r for r in rules if ids.count(r.get('evidence_id'))==1 and r['intent']==intent
             and r['source_text_sha256']==digest and r['reference']==source.get('reference')
             and r['work_title']==source.get('work_title')
+            and r.get('source_id')==source.get('source_id')
+            and r.get('author','')==source.get('author','')
+            and r.get('version') and r['version']==source.get('version','')
             and r['quote'] in source.get('text','')]
 
 
@@ -94,7 +104,8 @@ def verify_claim_packet(question, answer, sources):
             return reject('invalid_citation','stored locator missing',claims)
         # Source fingerprint and locator must both match the audited evidence unit.
         declared=next((r for r in load_catalog() if r['evidence_id']==c['evidence_id']),None)
-        if declared and (declared['reference']!=s['reference'] or declared['work_title']!=s.get('work_title')):
+        if declared and (declared['reference']!=s['reference'] or declared['work_title']!=s.get('work_title')
+                         or 'version' not in declared or declared['version']!=s.get('version','')):
             layers['reference_identity']='failed'
             return reject('invalid_citation','evidence locator does not identify this retrieved source',claims)
         layers['reference_identity']='passed'

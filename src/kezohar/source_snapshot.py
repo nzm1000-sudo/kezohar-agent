@@ -1,0 +1,46 @@
+"""Security identity shared by retrieval, verification, cache and display."""
+import hashlib
+import json
+from .permissions import rag_eligible
+from .models import Source
+
+FIELDS = tuple(key for key in Source.__dataclass_fields__ if key != 'metadata')
+
+def fingerprint(source):
+    # Scores/backend annotations are not identity; all permission and locator
+    # metadata is. Conflicting snapshots cannot be resolved by retrieval rank.
+    record = {key: source.get(key, '') for key in FIELDS}
+    record['metadata'] = source.get('metadata', {})
+    return hashlib.sha256(json.dumps(record, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+def admissible(source):
+    return (rag_eligible(source) and bool(source.get('source_id'))
+            and bool(source.get('reference')) and not source.get('identity_conflict')
+            and source.get('metadata', {}).get('locator_status') != 'ambiguous-file-fields')
+
+def unique_sources(sources):
+    index = {}
+    for source in sources:
+        sid = source.get('source_id')
+        if not sid or (sid in index and fingerprint(index[sid]) != fingerprint(source)):
+            raise ValueError('conflicting or missing source identity')
+        index[sid] = source
+    return index
+
+def snapshots(sources):
+    return {sid: fingerprint(source) for sid, source in unique_sources(sources).items()}
+
+def complete_quote(quote, source):
+    # Substrings can omit conditions before or after a quote. Bounded approved
+    # claim-unit quotations have their own separate verifier.
+    return bool(quote.strip()) and quote == source.get('text', '').strip()
+
+def public_sources(sources):
+    result=[]
+    for source in sources:
+        if admissible(source):result.append(dict(source))
+        else:
+            # Search permissions never imply permission to expose full text.
+            result.append({k:source.get(k,'') for k in ('source_id','work_title','reference')})
+            result[-1].update(permission_status='blocked-or-review-required',text='')
+    return result

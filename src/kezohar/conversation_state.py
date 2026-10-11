@@ -51,7 +51,8 @@ class ConversationStore:
 
     def create(self, owner):
         cid=secrets.token_hex(24)
-        state={'root_question':None,'intent':None,'user_facts':{},'system_hypotheses':[], 'turns':[]}
+        state={'root_question':None,'intent':None,'user_facts':{},'system_hypotheses':[],
+               'free_conditions':[], 'turns':[]}
         with self._db() as db:
             db.execute('INSERT INTO conversations VALUES (?,?,0,?)',(cid,self._owner(owner),json.dumps(state,ensure_ascii=False)))
         return cid
@@ -94,6 +95,9 @@ class ConversationStore:
             return agent.converse(question,**kwargs)
         if followup:
             facts=dict(state['user_facts'])
+            # Preserve user wording independently of the pruned turn history.
+            # It is never source evidence and cannot be silently replaced by slots.
+            state.setdefault('free_conditions',[]).append(question)
             # Only a tightly scoped explicit phrase changes this circumstance;
             # residues never turn the case into an automatic waiting obligation.
             if state['intent']=='shared-oil' and 'פירור' in q and 'שמנ' in q:
@@ -111,13 +115,15 @@ class ConversationStore:
                         'mode':'clarification','verdict':'needs_clarification','sources':[],
                         'human_review':'required','halachic_verified':False}
             else:
-                # Neutral case text avoids retaining a contradicted older fact
-                # inside the model prompt. The original wording remains in audit.
+                effective=state['root_question']+'\nפרטי המשך שמסר המשתמש; אינם ראיות או הכרעה:\n'+'\n'.join(state['free_conditions'])
+                # Conflicts between earlier wording and updated slots are
+                # deliberately left visible to analyze(), which asks clarification.
                 result=agent.converse(effective,circumstances=facts,**kwargs)
                 state['user_facts']=facts
         else:
             result=agent.converse(question,circumstances=circumstances,**kwargs)
             state['root_question']=question
+            state['free_conditions']=[]
             state['intent']=incoming['intent']
             # Default tradition is a system preference, not a fact the user gave.
             state['user_facts']={k:v for k,v in incoming['circumstances'].items() if k!='tradition'}

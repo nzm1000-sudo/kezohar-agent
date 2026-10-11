@@ -49,10 +49,16 @@ class SourceDiscoveryAgent:
     def __init__(self, agent):
         self.agent = agent
 
-    def discover(self, question, top_k=5, retrieved_sources=None):
+    def discover(self, question, top_k=5, retrieved_sources=None, request_budget=None):
+        from .retrieval_budget import accepts_budget
+        if request_budget:request_budget.check('source discovery')
         analysis = interpret(question)
-        sources = (self.agent.search_only(question, top_k=top_k) if retrieved_sources is None
-                   else retrieved_sources)
+        if retrieved_sources is None:
+            kwargs={'top_k':top_k}
+            if request_budget and accepts_budget(self.agent.search_only):kwargs['request_budget']=request_budget
+            sources=self.agent.search_only(question,**kwargs)
+        else:sources=retrieved_sources
         # Hints cannot manufacture an identity or turn a pending row into RAG.
         return {'sources': sources, 'query_analysis': analysis,
+                'search_status':getattr(sources,'status',{'partial':False,'errors':[]}),
                 'reused_retrieval': retrieved_sources is not None}

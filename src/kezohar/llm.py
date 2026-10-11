@@ -46,7 +46,7 @@ def build_messages(question, sources):
     records=[];statements=[]
     for s in sources:
         record={'source_id':s.get('source_id',''), 'reference':s.get('reference',''),
-                'text':s.get('text',''), 'tradition':s.get('tradition',''),
+                'text':s.get('text',''), 'tradition':s.get('authority_profile',{}).get('tradition',s.get('tradition','')),
                 'authority_profile':s.get('authority_profile',{}),
                 'source_type':s.get('source_type','unclassified')}
         units=[{'source_id':s.get('source_id',''),'evidence_id':u['evidence_id'],

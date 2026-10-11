@@ -1,18 +1,25 @@
 """Deterministic source verification independent of the answer model/provider."""
 from . import citations, evidence
 from .source_quality import exclusion_reason, applicability_issue
-from .semantic_claims import verify_claim_packet
+from .semantic_claims import verify_claim_packet, catalog_revision
 from .permissions import rag_eligible
 import json
+from .source_snapshot import admissible, snapshots
 
 
 class ExtractiveSourceVerifier:
     def eligible_sources(self, question, sources):
+        try: snapshots(sources)
+        except ValueError: return []
         return evidence.applicable_sources(question, [s for s in sources
-            if rag_eligible(s) and s.get('metadata', {}).get('locator_status') != 'ambiguous-file-fields'
+            if admissible(s)
             and not exclusion_reason(question, s)])
 
     def verify(self, question, answer, sources):
+        try: current_snapshots = snapshots(sources)
+        except ValueError:
+            return {'verdict':'invalid_citation','support':'ambiguous source identity',
+                    'human_review':'required','halachic_verified':False}
         if answer.strip().rstrip('.') == 'אין לי מקור לכך':
             return {'verdict': 'no_source', 'support': 'no claim'}
         try:
@@ -41,7 +48,7 @@ class ExtractiveSourceVerifier:
         result = evidence.verify_context(question, verified)
         if result['verdict'] == 'ok':
             cited = {item['source_id'] for item in result.get('evidence', [])}
-            if any(not rag_eligible(s) or s.get('metadata', {}).get('locator_status') == 'ambiguous-file-fields'
+            if any(not admissible(s)
                    for s in sources if s['source_id'] in cited):
                 result.update(verdict='invalid_citation', support='cited source permission or locator requires review')
                 result['checks']['source_applicability']='failed'
@@ -65,5 +72,7 @@ class ExtractiveSourceVerifier:
                 result['checks']['source_applicability']='failed'
                 return result
             result.update(human_review='required', halachic_verified=False)
+            result['source_snapshots']={sid:current_snapshots[sid] for sid in cited}
+            result['catalog_revision']=catalog_revision()
             result['checks']['source_applicability']='passed-necessary-checks'
         return result

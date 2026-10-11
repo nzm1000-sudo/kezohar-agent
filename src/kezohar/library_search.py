@@ -57,17 +57,22 @@ class SQLiteLibrarySearch:
         with sqlite3.connect(self.path.as_uri()+'?mode=ro', uri=True) as db:
             return db.execute('SELECT count(*) FROM records').fetchone()[0]
 
-    def search(self, query, top_k=5):
+    def search(self, query, top_k=5, request_budget=None):
+        if request_budget:request_budget.check('SQLite retrieval')
         terms = list(dict.fromkeys(tokens(query)))
         if not terms or not self.path.exists() or top_k<1:
             return []
         # MATCH expression is constructed from quoted tokens; SQL values are bound.
         expression = ' OR '.join('"'+t.replace('"','""')+'"' for t in terms[:50])
-        with sqlite3.connect(self.path.as_uri()+'?mode=ro', uri=True) as db:
+        with sqlite3.connect(self.path.as_uri()+'?mode=ro', uri=True,
+                             timeout=min(5,request_budget.remaining()) if request_budget else 5) as db:
+            if request_budget:
+                db.set_progress_handler(lambda:1 if request_budget.remaining()<=0 else 0,1000)
             rows = db.execute('''SELECT records.payload, bm25(library_fts) AS relevance
                 FROM library_fts JOIN records ON records.rowid=library_fts.rowid
                 WHERE library_fts MATCH ? ORDER BY relevance LIMIT ?''', (expression, max(1,min(top_k,100)))).fetchall()
         result=[]
+        if request_budget:request_budget.check('SQLite retrieval return')
         for payload, score in rows:
             source=json.loads(payload)
             if self.locator_overlay is not None:source=self.locator_overlay(source)
@@ -75,10 +80,14 @@ class SQLiteLibrarySearch:
             result.append(source)
         return result
 
-    def source_by_id(self, source_id):
+    def source_by_id(self, source_id, request_budget=None):
+        if request_budget:request_budget.check('SQLite source lookup')
         if not self.path.exists():return None
-        with sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True) as db:
+        with sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True,
+                             timeout=min(5,request_budget.remaining()) if request_budget else 5) as db:
+            if request_budget:db.set_progress_handler(lambda:1 if request_budget.remaining()<=0 else 0,1000)
             row=db.execute('SELECT payload FROM records WHERE id=?',(source_id,)).fetchone()
+        if request_budget:request_budget.check('SQLite source lookup return')
         if not row:return None
         source=json.loads(row[0])
         return self.locator_overlay(source) if self.locator_overlay is not None else source

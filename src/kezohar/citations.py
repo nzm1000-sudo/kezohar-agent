@@ -2,6 +2,7 @@
 import re
 import json
 from . import hebrew
+from .source_snapshot import unique_sources, complete_quote
 
 REF_PATTERNS = [
     re.compile(r'([֐-׿\s"\']+?),\s*([֐-׿\s]+?)\s+([^\s:;()]+)\s*:\s*([^\s,;()]+)'),
@@ -118,13 +119,21 @@ def verify_extractive_answer(answer, retrieved):
     remainder = pattern.sub('', answer)
     if remainder.strip(' \n\t.:;!?־–—'):
         return {"verdict":"unsupported", "support":"unverified prose outside quotations"}
+    try: unique_sources(retrieved)
+    except ValueError: return {'verdict':'invalid_citation', 'support':'ambiguous source identity'}
     evidence = []
     for match in matches:
         quote, ref = match.groups()
         matching = [s for s in retrieved if check_validity(ref,[s])[0]]
         if not matching:
             return {"verdict":"invalid_citation"}
-        source = next((s for s in matching if quote.strip() in s.get('text','')),None)
+        try:
+            matches = unique_sources(matching)
+        except ValueError:
+            return {'verdict':'invalid_citation', 'support':'ambiguous source identity'}
+        if len(matches)!=1:
+            return {'verdict':'invalid_citation', 'support':'ambiguous reference'}
+        source = next((s for s in matching if complete_quote(quote.strip(),s)),None)
         if source is None:
             return {"verdict":"unsupported", "support":"quote not present in cited excerpt"}
         evidence.append({"source_id":source['source_id'], "quote":quote})
@@ -155,12 +164,8 @@ def verify_source_id_answer(answer, retrieved):
     quotes = payload['quotes']
     if not isinstance(quotes, list) or not 1 <= len(quotes) <= 5:
         return {'verdict': 'unsupported', 'support': 'one to five exact quotes required'}
-    index = {}
-    for source in retrieved:
-        sid = source.get('source_id')
-        if sid in index and source != index[sid]:
-            return {'verdict': 'invalid_citation', 'support': 'ambiguous source id'}
-        index[sid] = source
+    try: index = unique_sources(retrieved)
+    except ValueError: return {'verdict': 'invalid_citation', 'support': 'ambiguous source id'}
     evidence, rendered = [], []
     for item in quotes:
         if (not isinstance(item, dict) or set(item) != {'source_id', 'quote'}
@@ -170,7 +175,7 @@ def verify_source_id_answer(answer, retrieved):
         if not source or not source.get('reference'):
             return {'verdict': 'invalid_citation', 'support': 'source id or stored locator absent'}
         quote = item['quote']
-        if not quote.strip() or quote != quote.strip() or quote not in source.get('text', ''):
+        if quote != quote.strip() or not complete_quote(quote,source):
             return {'verdict': 'unsupported', 'support': 'quote not present in cited excerpt'}
         evidence.append({'source_id': item['source_id'], 'quote': quote})
         rendered.append('״' + quote + '״ (' + source['reference'] + ').')

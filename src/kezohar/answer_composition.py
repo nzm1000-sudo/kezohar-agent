@@ -1,6 +1,21 @@
 """Present only the existing verifier's approved output; never fill gaps by AI."""
 from .permissions import rag_eligible
 from urllib.parse import quote
+from .source_snapshot import unique_sources, admissible, fingerprint
+from .semantic_claims import catalog_revision
+
+
+def snapshot_valid(verification, sources):
+    try: index=unique_sources(sources)
+    except ValueError: return False
+    evidence=verification.get('evidence',[])
+    pinned=verification.get('source_snapshots',{})
+    return (verification.get('verdict')=='ok' and bool(evidence)
+            and verification.get('catalog_revision')==catalog_revision()
+            and all(e.get('source_id') in index and admissible(index[e['source_id']])
+                    and pinned.get(e['source_id'])==fingerprint(index[e['source_id']])
+                    and e.get('quote') and e['quote'] in index[e['source_id']].get('text','')
+                    for e in evidence))
 
 
 def verification_layers(verification, sources):
@@ -9,11 +24,14 @@ def verification_layers(verification, sources):
     evidence=verification.get('evidence',[])
     literal=bool(evidence) and all(e.get('source_id') in index and e.get('quote')
                                  and e['quote'] in index[e['source_id']].get('text','') for e in evidence)
-    support=checks.get('claim_support','not-proved')
+    valid=snapshot_valid(verification,sources)
+    support=checks.get('claim_support','not-proved') if valid else 'not-proved'
     return {
         'source_identity': {'existence': checks.get('source_exists', 'not-checked'),
                             'locator': checks.get('reference_identity', 'not-checked')},
-        'quotation_integrity': 'passed-exact-extract' if literal else 'not-proved',
+        'quotation_integrity': 'passed-exact-extract' if literal and valid else 'not-proved',
+        'permissions': 'passed-current-snapshot' if valid else 'not-proved',
+        'overall': 'passed-software-checks' if valid else 'not-approved',
         'claim_support': {'status':'supported-bounded' if support=='supported-bounded' else 'not-proved-as-answer-to-case',
                           'method':support,'general_entailment_verified':False},
         'format': checks.get('format', 'not-checked'),
@@ -28,6 +46,19 @@ class VerifiedAnswerComposer:
         layers = verification_layers(verification,result.get('sources',[]))
         if result.get('mode')=='web-sources-only' and verification.get('verdict')!='ok':
             result['answer']='מצב חיפוש: המקורות זמינים לבדיקה; לא הופקה תשובה מאומתת.'
+        if verification.get('verdict')=='ok' and not snapshot_valid(verification,result.get('sources',[])):
+            checks=dict(verification.get('checks',{}),claim_support='not-proved',
+                        source_applicability='failed-current-snapshot')
+            verification=dict(verification,verdict='invalid_citation',checks=checks,
+                              support='composer source snapshot mismatch')
+            result.update(verdict='invalid_citation',mode='llm-guarded',verification=verification,
+                          answer='אין בסיס מאומת לתשובה; המקור או הציטוט דורשים בירור נוסף.')
+            layers=verification_layers(verification,result.get('sources',[]))
+        if verification.get('verdict')!='ok':
+            # Diagnostics are public API data too: do not leak a revoked quote,
+            # a previously supported statement or a rejected model assertion.
+            verification={k:v for k,v in verification.items() if k not in ('evidence','claims','rendered_answer')}
+            result['verification']=verification
         sources = {s['source_id']: s for s in result.get('sources', [])}
         citations = []
         quotes = []
