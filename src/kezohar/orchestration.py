@@ -32,6 +32,11 @@ class HalachicOrchestrator:
                                        'complexity': 'deterministic-fast-path'}
             return self.composer.compose(result)
         if analysis['requires_clarification']:
+            if analysis.get('unable_to_clarify'):
+                return self.composer.compose({'answer':'אין מספיק פרטים להכרעה. הפרטים שסומנו כלא ידועים לא יישאלו שוב באותה בקשה; ניתן לעדכן אותם לאחר בירור.',
+                    'mode':'sources-only','verdict':'insufficient_context','sources':[],
+                    'question_analysis':analysis,'missing_information':analysis['missing_fields'],
+                    'original_question':question,'orchestration':{'stages':trace+['clarification-stop'],'budget':budget.report()}})
             result = {'answer': 'כדי להתאים את המקורות למקרה: ' + ' '.join(
                         c['question'] for c in analysis['clarifications']),
                       'mode':'clarification', 'verdict':'needs_clarification', 'sources':[],

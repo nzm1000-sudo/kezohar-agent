@@ -5,12 +5,57 @@ STOP = {'מה','מתי','האם','איך','כמה','זמן','על','של','עם'
         'אפשר','צריך','לאכול','ברכה','ברכות','ברכת','מברכים','הלכה','הלכות','מחכים','לגבי'}
 
 STOP = {hebrew.normalize(word) for word in STOP}
+STOP.update(hebrew.normalize(word) for word in ('שכחתי','לומר','חוזרים','ראשונה','אחרונה'))
+
+# Retrieval vocabulary, never a ruling or an evidence approval.
+FAMILIES = [
+    ('ויבוא','ויבא'),
+    ('חודש','חדש','ר״ח','ר"ח'),
+    ('לדבר','דיבור','דבור','לדבר','שח','סח','יפסיק','להפסיק','הפסק','הפסיק','ישיח'),
+    ('תפילין','תפלין','תפלה','תפילה'),
+    ('לחמם','חימום','חמום','בישול','בשול','חזרה','להחזיר','מבשל'),
+    ('מרק','תבשיל'),
+]
+
+def word_variants(token):
+    result={token}
+    if len(token)>3 and token[0] in 'הובכלמש':result.add(token[1:])
+    return result
+
+def concept_groups(question):
+    groups=[]
+    # Follow-up facts remain in the question for applicability checks; they
+    # should not crowd out the original subject in the candidate search.
+    core=topic_tokens(question.split('\n')[0])
+    for token in core:
+        if token in {hebrew.normalize(w) for w in ('אגוז','אגוזים','פרי','פירות','מאכל')} and len(core)>1:
+            continue
+        variants=word_variants(token)
+        family=next((f for f in FAMILIES if variants & {hebrew.normalize(w) for w in f}),None)
+        group={hebrew.normalize(w) for w in family} if family else variants
+        if not any(group & existing for existing in groups):groups.append(group)
+    return groups
+
+def concept_coverage(text, question):
+    words=set().union(*(word_variants(w) for w in hebrew.tokens(text))) if text else set()
+    groups=concept_groups(question)
+    normalized=' '+hebrew.normalize(text)+' '
+    return sum(bool(group & words) or any(' ' in term and ' '+term+' ' in normalized for term in group)
+               for group in groups),len(groups)
+
+class RetrievalQuery(str):
+    def __new__(cls, text, groups):
+        result=super().__new__(cls,text)
+        result.concept_groups=groups
+        return result
 
 def topic_tokens(question):
     return [t for t in hebrew.tokens(question) if t not in STOP and len(t)>1]
 
 def retrieval_query(question):
     terms = topic_tokens(question)
+    groups=concept_groups(question)
+    terms.extend(word for group in groups for word in sorted(group))
     from .question_understanding import analyze
     intent=analyze(question)['intent']
     # Expand the requested case, never an answer or a predetermined ruling.
@@ -36,7 +81,7 @@ def retrieval_query(question):
             expanded.append(term[1:])
         if len(term)>=3:
             expanded.extend(prefix+term for prefix in ('ה','ו','ב','ל','מ','וה'))
-    return ' '.join(dict.fromkeys(expanded))
+    return RetrievalQuery(' '.join(dict.fromkeys(expanded)),groups)
 
 
 def intent_issue(question, source):

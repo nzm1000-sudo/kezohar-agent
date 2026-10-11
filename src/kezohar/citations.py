@@ -159,6 +159,21 @@ def verify_source_id_answer(answer, retrieved):
         return {'verdict': 'unsupported', 'support': 'invalid quotation JSON'}
     if payload == {'status': 'no_source'}:
         return {'verdict': 'no_source', 'support': 'no claim', 'rendered_answer': 'אין לי מקור לכך.'}
+    selection=False
+    if isinstance(payload,dict) and set(payload)=={'selected_sources'}:
+        ids=payload['selected_sources']
+        if (not isinstance(ids,list) or not 1<=len(ids)<=2
+                or not all(isinstance(sid,str) and sid.strip()==sid and sid for sid in ids)
+                or len(set(ids))!=len(ids)):
+            return {'verdict':'unsupported','support':'one or two distinct source ids required'}
+        try: index=unique_sources(retrieved)
+        except ValueError:return {'verdict':'invalid_citation','support':'ambiguous source id'}
+        if any(sid not in index for sid in ids):
+            return {'verdict':'invalid_citation','support':'selected source not retrieved'}
+        # Server-authored literal copies only. This protocol approves no model
+        # wording and never truncates a source or manufactures an evidence unit.
+        payload={'quotes':[{'source_id':sid,'quote':index[sid].get('text','').strip()} for sid in ids]}
+        selection=True
     if not isinstance(payload, dict) or set(payload) != {'quotes'}:
         return {'verdict': 'unsupported', 'support': 'unexpected claims or fields'}
     quotes = payload['quotes']
@@ -179,6 +194,6 @@ def verify_source_id_answer(answer, retrieved):
             return {'verdict': 'unsupported', 'support': 'quote not present in cited excerpt'}
         evidence.append({'source_id': item['source_id'], 'quote': quote})
         rendered.append('״' + quote + '״ (' + source['reference'] + ').')
-    return {'verdict': 'ok', 'support': 'exact-extract-only', 'evidence': evidence,
+    return {'verdict': 'ok', 'support': 'source-selection-whole-unit-reading' if selection else 'exact-extract-only', 'evidence': evidence,
             'rendered_answer': '\n'.join(rendered), 'human_review': 'required',
             'halachic_verified': False}

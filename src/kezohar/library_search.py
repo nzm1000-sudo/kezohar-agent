@@ -64,13 +64,25 @@ class SQLiteLibrarySearch:
             return []
         # MATCH expression is constructed from quoted tokens; SQL values are bound.
         expression = ' OR '.join('"'+t.replace('"','""')+'"' for t in terms[:50])
+        groups=getattr(query,'concept_groups',[])
+        focused=' AND '.join('('+' OR '.join('"'+v.replace('"','""')+'"'
+            for term in sorted(group) for v in dict.fromkeys([term]+[p+term for p in ('ה','ו','ב','ל','מ')]))+')'
+            for group in groups[:8])
         with sqlite3.connect(self.path.as_uri()+'?mode=ro', uri=True,
                              timeout=min(5,request_budget.remaining()) if request_budget else 5) as db:
             if request_budget:
                 db.set_progress_handler(lambda:1 if request_budget.remaining()<=0 else 0,1000)
-            rows = db.execute('''SELECT records.payload, bm25(library_fts) AS relevance
+            sql='''SELECT records.payload, bm25(library_fts) AS relevance
                 FROM library_fts JOIN records ON records.rowid=library_fts.rowid
-                WHERE library_fts MATCH ? ORDER BY relevance LIMIT ?''', (expression, max(1,min(top_k,100)))).fetchall()
+                WHERE library_fts MATCH ? ORDER BY relevance LIMIT ?'''
+            limit=max(1,min(top_k,100))
+            rows=db.execute(sql,(focused,limit)).fetchall() if focused else []
+            if request_budget:request_budget.check('SQLite focused retrieval return')
+            if len(rows)<limit:
+                broad=db.execute(sql,(expression,limit)).fetchall()
+                seen={json.loads(payload)['source_id'] for payload,_ in rows}
+                rows.extend((payload,score) for payload,score in broad if json.loads(payload)['source_id'] not in seen)
+                rows=rows[:limit]
         result=[]
         if request_budget:request_budget.check('SQLite retrieval return')
         for payload, score in rows:

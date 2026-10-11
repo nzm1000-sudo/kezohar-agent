@@ -3,7 +3,7 @@ import copy
 import json
 from concurrent.futures import ThreadPoolExecutor
 import pytest
-from test_contracts import (sandbox, source, agent, FixedAnswer, Q, TEXT, complete,
+from test_contracts import (sandbox, source, agent, FixedAnswer, Q, TEXT, complete, make_db,
                             quote, request, events, memory, MemoryAgent, backend)
 from kezohar import api, evidence
 from kezohar.hybrid import rrf_fuse, FederatedSearch
@@ -344,3 +344,102 @@ def test_missing_prayer_service_and_soup_details_are_not_inferred():
     assert p['requires_clarification'] and p['missing_fields']==['prayer_service','prayer_stage']
     s = analyze('האם מותר לחמם בשבת מרק שהתקרר?')
     assert s['requires_clarification'] and set(s['missing_fields'])=={'soup_cooked','soup_temperature','reheating_method'}
+
+@pytest.mark.parametrize('ids', [[], ['s1','s1'], ['s1','x','y'], 's1', [True], [' s1'], ['missing']])
+def test_source_selection_rejects_invalid_duplicate_or_unretrieved_ids(ids):
+    packet=json.dumps({'selected_sources':ids})
+    assert ExtractiveSourceVerifier().verify('בדיקת מקור',packet,[source()])['verdict']!='ok'
+
+
+def test_source_selection_cannot_add_prose_claims_or_crop_conditions():
+    s=source(text='בדיקת מקור: רק אם דגל אלפא פעיל. אם כבוי אין להציג את הסמל.')
+    packet=json.dumps({'selected_sources':['s1']})
+    v=ExtractiveSourceVerifier().verify('בדיקת מקור',packet,[s])
+    assert v['verdict']=='ok' and v['evidence'][0]['quote']==s['text']
+    assert v['support']=='source-selection-whole-unit-reading' and not v['halachic_verified']
+    for extra in ({'answer':'UNSUPPORTED'}, {'quotes':[]}, {'conditions':[]}):
+        assert ExtractiveSourceVerifier().verify('בדיקת מקור',json.dumps({'selected_sources':['s1'],**extra}),[s])['verdict']!='ok'
+
+
+@pytest.mark.parametrize('change', [{'version':'changed'},{'metadata':{'rag_answers_allowed':False}},
+                                  {'text':TEXT+' CONDITION_ADDED'}])
+def test_source_selection_still_revalidates_snapshot_after_generation(change):
+    a=agent(model=FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    def mutate():
+        for key,value in change.items():setattr(a.search.bm25.docs[0],key,value)
+    a.answer_model.hook=mutate
+    r=a.converse(Q,circumstances=complete())
+    assert r['verdict']=='invalid_citation' and not r['structured_answer']['quotations']
+
+
+def test_focused_disk_retrieval_preserves_rare_subject_and_action(tmp_path):
+    from kezohar.ranking import retrieval_query
+    good=source('good',text='בדיקה סינתטית: לא יפסיק בדיבור בין תפלה של יד לתפלה של ראש, כאשר דגל אלפא פעיל.')
+    noise=[source(str(i),text='בדיקה סינתטית: ראש יד תפילין ראש יד תפילין מידע כללי.') for i in range(12)]
+    db=make_db(tmp_path,noise+[good])
+    rows=__import__('kezohar.library_search',fromlist=['SQLiteLibrarySearch']).SQLiteLibrarySearch(db).search(
+        retrieval_query('האם מותר לדבר בין תפילין של יד לתפילין של ראש?'),top_k=1)
+    assert [s['source_id'] for s in rows]==['good']
+
+
+def test_complete_concept_match_not_displaced_by_diversity():
+    from kezohar.agent import diverse_sources,order_sources
+    exact=source('exact',text='בדיקה סינתטית: יפסיק בדיבור בין תפלה של יד לתפלה של ראש.')
+    extra=source('extra',text=exact['text']); extra['work_title']=exact['work_title']
+    tangential=source('tangential',work_title='ספר אחר',text='ראש ויד בלבד בבדיקה.')
+    ordered=order_sources([tangential,exact,extra],'האם מותר לדבר בין תפילין של יד לתפילין של ראש?')
+    assert {s['source_id'] for s in diverse_sources(ordered,2)}=={'exact','extra'}
+
+
+def test_blessing_table_requires_stage_and_never_proves_last_blessing_conditions():
+    s=source(text='אלפא – העץ / נפשות.',reference='לוח ברכות סינתטי א:א')
+    v=ExtractiveSourceVerifier()
+    packet=json.dumps({'selected_sources':['s1']})
+    assert v.verify('מה מברכים על אלפא?',packet,[s])['verdict']=='insufficient_context'
+    assert v.verify('מה מברכים על אלפא? ברכה אחרונה, נאכל כזית בתוך כדי אכילת פרס',packet,[s])['verdict']=='insufficient_context'
+    passed=v.verify('מה מברכים על אלפא? ברכה ראשונה',packet,[s])
+    assert passed['verdict']=='ok'
+    r=VerifiedAnswerComposer().compose({'answer':'old','verification':passed,'sources':[s]})
+    assert 'ברכה ראשונה לפי הטבלה' in r['answer'] and 'לא אומתו' in r['answer']
+    assert not r['structured_answer']['table_readings'][0]['after_blessing_case_verified']
+
+
+def test_unknown_circumstance_stops_instead_of_clarification_loop():
+    a=agent()
+    r=a.converse('מה מברכים על אלפא?',circumstances={'blessing_stage':'unknown'})
+    assert r['verdict']=='insufficient_context' and not r.get('clarifications') and not a.answer_model.calls
+
+
+def test_blessing_clarification_is_bounded_and_separates_before_from_after():
+    from kezohar.question_understanding import analyze
+    q='מה מברכים על אלפא?'
+    assert analyze(q)['missing_fields']==['blessing_stage']
+    assert not analyze(q,{'blessing_stage':'before'})['requires_clarification']
+    after=analyze(q,{'blessing_stage':'after'})
+    assert set(after['missing_fields'])=={'food_amount','eating_time'}
+
+
+def test_source_selection_layer_separates_format_from_missing_identity():
+    v=ExtractiveSourceVerifier().verify('בדיקת מקור',json.dumps({'selected_sources':['missing']}),[source()])
+    assert v['verdict']=='invalid_citation' and v['checks']['format']=='passed'
+    assert v['checks']['source_exists']=='failed'
+
+
+def test_after_blessing_cannot_use_unconditional_non_table_excerpt():
+    s=source(text='אלפא: ברכה אחרונה היא נפשות.')
+    r=ExtractiveSourceVerifier().verify('מה מברכים על אלפא? ברכה אחרונה',json.dumps({'selected_sources':['s1']}),[s])
+    assert r['verdict']=='insufficient_context' and not r['halachic_verified']
+
+
+def test_niqqud_does_not_hide_embedded_other_views():
+    from kezohar.halachic_authority import profile
+    s=source(text='בדיקת מקור. הַגָּה: דעה נוספת בבדיקה בלבד.')
+    assert profile(s)['embedded_other_views']
+
+
+def test_condition_in_table_last_column_is_not_lost_in_first_column_projection():
+    s=source(text='אלפא – העץ / נפשות, רק אם דגל הבדיקה פעיל.',reference='לוח ברכות סינתטי א:א')
+    v=ExtractiveSourceVerifier().verify('מה מברכים על אלפא? ברכה ראשונה',json.dumps({'selected_sources':['s1']}),[s])
+    assert v['verdict']=='ok'
+    r=VerifiedAnswerComposer().compose({'answer':v['rendered_answer'],'verification':v,'sources':[s]})
+    assert s['text'] in r['answer'] and r['structured_answer']['table_readings'][0]['has_conditions']

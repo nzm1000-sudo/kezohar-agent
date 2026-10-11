@@ -34,20 +34,33 @@ class ExtractiveSourceVerifier:
                     else citations.verify_extractive_answer(answer, sources))
         if 'checks' not in verified:
             quotes=payload.get('quotes') if isinstance(payload,dict) else None
+            selected=payload.get('selected_sources') if isinstance(payload,dict) else None
+            valid_selection=(isinstance(payload,dict) and set(payload)=={'selected_sources'}
+                and isinstance(selected,list) and 1<=len(selected)<=2
+                and all(isinstance(sid,str) and sid and sid.strip()==sid for sid in selected)
+                and len(set(selected))==len(selected))
             valid_format=(isinstance(payload,dict) and set(payload)=={'quotes'}
                           and isinstance(quotes,list) and 1<=len(quotes)<=5
                           and all(isinstance(c,dict) and set(c)=={'source_id','quote'}
                                   and all(isinstance(v,str) for v in c.values()) for c in quotes))
+            if verified.get('support')=='invalid quotation JSON':valid_selection=valid_format=False
             ids={s.get('source_id') for s in sources}
-            exists=valid_format and all(c['source_id'] in ids for c in quotes)
+            cited_ids=selected if valid_selection else [c['source_id'] for c in quotes] if valid_format else []
+            exists=(valid_format or valid_selection) and all(sid in ids for sid in cited_ids)
             stored_ref=exists and all(s.get('reference') for s in sources
-                                     if s.get('source_id') in {c['source_id'] for c in quotes})
-            verified['checks']={'format':'passed' if valid_format or verified['verdict'] in ('ok','no_source') else 'failed-or-legacy-unparsed',
-                                'source_exists':('passed' if exists or verified.get('evidence') else 'failed' if valid_format else 'not-checked'),
+                                     if s.get('source_id') in set(cited_ids))
+            verified['checks']={'format':'passed' if valid_format or valid_selection or verified['verdict'] in ('ok','no_source') else 'failed-or-legacy-unparsed',
+                                'source_exists':('passed' if exists or verified.get('evidence') else 'failed' if valid_format or valid_selection else 'not-checked'),
                                 'reference_identity':'passed' if stored_ref or verified.get('evidence') else 'not-checked',
                                 'claim_support':'exact-quote-only' if verified['verdict']=='ok' else 'not-proved'}
         result = evidence.verify_context(question, verified)
         if result['verdict'] == 'ok':
+            from .blessing_context import context_issue
+            issue=context_issue(question,result.get('evidence',[]))
+            if issue:
+                return {'verdict':'insufficient_context','support':issue,
+                        'checks':dict(result['checks'],claim_support='not-proved-as-answer-to-case'),
+                        'human_review':'required','halachic_verified':False}
             cited = {item['source_id'] for item in result.get('evidence', [])}
             if any(not admissible(s)
                    for s in sources if s['source_id'] in cited):

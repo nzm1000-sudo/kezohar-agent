@@ -1,6 +1,9 @@
 """Private loopback demonstration, using the existing agent and source guards."""
 import ipaddress
 import time
+import os
+import json
+import threading
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -9,6 +12,44 @@ from .request_budget import RequestBudget
 from .source_snapshot import public_sources
 
 app = FastAPI(title='כזוהר הרקיע — הדגמה פרטית')
+_audit_lock=threading.Lock()
+
+class _AuditedModel:
+    def __init__(self, delegate, path):
+        self.delegate,self.path=delegate,path
+    def __getattr__(self,key):return getattr(self.delegate,key)
+    def generate(self,question,sources,timeout=4.5):
+        from .source_snapshot import fingerprint
+        started=time.perf_counter()
+        result=self.delegate.generate(question,sources,timeout=timeout)
+        row={'question':question,'model':self.identity.model,
+             'sources':[{'source_id':s['source_id'],'snapshot':fingerprint(s)} for s in sources],
+             'raw_response':result,'elapsed_s':round(time.perf_counter()-started,3),
+             'status':'unverified-model-output; not a ruling'}
+        with _audit_lock:
+            self.path.parent.mkdir(parents=True,exist_ok=True)
+            os.chmod(self.path.parent,0o700)
+            with self.path.open('a',encoding='utf-8') as file:
+                os.chmod(self.path,0o600)
+                file.write(json.dumps(row,ensure_ascii=False)+'\n')
+        return result
+
+def demo_agent():
+    os.environ['SOURCE_GRAPH_ENABLED']='false'  # This private process only.
+    agent=api.get_agent()
+    # Demo retrieval is read-only; co-retrieval proposals must not mutate the
+    # active source graph. This changes only this demo process, not config files.
+    agent.source_graph=None
+    # Opt-in trace only for the authorized demonstration. Ordinary UI use does
+    # not persist questions or model output; nothing raw is returned publicly.
+    raw=os.environ.get('DEMO_AUDIT_PATH')
+    if raw and not isinstance(agent.answer_model,_AuditedModel):
+        root=Path(__file__).resolve().parents[2]/'data/store/demo-phase5-2026-10-12'
+        path=Path(raw).resolve()
+        if path.parent!=root:raise ValueError('demo audit path must remain in isolated demo directory')
+        with _audit_lock:
+            if not isinstance(agent.answer_model,_AuditedModel):agent.answer_model=_AuditedModel(agent.answer_model,path)
+    return agent
 
 @app.middleware('http')
 async def local_only(request: Request, call_next):
@@ -35,7 +76,7 @@ def home():
 
 @app.get('/demo/status')
 def status():
-    agent = api.get_agent()
+    agent = demo_agent()
     ok, info = agent.answer_model.health(timeout=5)
     return {'available': ok, 'model': agent.model,
             'error': '' if ok else str(info), 'retrieval': agent.knowledge.status()}
@@ -52,7 +93,7 @@ async def ask(request: Request):
     import asyncio
     def run():
         started = time.perf_counter()
-        agent = api.get_agent()
+        agent = demo_agent()
         budget = RequestBudget(seconds=45)
         result = agent.converse(question, **opts, request_budget=budget, timeout=45, cache_ttl=0)
         result = dict(result, sources=public_sources(result.get('sources', [])),
@@ -64,5 +105,6 @@ async def ask(request: Request):
 # Expose only the existing guarded source reader, not web research or memory.
 @app.get('/api/sources/{source_id}')
 def source_record(source_id: str):
+    demo_agent()
     status_code, result = api._source_result(source_id)
     return JSONResponse(result, status_code=status_code)

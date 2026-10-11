@@ -4,7 +4,7 @@ from . import fastpath, llm as llm_client
 from .knowledge import KnowledgeBase
 from .answer_models import ConfiguredAnswerModel
 from .verification import ExtractiveSourceVerifier
-from .ranking import topic_tokens, retrieval_query, topic_overlap
+from .ranking import topic_tokens, retrieval_query, topic_overlap, concept_coverage
 from .permissions import rag_eligible
 from . import evidence
 from .source_quality import classify, exclusion_reason
@@ -22,6 +22,11 @@ def diverse_sources(ordered, limit):
     Distinct excerpts/editions stay separate records, including on the second pass.
     """
     if limit<1:return []
+    # Diversity must not promote a tangential work over a complete case match.
+    complete=[s for s in ordered if s.get('concept_coverage',{}).get('complete')]
+    if complete and len(complete)<len(ordered):
+        rest=[s for s in ordered if not s.get('concept_coverage',{}).get('complete')]
+        return diverse_sources(complete,limit)+diverse_sources(rest,max(0,limit-len(complete)))
     chosen=[];works=set();ids=set()
     for source in ordered:
         work=(source.get('work_title'),source.get('author'),source.get('tradition'))
@@ -44,6 +49,8 @@ def order_sources(sources, question=""):
     for source in sources:
         source.update(classify(source))
         source['topical_overlap'] = topic_overlap(source.get('text',''),question) if question else 0
+        covered,total=concept_coverage(source.get('text',''),question)
+        source['concept_coverage']={'matched':covered,'total':total,'complete':bool(total) and covered==total}
         source.setdefault('search_relevance', source.get('score',0))
         source.setdefault('source_reliability', source.get('metadata',{}).get('source_reliability','import-provenance-only'))
         source.setdefault('halachic_authority', source.get('authority_level','') or ('maran' if source.get('work_title','').startswith('שולחן ערוך') or source.get('book_id')=='Beit_Yosef' else 'unclassified'))
@@ -57,6 +64,8 @@ def order_sources(sources, question=""):
         source['_selection_key']=selection_key(source,question,preferred)
     return sorted(sources, key=lambda s: (
         not rag_eligible(s),
+        not s['concept_coverage']['complete'],
+        -s['concept_coverage']['matched'],
         s['_selection_key']))
 
 
@@ -208,8 +217,11 @@ class Agent:
         verdict = v["verdict"]
         if verdict not in ("ok", "no_source"):
             # do not present as certain ruling
-            answer = evidence.INSUFFICIENT if evidence.shared_oil_waiting(q) else "אין לי מקור לכך. " + " ".join(
-                f"[{s.get('reference','')}]" for s in retrieved[:3])
+            answer = evidence.INSUFFICIENT if evidence.shared_oil_waiting(q) else (
+                'נמצאו מקורות לעיון, אך לא אומתה תשובה למקרה. '
+                'הציטוט אינו מספק את ההקשר הנדרש; יש לברר את תנאי המקור והאכילה.'
+                if verdict=='insufficient_context' else
+                'נמצאו מקורות לעיון, אך פלט המודל לא עבר אימות. אין להסתמך עליו להכרעה.')
             mode = "llm-guarded"
         supported = {e['source_id'] for e in v.get('evidence',[])}
         for source in retrieved:

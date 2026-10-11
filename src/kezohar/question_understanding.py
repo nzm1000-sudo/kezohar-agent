@@ -11,6 +11,9 @@ SLOTS = {
     'tradition': ('לפי איזו מסורת מבוקש המענה?', {'sephardi':'לפי פסיקת הספרדים', 'ashkenazi':'לפי פסיקת האשכנזים', 'both':'השוואת מסורות'})
 }
 SLOTS.update({
+    'blessing_stage': ('האם מבוקשת ברכה ראשונה לפני האכילה, או ברכה אחרונה לאחריה?', {'before':'ברכה ראשונה לפני האכילה', 'after':'ברכה אחרונה לאחר האכילה', 'both':'ברכה ראשונה וגם ברכה אחרונה', 'unknown':'לא ידוע איזה שלב מבוקש'}),
+    'food_amount': ('מה הכמות שנאכלה ביחס לשיעור כזית?', {'below_kezayit':'נאכל פחות משיעור כזית', 'at_least_kezayit':'נאכל לפחות שיעור כזית', 'unknown':'כמות האכילה לא ידועה'}),
+    'eating_time': ('מה משך האכילה ביחס לכדי אכילת פרס?', {'within_pras':'האכילה היתה בתוך כדי אכילת פרס', 'longer':'האכילה נמשכה יותר מכדי אכילת פרס', 'unknown':'משך האכילה לא ידוע'}),
     'prayer_service': ('באיזו תפילה נשכחה ההזכרה?', {'shachrit':'בתפילת שחרית', 'mincha':'בתפילת מנחה', 'arvit':'בתפילת ערבית', 'unknown':'התפילה לא ידועה'}),
     'soup_cooked': ('האם המרק כבר התבשל כל צורכו?', {'fully':'המרק מבושל כל צורכו', 'not_fully':'המרק לא מבושל כל צורכו', 'unknown':'מצב הבישול לא ידוע'}),
     'soup_temperature': ('מה מצב המרק כעת?', {'cold':'המרק קר', 'warm':'המרק עדיין חם', 'unknown':'מצב חום המרק לא ידוע'}),
@@ -28,6 +31,8 @@ def analyze(question, circumstances=None):
         raise ValueError('circumstances must contain supported slot/value pairs')
     q = normalize(question)
     intent = question_intent(question)
+    if intent not in ('rice','birkat-mazon') and ('מברכ' in q or 'ברכה' in q) and 'על' in q.split():
+        intent='food-blessing'
     if 'יעלה' in q and any(t in q for t in ('ראש חודש', 'ראש חדש')):
         service = supplied.get('prayer_service')
         for word, value in (('שחרית','shachrit'),('מנחה','mincha'),('ערבית','arvit')):
@@ -42,6 +47,9 @@ def analyze(question, circumstances=None):
     if 'טלפונ' in q and 'שבת' in q:intent='phone-shabbat'
     if 'מיחמ' in q and any(t in q for t in ('להוסיפ','להכניס')):intent='water-urn'
     facts = {}
+    if intent=='food-blessing':
+        if 'ראשונה' in q: facts['blessing_stage']='before'
+        if 'אחרונה' in q: facts['blessing_stage']='both' if 'ראשונה' in q else 'after'
     if intent in ('yaaleh-shachrit','yaaleh-general'):
         for word, value in (('שחרית','shachrit'),('מנחה','mincha'),('ערבית','arvit')):
             if word in q: facts['prayer_service'] = value
@@ -90,12 +98,15 @@ def analyze(question, circumstances=None):
     facts.update(supplied)
     origins.update({k:'user-supplied-slot' for k in supplied})
     requirements = {'rice':['rice_form'], 'yaaleh-shachrit':['prayer_stage'],
+                    'food-blessing':['blessing_stage'],
                     'yaaleh-general':['prayer_service','prayer_stage'],
                     'soup-reheat':['soup_cooked','soup_temperature','reheating_method'],
                     'shared-oil':['oil_case','next_food','oil_residue'], 'travel':['travel_distance','travel_stage'],
                     'phone-shabbat':['phone_purpose'],'water-urn':['water_temperature']}
     if intent=='shared-oil' and (facts.get('oil_case')=='new_clean' or facts.get('next_food')=='other'):
         requirements['shared-oil']=['oil_case','next_food']
+    if intent=='food-blessing' and facts.get('blessing_stage') in ('after','both'):
+        requirements['food-blessing']+=['food_amount','eating_time']
     missing = [k for k in requirements.get(intent,[]) if k not in facts or facts[k]=='unknown']
     clarification = [{'field':k, 'question':SLOTS[k][0],
                       'options':[{'value':v,'label':label} for v,label in SLOTS[k][1].items()]}
@@ -105,6 +116,7 @@ def analyze(question, circumstances=None):
             'missing_fields':missing, 'conflicting_fields':conflicts,
             'clarifications':clarification,
             'requires_clarification':bool(missing or conflicts),
+            'unable_to_clarify':[k for k in missing if supplied.get(k)=='unknown'],
             'query_hypotheses':discovery['possible_topics'],
             'method':'bounded rules; circumstances are not evidence for a ruling'}
 
@@ -129,7 +141,7 @@ def case_coverage(question, source):
     text=normalize(source.get('text',''))
     markers={'raw':('כוסס','לא מבושל'), 'cooked':('מבושל','בשלו'),
              'mixed':('מעורב','תערובת'), 'bread':('פת',),
-             'finished':('עקר','סיימ'), 'during':('רצה','מודימ'),
+             'finished':('עקר','יעקור','סיימ','השלי'), 'during':('רצה','מודימ'),
              'after_musaf':('מוספ',), 'same':('אותו שמנ','שמנ שבו'),
              'new_clean':('שמנ חדש',), 'at_least_parsa':('פרסה',),
              'less_than_parsa':('פחות מפרסה',), 'before':('לפני','קודמ'),

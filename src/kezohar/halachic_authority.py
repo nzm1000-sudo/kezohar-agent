@@ -22,7 +22,7 @@ def profile(source):
     if source.get('book_id')=='Beit_Yosef' or title.startswith('בית יוספ'):role='foundation-and-analysis'
     return {'authority':authority,'tradition':tradition,'role':role,
             'edition':source.get('version') or 'unknown',
-            'embedded_other_views':any(t in source.get('text','') for t in ('הרמ״א','הרמ"א','הגה ')),
+            'embedded_other_views':any(normalize(t) in normalize(source.get('text','')) for t in ('הרמ״א','הרמ"א','הגה ')),
             'attribution_scope':'work identity; individual passages may quote other opinions',
             'evidence_support':'not-established-by-authority'}
 
@@ -45,9 +45,10 @@ def selection_key(source, question, tradition):
                                 'basis':'case coverage, role and tradition; not an adjudication'}
     contextual=(p['role'] not in desired_role,not matching) if study else (not matching,p['role'] not in desired_role)
     return (-source.get('case_coverage',0), contextual,
-            -source.get('topical_overlap',0), not preferred,
+            not preferred,
             p['authority']!='maran' if preferred else False,
             p['authority']!='rav-ovadia-yosef' if preferred else False,
+            0 if source.get('concept_coverage',{}).get('complete') else -source.get('topical_overlap',0),
             -source.get('score',0))
 
 

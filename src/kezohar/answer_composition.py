@@ -100,6 +100,19 @@ class VerifiedAnswerComposer:
             'caveat': 'אימות תוכנה אינו אישור הלכתי. נדרשת ביקורת הלכתית אנושית.',
         }
         result['verification_layers'] = layers
+        if verification.get('verdict')=='ok':
+            from .blessing_context import reading
+            tables=reading(verification.get('evidence',[]),result.get('sources',[]))
+            if tables:
+                result['structured_answer']['table_readings']=tables
+                if any(r['has_conditions'] for r in tables):
+                    # Do not project a column when a condition elsewhere in the
+                    # row might qualify it. Keep the complete literal reading.
+                    result['answer']=verification.get('rendered_answer',result.get('answer',''))
+                else:
+                    result['answer']='\n'.join('ברכה ראשונה לפי הטבלה עבור ״'+r['food']+'״: ״'+r['first_column']+'״ ('+r['reference']+').' for r in tables)
+                result['answer']+='\nהעמודה השנייה מסווגת ברכה אחרונה בלבד; אין כאן קביעה שחייבים בה לאחר כל אכילה. תנאי החיוב במקרה שלך לא אומתו.'
+                result['structured_answer']['short_answer']=result['answer']
         result['human_review'] = 'required'
         result['halachic_verified'] = False
         return result
