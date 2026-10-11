@@ -1,0 +1,247 @@
+{
+  "base_commit": "cde0012",
+  "exit_code": 1,
+  "blocked_external_attempts": 0,
+  "tests": [
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T01_fast_refuse_no_retrieval_generation_or_persistence",
+      "outcome": "passed",
+      "duration_s": 0.0016770830000000236,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T02_missing_and_conflicting_slots_stop_before_search",
+      "outcome": "passed",
+      "duration_s": 0.0003652909999999898,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T03_json_and_sse_effective_questions_match_three_traditions",
+      "outcome": "passed",
+      "duration_s": 0.017954459000000034,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T04_reuse_retrieval_and_verify_actual_sent_sources",
+      "outcome": "passed",
+      "duration_s": 0.001111542000000021,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T05_research_mock_fetch_failure_keeps_local_verified_source",
+      "outcome": "passed",
+      "duration_s": 0.00440379099999999,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T06_utf8_limit_drops_whole_sources",
+      "outcome": "passed",
+      "duration_s": 0.005888999999999978,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T07_all_oversized_sources_stop_without_generation",
+      "outcome": "passed",
+      "duration_s": 0.005448916999999998,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T08_fake_deadline_prevents_start_and_rejects_late_output",
+      "outcome": "passed",
+      "duration_s": 0.0004702919999999833,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T09_zero_one_and_second_call_no_retry",
+      "outcome": "passed",
+      "duration_s": 0.0005798750000000075,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T10_budget_failure_and_context_changes_do_not_poison_cache",
+      "outcome": "passed",
+      "duration_s": 0.0028548750000000345,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T11_exact_quote_identity_not_general_entailment",
+      "outcome": "passed",
+      "duration_s": 0.000221209,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T12_fabricated_or_colliding_id_blocked",
+      "outcome": "passed",
+      "duration_s": 0.00017445799999998846,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T13_budget_dropped_source_cannot_be_cited",
+      "outcome": "passed",
+      "duration_s": 0.04616583399999996,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T14_changed_or_condition_truncated_quote_blocked",
+      "outcome": "failed",
+      "duration_s": 0.0003278329999999996,
+      "details": "tests/phase4_isolated/test_contracts.py:232: in test_T14_changed_or_condition_truncated_quote_blocked\n    assert not issues, 'accepted altered/condition-truncated exact substring: '+repr(issues)\nE   AssertionError: accepted altered/condition-truncated exact substring: ['יש להציג סמל אלפא.']\nE   assert not ['יש להציג סמל אלפא.']"
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T15_fluent_similar_uncatalogued_claim_not_approved",
+      "outcome": "passed",
+      "duration_s": 0.00027458400000002214,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T16_changed_text_locator_or_edition_invalidates_unit",
+      "outcome": "failed",
+      "duration_s": 0.0011526250000000182,
+      "details": "tests/phase4_isolated/test_contracts.py:244: in test_T16_changed_text_locator_or_edition_invalidates_unit\n    assert not issues, 'stale evidence accepted after identity change: '+repr(issues)\nE   AssertionError: stale evidence accepted after identity change: ['version']\nE   assert not ['version']"
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T17_added_claim_and_omitted_condition_rejected",
+      "outcome": "passed",
+      "duration_s": 0.0006748330000000413,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T18_search_only_ambiguous_excluded_copyright_alone_allowed",
+      "outcome": "passed",
+      "duration_s": 0.0003443340000000017,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T19_civil_title_or_path_cannot_be_used_as_ruling",
+      "outcome": "passed",
+      "duration_s": 0.00020887499999999726,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T20_original_qwen_waiting_fixture",
+      "outcome": "skipped",
+      "duration_s": 0.00010445900000000119,
+      "details": "('/Users/nitz/kezohar-agent/tests/phase4_isolated/test_contracts.py', 266, 'Skipped: T20 historical Qwen fixture is real halachic content; synthetic-only authorization excludes it')"
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T21_foreign_owner_load_denied",
+      "outcome": "passed",
+      "duration_s": 0.0029935829999999664,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T22_foreign_owner_turn_denied_before_agent",
+      "outcome": "passed",
+      "duration_s": 0.0013922499999999838,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T23_foreign_save_delete_leave_original_unchanged",
+      "outcome": "passed",
+      "duration_s": 0.0016594580000000025,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T24_parallel_owners_and_conversations_isolated",
+      "outcome": "passed",
+      "duration_s": 0.006555542000000025,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T25_known_followup_updates_only_selected_slot",
+      "outcome": "passed",
+      "duration_s": 0.0026811250000000064,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T26_unparsed_free_condition_not_silently_lost",
+      "outcome": "failed",
+      "duration_s": 0.003025541999999992,
+      "details": "tests/phase4_isolated/test_contracts.py:327: in test_T26_unparsed_free_condition_not_silently_lost\n    assert r.get('mode')=='clarification' or ('PRIVATE_CASE_CONDITION_X' in sent and 'UNKNOWN_CONDITION_Y' in sent), 'free conditions discarded while recognized slot update permits answering'\nE   AssertionError: free conditions discarded while recognized slot update permits answering\nE   assert (None == 'clarification' or ('PRIVATE_CASE_CONDITION_X' in 'בדיקת מקור סינתטי CASE_RICE'))\nE    +  where None = <built-in method get of dict object at 0x107a867c0>('mode')\nE    +    where <built-in method get of dict object at 0x107a867c0> = {'answer': 'תוצאת תחליף בלבד', 'conversation': {'followup': True, 'id': '698db27aa32fe3f532abddce9d918fa7fcd716fd00348... False, 'original_turn': 'TEST_FOLLOWUP UNKNOWN_CONDITION_Y', ...}, 'halachic_verified': False, 'verdict': 'test-only'}.get"
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T27_concurrent_revision_compare_and_swap",
+      "outcome": "passed",
+      "duration_s": 0.0031308340000000268,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T28_whole_turn_pruning_provenance_and_scoped_delete",
+      "outcome": "passed",
+      "duration_s": 0.0030945420000000334,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T29_normalization_expansion_does_not_mutate_source",
+      "outcome": "passed",
+      "duration_s": 0.0005021249999999644,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T30_fts_core_terms_before_prefixes_and_refs_only_hints",
+      "outcome": "passed",
+      "duration_s": 0.0022251669999999724,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T31_rrf_dedup_and_collision_not_silently_replaced",
+      "outcome": "failed",
+      "duration_s": 0.0003642500000000104,
+      "details": "tests/phase4_isolated/test_contracts.py:398: in test_T31_rrf_dedup_and_collision_not_silently_replaced\n    assert not any(s['source_id']=='a' and not s.get('identity_conflict') for s in conflict), 'RRF silently keeps first payload for conflicting source ID'\nE   AssertionError: RRF silently keeps first payload for conflicting source ID\nE   assert not True\nE    +  where True = any(<generator object test_T31_rrf_dedup_and_collision_not_silently_replaced.<locals>.<genexpr> at 0x107b12270>)"
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T32_backend_failure_has_explicit_status_and_deadline",
+      "outcome": "failed",
+      "duration_s": 0.0019942920000000086,
+      "details": "tests/phase4_isolated/test_contracts.py:422: in test_T32_backend_failure_has_explicit_status_and_deadline\n    assert not issues, '; '.join(issues)\nE   AssertionError: backend exception escapes without structured partial-search status; retrieval starts/completes after expired budget: ['backend-started-after-deadline', 'backend-completed-after-deadline']\nE   assert not ['backend exception escapes without structured partial-search status', \"retrieval starts/completes after expired budget: ['backend-started-after-deadline', 'backend-completed-after-deadline']\"]"
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T33_embedding_namespace_changes_and_fts_survives",
+      "outcome": "passed",
+      "duration_s": 0.00038050000000000583,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T34_two_configured_fixed_providers_leave_corpus_and_vectors_unchanged",
+      "outcome": "passed",
+      "duration_s": 0.015789749999999936,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T35_graph_proposals_never_proof_review_needs_witness",
+      "outcome": "passed",
+      "duration_s": 0.0033482499999999416,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T36_graph_changed_or_revoked_source_not_current_proof",
+      "outcome": "passed",
+      "duration_s": 0.002543249999999997,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T37_locator_requires_same_edition_full_proof_review_reversible",
+      "outcome": "passed",
+      "duration_s": 0.004342375000000009,
+      "details": ""
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T38_source_endpoint_status_collision_and_revoked_permission",
+      "outcome": "failed",
+      "duration_s": 0.007497500000000046,
+      "details": "tests/phase4_isolated/test_contracts.py:527: in test_T38_source_endpoint_status_collision_and_revoked_permission\n    assert r.status_code in (404,409) and TEXT not in r.text, 'source endpoint exposes text when first duplicate is allowed but matching record is revoked'\nE   AssertionError: source endpoint exposes text when first duplicate is allowed but matching record is revoked\nE   assert (200 in (404, 409))\nE    +  where 200 = <Response [200 OK]>.status_code"
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T39_invalid_json_types_and_fastapi_fallback_parity",
+      "outcome": "failed",
+      "duration_s": 0.005021083000000037,
+      "details": "tests/phase4_isolated/test_contracts.py:556: in test_T39_invalid_json_types_and_fastapi_fallback_parity\n    assert not errors,'malformed input not rejected consistently: '+repr(errors)\nE   AssertionError: malformed input not rejected consistently: [('fastapi', '/ask', \"{'question': 17}\", 'AttributeError'), ('fallback', '/ask', \"{'question': 17}\", 'AttributeError'), ('fastapi', '/ask', \"{'question': ['TEST']}\", 'AttributeError'), ('fallback', '/ask', \"{'question': ['TEST']}\", 'AttributeError'), ('fallback', '/ask', \"{'question': 'בדיקת מקור סינתטי CASE_RICE', 'top_k': {}}\", 'status 200'), ('fastapi', '/search', '[]', 'AttributeError'), ('fallback', '/search', '[]', 'AttributeError'), ('fastapi', '/search', \"{'query': 17}\", 'AttributeError'), ('fallback', '/search', \"{'query': 17}\", 'AttributeError'), ('fastapi', '/search', \"{'query': 'TEST', 'top_k': 'bad'}\", 'ValueError'), ('fallback', '/search', \"{'query': 'TEST', 'top_k': 'bad'}\", 'status 200')]\nE   assert not [('fastapi', '/ask', \"{'question': 17}\", 'AttributeError'), ('fallback', '/ask', \"{'question': 17}\", 'AttributeError')...ion': 'בדיקת מקור סינתטי CASE_RICE', 'top_k': {}}\", 'status 200'), ('fastapi', '/search', '[]', 'AttributeError'), ...]"
+    },
+    {
+      "test": "tests/phase4_isolated/test_contracts.py::test_T40_sse_order_layers_graph_and_rejected_claim_hidden",
+      "outcome": "failed",
+      "duration_s": 0.0025046670000000715,
+      "details": "tests/phase4_isolated/test_contracts.py:579: in test_T40_sse_order_layers_graph_and_rejected_claim_hidden\n    assert composed['verification_layers']['claim_support']['status']!='supported-bounded', 'blocked snapshot still advertises supported-bounded in verification layers'\nE   AssertionError: blocked snapshot still advertises supported-bounded in verification layers\nE   assert 'supported-bounded' != 'supported-bounded'"
+    }
+  ]
+}
