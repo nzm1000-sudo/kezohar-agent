@@ -1,0 +1,36 @@
+name: kezohar-agent
+networks:
+  kezohar-net:
+    name: kezohar-net
+services:
+  agent-api:
+    build: .
+    image: kezohar-agent:latest
+    container_name: kezohar-agent-api
+    ports:
+      - "8710:8710"
+    environment:
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_MODEL=${LLM_MODEL:-qwen/qwen3.5-35b-a3b}
+      - STORE_PATH=/data/sources.jsonl
+    volumes:
+      - agent-data:/data
+    networks:
+      - kezohar-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8710/health',timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: kezohar-qdrant
+    ports:
+      - "8733:6333"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - kezohar-net
+volumes:
+  agent-data:
+  qdrant-data:

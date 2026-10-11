@@ -13,6 +13,14 @@
 10. `api` — FastAPI: GET /health, POST /search, POST /ask (+SSE)
 11. Docker/compose, scripts/backup+restore
 12. בדיקות E2E + מדידת ביצועים
+13. מחבר Sefaria (מוכן, נבדק Mock — יבוא מלא בפריסה)
+14. פריסה ל-NAS (ממתין לגישה: Qdrant אמיתי + BGE-M3 + יבוא מלא)
+
+## קבצי פריסה
+- `Dockerfile`, `compose.yaml`, `requirements.txt`, `.env.example`
+- `scripts/backup.sh`, `scripts/restore.sh`
+- פורט API: 8710, רשת `kezohar-net`, Qdrant פנימי 8733->6333
+- אין IP קשיח בקוד — הכול מ-.env
 
 ## תלויות
 - חובה: stdlib בלבד לליבה (hebrew/bm25/citations/fastpath-basic/llm/ingest).
