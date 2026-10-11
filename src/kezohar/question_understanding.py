@@ -93,6 +93,15 @@ def contextual_question(question, analysis):
     return question + ('\nנסיבות שמסר המשתמש: '+ '; '.join(facts) if facts else '')
 
 
+def effective_question(question, analysis):
+    """One case/tradition representation for streaming and orchestration."""
+    effective=contextual_question(question,analysis)
+    tradition=analysis['circumstances']['tradition']
+    if tradition=='ashkenazi':effective+='\nלפי פסיקת האשכנזים'
+    elif tradition=='both':effective+='\nהשוואת מסורות'
+    return effective
+
+
 def case_coverage(question, source):
     """Retrieval feature only; never used to approve a claim or a locator."""
     analysis=analyze(question)

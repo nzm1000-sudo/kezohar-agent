@@ -1,6 +1,6 @@
 """Deterministic specialists share retrieved evidence and one generation budget."""
 from . import fastpath
-from .question_understanding import analyze, contextual_question
+from .question_understanding import analyze, effective_question
 from .discovery import SourceDiscoveryAgent
 from .halachic_reasoning import HalachicReasoningAgent
 from .answer_composition import VerifiedAnswerComposer
@@ -41,11 +41,7 @@ class HalachicOrchestrator:
                       'orchestration':{'stages':trace+['clarification'], 'budget':budget.report(),
                                        'complexity':'incomplete-case'}}
             return self.composer.compose(result)
-        effective = contextual_question(question, analysis)
-        if analysis['circumstances']['tradition'] == 'ashkenazi':
-            effective += '\nלפי פסיקת האשכנזים'
-        elif analysis['circumstances']['tradition'] == 'both':
-            effective += '\nהשוואת מסורות'
+        effective = effective_question(question, analysis)
         discovery = self.discovery.discover(effective, kwargs.get('top_k',5), kwargs.pop('retrieved_sources',None))
         sources = discovery['sources']
         trace += ['source-discovery', 'contextual-source-selection']

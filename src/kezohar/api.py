@@ -90,6 +90,7 @@ def _sse_events(result):
         'verification_layers':result.get('verification_layers'),
         'structured_answer':result.get('structured_answer'),
         'orchestration':result.get('orchestration'),
+        'source_relationships':result.get('source_relationships',[]),
         'human_review':result.get('human_review'),'halachic_verified':result.get('halachic_verified')}, ensure_ascii=False) + "\n\n"
 
 def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumstances=None):
@@ -97,7 +98,7 @@ def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumst
     ag = get_agent()
     from .request_budget import RequestBudget
     budget=RequestBudget()
-    from .question_understanding import analyze, contextual_question
+    from .question_understanding import analyze, effective_question
     analysis=analyze(question,circumstances)
     if analysis['requires_clarification'] and not fastpath.is_out_of_scope(question):
         yield from _sse_events(ag.converse(question,circumstances=circumstances,request_budget=budget))
@@ -105,8 +106,7 @@ def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumst
     fast = fastpath.is_out_of_scope(question) or fastpath.handle(question,
         lat=lat or fastpath.DEFAULT_LAT, lon=lon or fastpath.DEFAULT_LON,
         location=location or fastpath.DEFAULT_LOCATION) is not None
-    effective=contextual_question(question,analysis)
-    if analysis['circumstances']['tradition']=='ashkenazi':effective+='\nלפי פסיקת האשכנזים'
+    effective=effective_question(question,analysis)
     sources = [] if fast else ag.search_only(effective,top_k=top_k)
     yield 'event: sources\ndata: '+json.dumps({'sources':sources},ensure_ascii=False)+'\n\n'
     result=ag.converse(question,circumstances=circumstances,top_k=top_k,lat=lat,lon=lon,location=location,retrieved_sources=sources,request_budget=budget)
