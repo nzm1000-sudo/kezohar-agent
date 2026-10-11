@@ -159,3 +159,37 @@ def test_declared_app_permission_is_reported_without_inventing_rag_scope(library
     assert report['pending_scope_review'][0]['status']=='pending-scope-review'
     assert 'זכויות יוצרים כשלעצמן אינן עילת חסימה' in report['blocked'][0]['permission']['reason']
     assert report['owner_declaration']=='app-owner-existing-library-2026-10-11'
+
+def test_documented_oneg_shabbat_permission_is_resource_scoped():
+    from kezohar.permissions import permission_for, PURPOSES
+    grants=json.loads(Path('data/app_author_permissions.json').read_text())
+    assert len(grants)==3
+    for resource, grant in grants.items():
+        assert resource.startswith('author-permission-ong-shabbat/')
+        assert all(grant['scope'][purpose] for purpose in PURPOSES)
+        assert permission_for('author-permission',{},grants,resource)[0]
+    assert not permission_for('author-permission',{},grants,'another-book/text.json.gz')[0]
+
+
+def test_documented_grant_survives_default_sync_and_can_be_revoked(library):
+    app,out,_=library
+    old=app/'public/library/packs/p'
+    pack=old.with_name('author-permission-ong-shabbat')
+    old.rename(pack)
+    (pack/'b.json.gz').rename(pack/'Oneg_Shabbat.json.gz')
+    with gzip.open(pack/'Oneg_Shabbat.json.gz','rt') as fh:
+        payload=json.load(fh)
+    payload['packId']=pack.name
+    with gzip.open(pack/'Oneg_Shabbat.json.gz','wt') as fh:
+        json.dump(payload,fh)
+    manifest={'packId':pack.name,'license':'author-permission',
+              'files':[{'workId':'Book','file':'Oneg_Shabbat.json.gz'}]}
+    (pack/'manifest.json').write_text(json.dumps(manifest))
+    report=sync_library(app,out,{})
+    assert report['sources']>0 and not report['pending_scope_review']
+    from kezohar.permissions import rag_eligible
+    assert all(rag_eligible(s.to_dict()) for s in load_store(out/'sources.jsonl'))
+    assert sync_library(app,out,{})['unchanged_files']==1
+    resource=pack.name+'/Oneg_Shabbat.json.gz'
+    revoked=sync_library(app,out,{},grants={resource:{'verified':False}})
+    assert revoked['sources']==0 and revoked['pending_scope_review']

@@ -1,0 +1,53 @@
+{
+  "author-permission-ong-shabbat/Oneg_Shabbat.json.gz": {
+    "verified": true,
+    "status": "owner-confirmed-author-permission-full-scope",
+    "author": "הרב ישראל שריקי",
+    "work": "עונג שבת",
+    "recorded_on": "2026-10-11",
+    "evidence": "הצהרת בעל האפליקציה בשיחה מיום 2026-10-11: לעונג שבת יש הרשאה מלאה לשימוש מהמחבר הרב ישראל שריקי ללא הגבלות.",
+    "evidence_type": "owner-attestation-of-author-permission",
+    "verification_note": "תיעוד היקף לפי הצהרת הבעלים; לא נטען שעיינו במסמך חתום של המחבר.",
+    "scope": {
+      "local_storage": true,
+      "search_index": true,
+      "rag_answers": true
+    },
+    "restrictions": [],
+    "attribution_required": "שימור המחבר, המהדורה, הקרדיטים ומראי המקום כפי שנדרש בפרויקט."
+  },
+  "author-permission-ong-shabbat/Oneg_Shabbat_Notes.json.gz": {
+    "verified": true,
+    "status": "owner-confirmed-author-permission-full-scope",
+    "author": "הרב ישראל שריקי",
+    "work": "עונג שבת",
+    "recorded_on": "2026-10-11",
+    "evidence": "הצהרת בעל האפליקציה בשיחה מיום 2026-10-11: לעונג שבת יש הרשאה מלאה לשימוש מהמחבר הרב ישראל שריקי ללא הגבלות.",
+    "evidence_type": "owner-attestation-of-author-permission",
+    "verification_note": "תיעוד היקף לפי הצהרת הבעלים; לא נטען שעיינו במסמך חתום של המחבר.",
+    "scope": {
+      "local_storage": true,
+      "search_index": true,
+      "rag_answers": true
+    },
+    "restrictions": [],
+    "attribution_required": "שימור המחבר, המהדורה, הקרדיטים ומראי המקום כפי שנדרש בפרויקט."
+  },
+  "author-permission-ong-shabbat/Oneg_Shabbat_Notes.anchors.json.gz": {
+    "verified": true,
+    "status": "owner-confirmed-author-permission-full-scope",
+    "author": "הרב ישראל שריקי",
+    "work": "עונג שבת",
+    "recorded_on": "2026-10-11",
+    "evidence": "הצהרת בעל האפליקציה בשיחה מיום 2026-10-11: לעונג שבת יש הרשאה מלאה לשימוש מהמחבר הרב ישראל שריקי ללא הגבלות.",
+    "evidence_type": "owner-attestation-of-author-permission",
+    "verification_note": "תיעוד היקף לפי הצהרת הבעלים; לא נטען שעיינו במסמך חתום של המחבר.",
+    "scope": {
+      "local_storage": true,
+      "search_index": true,
+      "rag_answers": true
+    },
+    "restrictions": [],
+    "attribution_required": "שימור המחבר, המהדורה, הקרדיטים ומראי המקום כפי שנדרש בפרויקט."
+  }
+}

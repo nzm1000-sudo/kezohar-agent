@@ -17,17 +17,23 @@
       "author-permission-ong-shabbat/Oneg_Shabbat.json.gz": {
         "pack_id": "author-permission-ong-shabbat",
         "checksum": "d4a3dc60",
-        "role": "text"
+        "role": "text",
+        "additional_scope_coverage_verified": true,
+        "permission_record": "data/app_author_permissions.json#author-permission-ong-shabbat/Oneg_Shabbat.json.gz"
       },
       "author-permission-ong-shabbat/Oneg_Shabbat_Notes.json.gz": {
         "pack_id": "author-permission-ong-shabbat",
         "checksum": "467daee8",
-        "role": "text"
+        "role": "text",
+        "additional_scope_coverage_verified": true,
+        "permission_record": "data/app_author_permissions.json#author-permission-ong-shabbat/Oneg_Shabbat_Notes.json.gz"
       },
       "author-permission-ong-shabbat/Oneg_Shabbat_Notes.anchors.json.gz": {
         "pack_id": "author-permission-ong-shabbat",
         "checksum": "4883bcd6",
-        "role": "anchors"
+        "role": "anchors",
+        "additional_scope_coverage_verified": true,
+        "permission_record": "data/app_author_permissions.json#author-permission-ong-shabbat/Oneg_Shabbat_Notes.anchors.json.gz"
       },
       "sefaria-beit-yosef-public-domain/Beit_Yosef.1-1.json.gz": {
         "pack_id": "sefaria-beit-yosef-public-domain",

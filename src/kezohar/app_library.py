@@ -133,7 +133,10 @@ def _sync_library(app_root, output_dir, licenses=None, grants=None, pack_ids=Non
         raise ValueError('app packs directory missing')
     out.mkdir(parents=True, exist_ok=True)
     licenses = load_licenses() if licenses is None else licenses
-    grants = grants or {}
+    # Persist documented per-resource grants across ordinary incremental syncs.
+    grants_path = project / 'data/app_author_permissions.json'
+    documented = json.loads(grants_path.read_text(encoding='utf-8')) if grants_path.exists() else {}
+    grants = {**documented, **(grants or {})}
     declaration_path = project / 'data/app_owner_declaration.json'
     declaration = json.loads(declaration_path.read_text(encoding='utf-8')) if declaration_path.exists() else {}
     declared_resources = declaration.get('application_snapshot', {}).get('resources', {})
