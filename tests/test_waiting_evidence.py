@@ -89,3 +89,47 @@ def test_reference_provenance_and_missing_original_not_fabricated():
     assert all(s['origin'].startswith('synthetic') for s in CASE['synthetic_problematic_responses'])
     from bench.run import load_questions
     assert next(q for q in load_questions() if q['n']==21)['q']==Q
+
+def test_real_qwen_response_preserved_verbatim():
+    import hashlib
+    original=Path(CASE['original_response_file']).read_bytes()
+    assert hashlib.sha256(original).hexdigest()==CASE['original_response_sha256']
+    assert original.decode('utf-8').removesuffix('\n')==CASE['original_qwen_response']
+    assert CASE['original_response_status']=='user-supplied-original'
+    assert 'טיגון משמנת' in CASE['original_qwen_response']
+    assert 'בשולי בשר' in CASE['original_qwen_response']
+    assert CASE['original_qwen_response'].endswith('בדיני טיגון ומשקאות.')
+
+@pytest.mark.parametrize('text', ['אסור לאכול בשר עם חלב.',EXPLICIT])
+def test_real_qwen_failure_never_becomes_local_answer(text,monkeypatch):
+    calls=[]
+    def generated(*a,**k):
+        calls.append(True)
+        return {'answer':CASE['original_qwen_response']}
+    monkeypatch.setattr(llm,'ask',generated)
+    result=Agent(sources=[]).ask(Q,retrieved_sources=[source(text)])
+    assert result['answer']==evidence.INSUFFICIENT
+    assert bool(calls)==(text==EXPLICIT)
+    if calls:
+        assert result['verification']['verdict']=='unsupported'
+
+
+def test_real_qwen_failure_never_becomes_web_answer(monkeypatch):
+    engine=WebResearchEngine()
+    monkeypatch.setattr(engine,'research',lambda *a,**k:{'sources':[source(EXPLICIT)],'answer':'unsafe','comparisons':[]})
+    monkeypatch.setattr(llm,'ask',lambda *a,**k:{'answer':CASE['original_qwen_response']})
+    result=engine.answer(Q,'local','qwen')
+    assert result['mode']=='web-llm-guarded'
+    assert result['answer']==evidence.INSUFFICIENT
+    assert result['verification']['verdict']=='unsupported'
+
+@pytest.mark.parametrize('answer', [
+    'לפי הרמ״א והגר״א חייבים להמתין שש שעות (מקור בדיקה א:א).',
+    'זהו דין טיגון משמנת: ״'+EXPLICIT+'״ (מקור בדיקה א:א).',
+    'אפשר להקל בשלושים דקות או שעה, לפי רוב הפוסקים.',
+])
+def test_specific_unsupported_claims_from_original_are_blocked(answer,monkeypatch):
+    monkeypatch.setattr(llm,'ask',lambda *a,**k:{'answer':answer})
+    result=Agent(sources=[]).ask(Q,retrieved_sources=[source(EXPLICIT)])
+    assert result['mode']=='llm-guarded'
+    assert result['answer']==evidence.INSUFFICIENT
