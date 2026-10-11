@@ -49,3 +49,13 @@ def test_niqqud_query():
     a = idx.search("שַׁבָּת", top_k=5)
     b = idx.search("שבת", top_k=5)
     assert [r["source_id"] for r in a] == [r["source_id"] for r in b]
+
+def test_postings_match_exhaustive_scores():
+    from kezohar.models import Source
+    from kezohar.bm25 import BM25Index
+    from kezohar.hebrew import tokens
+    docs=[Source(source_id=str(i),work_title='ספר',reference=str(i),text=text) for i,text in enumerate(['אורז שבת','ברכות אורז','תפילה חנוכה'])]
+    index=BM25Index().build(docs)
+    scores={str(i):round(index._score_one(tokens('אורז'),i),4) for i in range(3)}
+    got=index.search('אורז')
+    assert {s['source_id']:s['score'] for s in got}=={k:v for k,v in scores.items() if v>0}

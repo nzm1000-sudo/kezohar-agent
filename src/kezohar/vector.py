@@ -48,8 +48,7 @@ class MockVectorStore(VectorStore):
             s = r["source"]
             if r["score"] <= 0:
                 continue
-            out.append({"source_id": s.source_id, "work_title": s.work_title,
-                        "reference": s.reference, "text": s.text,
-                        "license": s.license, "tradition": s.tradition,
-                        "score": round(r["score"], 4), "backend": "vector-mock"})
+            payload = s.to_dict()
+            payload.update(score=round(r["score"], 4), backend="vector-mock")
+            out.append(payload)
         return out

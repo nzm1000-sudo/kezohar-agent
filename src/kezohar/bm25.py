@@ -13,6 +13,7 @@ class BM25Index:
         self.df = Counter()
         self.tf = []  # list of Counter
         self.N = 0
+        self.postings = defaultdict(set)
 
     def add(self, sources):
         for s in sources:
@@ -23,6 +24,7 @@ class BM25Index:
             self.doc_len.append(len(toks))
             for t in tf:
                 self.df[t] += 1
+                self.postings[t].add(len(self.docs)-1)
         self.N = len(self.docs)
         self.avgdl = sum(self.doc_len) / self.N if self.N else 0.0
 
@@ -52,7 +54,11 @@ class BM25Index:
             return []
         qnorm = hebrew.normalize(query)
         scored = []
-        for i, s in enumerate(self.docs):
+        candidates = set()
+        for token in qtoks:
+            candidates.update(self.postings.get(token, ()))
+        for i in sorted(candidates):
+            s = self.docs[i]
             sc = self._score_one(qtoks, i)
             if sc <= 0:
                 continue
@@ -70,8 +76,7 @@ class BM25Index:
         out = []
         for r in ranked:
             s = r["source"]
-            out.append({"source_id": s.source_id, "work_title": s.work_title,
-                        "reference": s.reference, "text": s.text,
-                        "license": s.license, "tradition": s.tradition,
-                        "score": r["score"], "backend": "bm25"})
+            payload = s.to_dict()
+            payload.update(score=r["score"], backend="bm25")
+            out.append(payload)
         return out

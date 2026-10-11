@@ -27,14 +27,15 @@ def rrf_fuse(rank_lists, k=RRF_K, top_k=5):
 class HybridSearch:
     def __init__(self, sources=None, vector_store=None):
         self.bm25 = BM25Index()
-        self.vector = vector_store or MockVectorStore()
+        self.vector = vector_store or (MockVectorStore() if not sources or len(sources) <= 10000 else None)
         if sources:
             self.bm25.build(sources)
-            self.vector.add(sources)
+            if self.vector is not None:
+                self.vector.add(sources)
 
     def search(self, query, top_k=5):
         b = self.bm25.search(query, top_k=top_k*2)
-        v = self.vector.search(query, top_k=top_k*2)
+        v = self.vector.search(query, top_k=top_k*2) if self.vector is not None else []
         if not b and not v:
             return []
         if not b:
@@ -42,3 +43,17 @@ class HybridSearch:
         if not v:
             return b[:top_k]
         return rrf_fuse([b, v], top_k=top_k)
+
+
+class FederatedSearch:
+    """Fuse local, large app-library and verified research retrieval by rank."""
+    def __init__(self, primary, backends):
+        self.primary = primary
+        self.backends = backends
+        self.bm25 = primary.bm25
+        self.vector = primary.vector
+
+    def search(self, query, top_k=5):
+        ranked = [self.primary.search(query, top_k=top_k*2)]
+        ranked.extend(backend.search(query, top_k=top_k*2) for backend in self.backends)
+        return rrf_fuse(ranked, top_k=top_k)

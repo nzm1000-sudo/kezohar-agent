@@ -32,6 +32,10 @@ class Source:
     verification_status: str = ""
     provenance: str = ""
 
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    license_url: str = ""
+    attribution: str = ""
+
     def to_dict(self):
         return asdict(self)
 

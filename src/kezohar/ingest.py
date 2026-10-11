@@ -82,6 +82,9 @@ def prepare_source(raw, licenses):
             reference_en=raw.get("reference_en", ""),
             verification_status=raw.get("verification_status", ""),
             provenance=raw.get("provenance", ""),
+            metadata=raw.get("metadata", {}),
+            attribution=raw.get("attribution", ""),
+            license_url=raw.get("license_url", ""),
         ))
     return out, ""
 
@@ -141,7 +144,8 @@ def load_store(store_path):
     out = []
     if not p.exists():
         return out
-    for line in p.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            out.append(Source.from_dict(json.loads(line)))
+    with p.open(encoding="utf-8") as fh:
+        for line in fh:
+            if line.strip():
+                out.append(Source.from_dict(json.loads(line)))
     return out

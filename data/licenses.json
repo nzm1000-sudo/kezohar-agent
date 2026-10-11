@@ -3,19 +3,34 @@
     "name": "Public Domain — Shulchan Aruch Lemberg editions (1893/1888)",
     "allows_full_text": true,
     "url": "https://www.sefaria.org/",
-    "notes": "מהדורות למברג 1893/1888 — נחלת הכלל. מותר לשמור עותק מקומי."
+    "notes": "מהדורות למברג 1893/1888 — נחלת הכלל. מותר לשמור עותק מקומי.",
+    "scope": {
+      "local_storage": true,
+      "search_index": true,
+      "rag_answers": true
+    }
   },
   "CC-BY": {
     "name": "Creative Commons Attribution",
     "allows_full_text": true,
     "url": "https://creativecommons.org/licenses/by/4.0/",
-    "notes": ""
+    "notes": "",
+    "scope": {
+      "local_storage": true,
+      "search_index": true,
+      "rag_answers": true
+    }
   },
   "CC-BY-SA": {
     "name": "Creative Commons Attribution-ShareAlike",
     "allows_full_text": true,
     "url": "https://creativecommons.org/licenses/by-sa/4.0/",
-    "notes": ""
+    "notes": "",
+    "scope": {
+      "local_storage": true,
+      "search_index": true,
+      "rag_answers": true
+    }
   },
   "RESTRICTED": {
     "name": "Restricted / copyrighted — no full-text import",
@@ -31,7 +46,12 @@
     "app_enabled": true,
     "status": "verified-enabled",
     "url": "https://www.sefaria.org/",
-    "notes": "נחלת הכלל — מותר טקסט מלא, ייחוס נשמר."
+    "notes": "נחלת הכלל — מותר טקסט מלא, ייחוס נשמר.",
+    "scope": {
+      "local_storage": true,
+      "search_index": true,
+      "rag_answers": true
+    }
   },
   "cc-by": {
     "name": "Creative Commons Attribution",
@@ -39,7 +59,12 @@
     "app_enabled": true,
     "status": "verified-enabled",
     "url": "https://creativecommons.org/licenses/by/4.0/",
-    "notes": "מותר טקסט מלא בכפוף לייחוס."
+    "notes": "מותר טקסט מלא בכפוף לייחוס.",
+    "scope": {
+      "local_storage": true,
+      "search_index": true,
+      "rag_answers": true
+    }
   },
   "cc-by-sa": {
     "name": "Creative Commons Attribution-ShareAlike",
@@ -47,7 +72,12 @@
     "app_enabled": true,
     "status": "verified-enabled",
     "url": "https://creativecommons.org/licenses/by-sa/4.0/",
-    "notes": "מותר טקסט מלא בכפוף לייחוס ושיתוף זהה."
+    "notes": "מותר טקסט מלא בכפוף לייחוס ושיתוף זהה.",
+    "scope": {
+      "local_storage": true,
+      "search_index": true,
+      "rag_answers": true
+    }
   },
   "uxlc-free": {
     "name": "UXLC Tanach.us free use",
@@ -55,7 +85,12 @@
     "app_enabled": true,
     "status": "verified-enabled",
     "url": "https://www.tanach.us/Tanach.xml",
-    "notes": "כתר לנינגרד — שימוש חופשי, ייחוס נשמר."
+    "notes": "כתר לנינגרד — שימוש חופשי, ייחוס נשמר.",
+    "scope": {
+      "local_storage": true,
+      "search_index": true,
+      "rag_answers": true
+    }
   },
   "cc-by-nc": {
     "name": "Creative Commons Attribution-NonCommercial",
