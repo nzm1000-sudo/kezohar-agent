@@ -20,11 +20,16 @@ def retrieval_query(question):
                 'phone-shabbat':['טלפון','מוקצה','טלטול'],
                 'water-urn':['מיחם','להוסיף','מים']}
     terms.extend(expansions.get(intent,[]))
+    from .discovery import interpret
+    for expansion in interpret(question)['expansions']:
+        terms.extend(hebrew.tokens(expansion))
     if not terms:
         return question
     if any('חלב' in t for t in terms):
         terms.extend(['חלב','גבינה'])
-    expanded = []
+    # Keep all core case terms before grammatical variants. Disk FTS limits
+    # tokens to 50; interleaving six prefixes per word used to hide later topics.
+    expanded = list(dict.fromkeys(terms))
     for term in terms:
         expanded.append(term)
         if len(term)>3 and term[0] in 'הובכלמש':

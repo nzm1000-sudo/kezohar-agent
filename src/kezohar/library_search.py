@@ -74,3 +74,11 @@ class SQLiteLibrarySearch:
             source.update(score=-score, search_relevance=-score, backend='app-library-fts5')
             result.append(source)
         return result
+
+    def source_by_id(self, source_id):
+        if not self.path.exists():return None
+        with sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True) as db:
+            row=db.execute('SELECT payload FROM records WHERE id=?',(source_id,)).fetchone()
+        if not row:return None
+        source=json.loads(row[0])
+        return self.locator_overlay(source) if self.locator_overlay is not None else source

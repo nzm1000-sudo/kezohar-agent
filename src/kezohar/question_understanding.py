@@ -11,6 +11,8 @@ SLOTS = {
     'tradition': ('לפי איזו מסורת מבוקש המענה?', {'sephardi':'לפי פסיקת הספרדים', 'ashkenazi':'לפי פסיקת האשכנזים', 'both':'השוואת מסורות'})
 }
 SLOTS.update({
+    'next_food': ('לאחר הצ׳יפס, האם מבוקש לאכול מאכל חלבי?', {'dairy':'לאחר מכן מבוקש לאכול מאכל חלבי', 'other':'לא מבוקש לאכול מאכל חלבי', 'unknown':'סוג המאכל הבא לא ידוע'}),
+    'oil_residue': ('האם נשארו בשמן פירורי בשר או שומן ממשי?', {'present':'נשארו פירורי בשר או שומן ממשי בשמן', 'absent':'לא נשארו שיירי בשר או שומן ממשי בשמן', 'unknown':'מצב שיירי הבשר בשמן לא ידוע'}),
     'phone_purpose': ('לשם מה מבוקש טלטול הטלפון בשבת?', {'use':'לצורך שימוש בטלפון', 'place':'לצורך מקומו של הטלפון', 'protect':'לשמירת הטלפון מנזק', 'unknown':'מטרת הטלטול לא ידועה'}),
     'water_temperature': ('מה מצב המים שרוצים להוסיף למיחם?', {'boiling':'מים רותחים', 'hot':'מים חמים שאינם רותחים', 'cold':'מים קרים', 'unknown':'מצב המים לא ידוע'})
 })
@@ -22,6 +24,9 @@ def analyze(question, circumstances=None):
         raise ValueError('circumstances must contain supported slot/value pairs')
     q = normalize(question)
     intent = question_intent(question)
+    from .discovery import interpret
+    discovery=interpret(question)
+    if discovery['shared_oil_candidate'] and discovery['waiting_requested']:intent='shared-oil'
     if 'טלפונ' in q and 'שבת' in q:intent='phone-shabbat'
     if 'מיחמ' in q and any(t in q for t in ('להוסיפ','להכניס')):intent='water-urn'
     facts = {}
@@ -37,6 +42,11 @@ def analyze(question, circumstances=None):
     if intent == 'shared-oil':
         if 'שמנ חדש' in q and 'נקי' in q: facts['oil_case']='new_clean'
         elif 'אותו שמנ' in q or 'שמנ שבו' in q: facts['oil_case']='same'
+        elif 'שמנ של שניצל' in q: facts['oil_case']='same'
+        if discovery['dairy_target_explicit']:facts['next_food']='dairy'
+        if (('פירור' in q or 'שיירי' in q or 'שומנ' in q)
+                and any(t in q for t in ('לא נשארו','בלי פירורי','ללא שיירי'))):facts['oil_residue']='absent'
+        elif 'נשארו פירור' in q or 'יש פירורי' in q:facts['oil_residue']='present'
     if intent == 'travel':
         if 'פחות מפרסה' in q: facts['travel_distance']='less_than_parsa'
         elif 'לפחות פרסה' in q or 'פרסה לפחות' in q: facts['travel_distance']='at_least_parsa'
@@ -55,18 +65,26 @@ def analyze(question, circumstances=None):
     facts['tradition']=explicit
     conflicts = [k for k,v in supplied.items() if k in facts and facts[k]!=v
                  and k!='tradition']
+    origins={k:'user-question' for k in facts}
+    if not any(t in q for t in ('אשכנז','ספרד','השוואת מסורות')):
+        origins['tradition']='policy-default'
     facts.update(supplied)
+    origins.update({k:'user-supplied-slot' for k in supplied})
     requirements = {'rice':['rice_form'], 'yaaleh-shachrit':['prayer_stage'],
-                    'shared-oil':['oil_case'], 'travel':['travel_distance','travel_stage'],
+                    'shared-oil':['oil_case','next_food','oil_residue'], 'travel':['travel_distance','travel_stage'],
                     'phone-shabbat':['phone_purpose'],'water-urn':['water_temperature']}
+    if intent=='shared-oil' and (facts.get('oil_case')=='new_clean' or facts.get('next_food')=='other'):
+        requirements['shared-oil']=['oil_case','next_food']
     missing = [k for k in requirements.get(intent,[]) if k not in facts or facts[k]=='unknown']
     clarification = [{'field':k, 'question':SLOTS[k][0],
                       'options':[{'value':v,'label':label} for v,label in SLOTS[k][1].items()]}
                      for k in list(dict.fromkeys(conflicts+missing))[:2]]
     return {'intent':intent or 'general-halacha', 'circumstances':facts,
+            'fact_origins':origins,
             'missing_fields':missing, 'conflicting_fields':conflicts,
             'clarifications':clarification,
             'requires_clarification':bool(missing or conflicts),
+            'query_hypotheses':discovery['possible_topics'],
             'method':'bounded rules; circumstances are not evidence for a ruling'}
 
 

@@ -7,20 +7,48 @@ def profile(source):
     quality=classify(source)
     title=normalize(source.get('work_title',''))
     author=normalize(source.get('author',''))
-    rank=5
     tradition=source.get('tradition','')
     authority=quality['halachic_authority']
-    if authority=='maran': rank=0;tradition='sephardi'
+    if authority=='maran': tradition='sephardi'
     elif title.startswith(('חזונ עובדיה','יביע אומר','יחוה דעת')) and any(name in author for name in ('עובדיה יוספ','ovadia yosef','ovadiah yosef')):
-        rank=1;tradition='sephardi';authority='rav-ovadia-yosef'
+        tradition='sephardi';authority='rav-ovadia-yosef'
     elif 'ילקוט יוספ' in title and quality['domain']=='halacha':
-        rank=2;tradition='sephardi';authority='yalkut-yosef'
-    elif authority=='sephardi-posek': rank=3;tradition='sephardi'
-    elif authority=='ashkenazi-posek': rank=4;tradition='ashkenazi'
-    return {'authority':authority,'priority':rank,'tradition':tradition,
+        tradition='sephardi';authority='yalkut-yosef'
+    elif authority=='sephardi-posek': tradition='sephardi'
+    elif authority=='ashkenazi-posek': tradition='ashkenazi'
+    source_type=quality['source_type']
+    role=('foundation' if source_type=='primary-torah-text' else
+          'practical-ruling' if source_type in ('psak-code','responsa') else 'context')
+    if source.get('book_id')=='Beit_Yosef' or title.startswith('בית יוספ'):role='foundation-and-analysis'
+    return {'authority':authority,'tradition':tradition,'role':role,
+            'edition':source.get('version') or 'unknown',
             'embedded_other_views':any(t in source.get('text','') for t in ('הרמ״א','הרמ"א','הגה ')),
             'attribution_scope':'work identity; individual passages may quote other opinions',
             'evidence_support':'not-established-by-authority'}
+
+
+def selection_key(source, question, tradition):
+    """Contextual prompt selection, never a score that adjudicates a dispute.
+
+    Specific case coverage takes precedence over the preferred work. A Talmud
+    passage is a foundation, not automatically the practical answer. No author
+    or work preference can establish claim support.
+    """
+    p=source['authority_profile']
+    study=any(word in question for word in ('יסוד הדין','מקור בתלמוד','טעם הדין','סוגיה'))
+    desired_role=('foundation','foundation-and-analysis') if study else ('practical-ruling',)
+    matching=tradition=='both' or p['tradition']==tradition
+    preferred=p['authority'] in ('maran','rav-ovadia-yosef','yalkut-yosef') and tradition!='ashkenazi'
+    source['selection_policy']={'requested_tradition':tradition,'purpose':'study' if study else 'practical-case',
+                                'role_matches':p['role'] in desired_role,
+                                'preferred_sephardic_work':preferred,
+                                'basis':'case coverage, role and tradition; not an adjudication'}
+    contextual=(p['role'] not in desired_role,not matching) if study else (not matching,p['role'] not in desired_role)
+    return (-source.get('case_coverage',0), contextual,
+            -source.get('topical_overlap',0), not preferred,
+            p['authority']!='maran' if preferred else False,
+            p['authority']!='rav-ovadia-yosef' if preferred else False,
+            -source.get('score',0))
 
 
 def differences(question, sources):

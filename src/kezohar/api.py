@@ -34,6 +34,9 @@ def get_agent():
                     if Path(path).exists()]
         if backends:
             _agent.search = FederatedSearch(_agent.search, backends)
+        if os.environ.get('SOURCE_GRAPH_ENABLED','').lower() in ('1','true'):
+            from .source_graph import HalachicSourceGraph
+            _agent.source_graph=HalachicSourceGraph()
     return _agent
 
 def _validate_ask(body):
@@ -61,6 +64,17 @@ def _ask_result(question, top_k=5, lat=None, lon=None, location=None, research=F
     return get_agent().converse(question,circumstances=circumstances,research=research,
                                top_k=top_k,lat=lat,lon=lon,location=location)
 
+def _source_result(source_id):
+    from .permissions import rag_eligible
+    if len(source_id)>256:return 400,{'error':'invalid source id'}
+    source=get_agent().knowledge.source_by_id(source_id)
+    if source is None:return 404,{'error':'source unavailable'}
+    if not rag_eligible(source) or source.get('metadata',{}).get('locator_status')=='ambiguous-file-fields':
+        return 409,{'error':'source locator or RAG permission requires review'}
+    return 200,{'source':{k:source.get(k,'') for k in ('source_id','work_title','author','reference',
+                      'version','text','source_url','attribution','license','verification_status')},
+                'human_review':'required','halachic_verified':False}
+
 def _sse_events(result):
     # event 1: sources first (<1s target), then answer sentences
     yield "event: sources\n" + "data: " + json.dumps({"sources": result.get("sources", [])}, ensure_ascii=False) + "\n\n"
@@ -73,15 +87,20 @@ def _sse_events(result):
         yield "event: answer\n" + "data: " + json.dumps({"sentence": s}, ensure_ascii=False) + "\n\n"
     yield "event: done\n" + "data: " + json.dumps({"verdict": result.get("verdict"), "mode": result.get("mode"), "elapsed_s": result.get("elapsed_s"),
         'explanation':result.get('explanation'), 'differences':result.get('differences',[]),
+        'verification_layers':result.get('verification_layers'),
+        'structured_answer':result.get('structured_answer'),
+        'orchestration':result.get('orchestration'),
         'human_review':result.get('human_review'),'halachic_verified':result.get('halachic_verified')}, ensure_ascii=False) + "\n\n"
 
 def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumstances=None):
     """Yield source event before starting inference; retrieved passages are reused."""
     ag = get_agent()
+    from .request_budget import RequestBudget
+    budget=RequestBudget()
     from .question_understanding import analyze, contextual_question
     analysis=analyze(question,circumstances)
     if analysis['requires_clarification'] and not fastpath.is_out_of_scope(question):
-        yield from _sse_events(ag.converse(question,circumstances=circumstances))
+        yield from _sse_events(ag.converse(question,circumstances=circumstances,request_budget=budget))
         return
     fast = fastpath.is_out_of_scope(question) or fastpath.handle(question,
         lat=lat or fastpath.DEFAULT_LAT, lon=lon or fastpath.DEFAULT_LON,
@@ -90,7 +109,7 @@ def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumst
     if analysis['circumstances']['tradition']=='ashkenazi':effective+='\nלפי פסיקת האשכנזים'
     sources = [] if fast else ag.search_only(effective,top_k=top_k)
     yield 'event: sources\ndata: '+json.dumps({'sources':sources},ensure_ascii=False)+'\n\n'
-    result=ag.converse(question,circumstances=circumstances,top_k=top_k,lat=lat,lon=lon,location=location,retrieved_sources=sources)
+    result=ag.converse(question,circumstances=circumstances,top_k=top_k,lat=lat,lon=lon,location=location,retrieved_sources=sources,request_budget=budget)
     events=iter(_sse_events(result))
     next(events)  # Source event was already delivered.
     yield from events
@@ -115,6 +134,11 @@ if HAVE_FASTAPI:
             return JSONResponse({"error": "missing query"}, status_code=400)
         top_k = int(body.get("top_k", 5))
         return {"results": get_agent().search_only(q, top_k=top_k)}
+
+    @app.get('/sources/{source_id}')
+    def source_record(source_id: str):
+        status,result=_source_result(source_id)
+        return JSONResponse(result,status_code=status)
 
     @app.post("/research")
     def research(body: dict, req: Request):
@@ -185,6 +209,10 @@ def run_stdio_fallback(port=None):
             if self.path == "/health":
                 ok, models = get_agent().answer_model.health()
                 self._send(200, {"status": "ok", "llm_ok": ok})
+            elif self.path.startswith('/sources/'):
+                from urllib.parse import unquote,urlsplit
+                status,result=_source_result(unquote(urlsplit(self.path).path[len('/sources/'):]))
+                self._send(status,result)
             else:
                 self._send(404, {"error": "not found"})
         def do_POST(self):

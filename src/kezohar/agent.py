@@ -8,10 +8,8 @@ from .ranking import topic_tokens, retrieval_query, topic_overlap
 from .permissions import rag_eligible
 from . import evidence
 from .source_quality import classify, exclusion_reason
-from .halachic_authority import profile as authority_profile, differences
-from .question_understanding import analyze, contextual_question, case_coverage
-
-TRADITION_ORDER = {"sephardi": 0, "": 1, "ashkenazi": 2}
+from .halachic_authority import profile as authority_profile, selection_key
+from .question_understanding import analyze, case_coverage
 
 
 def diverse_sources(ordered, limit):
@@ -52,25 +50,21 @@ def order_sources(sources, question=""):
         source['tradition']=source['authority_profile']['tradition']
         source['case_coverage']=case_coverage(question,source) if question else 0
     preferred=analyze(question)['circumstances']['tradition'] if question else 'sephardi'
+    for source in sources:
+        source['_selection_key']=selection_key(source,question,preferred)
     return sorted(sources, key=lambda s: (
         not rag_eligible(s),
-        s.get('domain') != 'halacha',
-        (s.get('tradition')!='ashkenazi' if preferred=='ashkenazi' else TRADITION_ORDER.get(s.get('tradition',''),1)),
-        -s.get('case_coverage',0),
-        s['authority_profile']['priority'],
-        s.get('source_type')!='psak-code',
-        -s.get('topical_overlap',0),
-        s.get('category') not in ('halacha','responsa'),
-        -s.get('score',0)))
+        s['_selection_key']))
 
 
 class Agent:
     def __init__(self, sources=None, store_path=None, base_url=None, model=None, research_engine=None,
-                 knowledge=None, search_engine=None, answer_model=None, source_verifier=None):
+                 knowledge=None, search_engine=None, answer_model=None, source_verifier=None, source_graph=None):
         self.knowledge = knowledge if knowledge is not None else KnowledgeBase(sources, store_path, search_engine)
         self.answer_model = answer_model if answer_model is not None else ConfiguredAnswerModel(base_url, model)
         self.source_verifier = source_verifier if source_verifier is not None else ExtractiveSourceVerifier()
         self.research_engine = research_engine
+        self.source_graph = source_graph
         self._cache_revision = None
         self._cache = {}
 
@@ -90,9 +84,10 @@ class Agent:
     def search(self, value):
         self.knowledge.search = value
 
-    def ask(self, question, top_k=5, lat=None, lon=None, location=None, timeout=4.5, cache_ttl=300, retrieved_sources=None):
+    def ask(self, question, top_k=5, lat=None, lon=None, location=None, timeout=4.5, cache_ttl=300, retrieved_sources=None, answer_model=None):
         t0 = time.time()
         q = (question or "").strip()
+        cacheable = answer_model is None and retrieved_sources is None
         if not q:
             return {"answer": "נא לשאול שאלה.", "sources": [], "verdict": "empty",
                     "mode": "refuse", "elapsed_s": 0.0}
@@ -103,7 +98,7 @@ class Agent:
             self._cache_revision = revision
         # cache
         now = time.time()
-        if q in self._cache:
+        if q in self._cache and cacheable:
             ts, res = self._cache[q]
             if now - ts < cache_ttl:
                 r = dict(res)
@@ -114,7 +109,7 @@ class Agent:
             res = {"answer": "מצטער, אני עונה רק על הלכה, מנהגים, ברכות, זמנים, תפילות, צומות, שבת, חגים ולוח השנה העברי.",
                    "sources": [], "verdict": "out_of_scope", "mode": "refuse",
                    "elapsed_s": round(time.time() - t0, 3)}
-            self._cache[q] = (now, res)
+            if cacheable:self._cache[q] = (now, res)
             return dict(res)
         # fast path (zmanim/calendar) — no LLM
         fp = fastpath.handle(q, lat=lat or fastpath.DEFAULT_LAT, lon=lon or fastpath.DEFAULT_LON,
@@ -122,7 +117,7 @@ class Agent:
         if fp is not None:
             res = {"answer": fp["answer"], "sources": [], "verdict": fp["kind"],
                    "mode": "fast", "details": fp, "elapsed_s": round(time.time() - t0, 3)}
-            self._cache[q] = (now, res)
+            if cacheable:self._cache[q] = (now, res)
             return dict(res)
         # retrieval first (in code)
         retrieved = retrieved_sources if retrieved_sources is not None else self.search_only(q,top_k=top_k)
@@ -130,7 +125,7 @@ class Agent:
             res = {"answer": evidence.INSUFFICIENT if evidence.shared_oil_waiting(q) else "אין לי מקור לכך.", "sources": [],
                    "verdict": "no_source", "mode": "sources-only",
                    "elapsed_s": round(time.time() - t0, 3)}
-            self._cache[q] = (now, res)
+            if cacheable:self._cache[q] = (now, res)
             return dict(res)
         searchable = retrieved
         retrieved = [s for s in retrieved if rag_eligible(s)]
@@ -147,15 +142,22 @@ class Agent:
         retrieved = eligible
         # one LLM call
         try:
-            lr = self.answer_model.generate(q, retrieved, timeout=timeout)
+            generator=answer_model if answer_model is not None else self.answer_model
+            lr = generator.generate(q, retrieved, timeout=timeout)
+            if hasattr(generator,'sent_sources'):
+                retrieved=generator.sent_sources
             answer = lr["answer"]
             mode = "llm"
         except llm_client.LLMUnavailable:
             # Mac offline: sources only, clearly labeled
+            stopped=getattr(getattr(generator,'budget',None),'reason',None)
             res = {"answer": evidence.INSUFFICIENT if evidence.shared_oil_waiting(q) else "מצב חיפוש (המודל אינו זמין): אלו המקורות הקרובים ביותר.",
                    "sources": retrieved, "verdict": "sources-only",
                    "mode": "sources-only", "elapsed_s": round(time.time() - t0, 3)}
-            self._cache[q] = (now, res)
+            if stopped:
+                res.update(answer='מצב חיפוש: הבקשה הגיעה למגבלת הזמן, הקריאות או ההקשר; אין תשובה מאומתת.',
+                           verdict='budget_exhausted')
+            if cacheable:self._cache[q] = (now, res)
             return dict(res)
         # safety verification
         v = self.source_verifier.verify(q, answer, retrieved)
@@ -177,7 +179,7 @@ class Agent:
                "verification": v, "mode": mode,
                "human_review": "required", "halachic_verified": False,
                "elapsed_s": round(time.time() - t0, 3)}
-        self._cache[q] = (now, res)
+        if cacheable:self._cache[q] = (now, res)
         return dict(res)
 
     def search_only(self, query, top_k=5):
@@ -190,34 +192,14 @@ class Agent:
         return selected+diverse_sources(pending,top_k-len(selected)) if len(selected)<top_k else selected
 
     def converse(self, question, circumstances=None, research=False, **kwargs):
-        """Stateless conversation: client retains the question and explicit slot values."""
-        analysis=analyze(question,circumstances)
-        if analysis['requires_clarification'] and not fastpath.is_out_of_scope(question):
-            return {'answer':'כדי להתאים את המקורות למקרה: '+ ' '.join(
-                        c['question'] for c in analysis['clarifications']),
-                    'mode':'clarification','verdict':'needs_clarification','sources':[],
-                    'question_analysis':analysis,'clarifications':analysis['clarifications'],
-                    'human_review':'required','halachic_verified':False,
-                    'explanation':'הנסיבות חסרות או סותרות; טרם ניתנה הכרעה הלכתית.',
-                    'original_question':question}
-        effective=contextual_question(question,analysis)
-        if analysis['circumstances']['tradition']=='ashkenazi':
-            effective+='\nלפי פסיקת האשכנזים'
-        elif analysis['circumstances']['tradition']=='both':
-            effective+='\nהשוואת מסורות'
-        result=(self.research(effective,top_k=kwargs.get('top_k',5)) if research
-                else self.ask(effective,**kwargs))
-        result=dict(result)
-        result['question_analysis']=analysis
-        result['original_question']=question
-        result['differences']=differences(effective,result.get('sources',[]))
-        supported=result.get('verification',{}).get('verdict')=='ok'
-        result['explanation']=('ההפניות נבנו מהמקורות שנשלפו; אימות התוכנה אינו הכרעה הלכתית אנושית.'
-                               if supported else 'המקורות או האימות אינם מספיקים להכרעה; אין להסיק דין נוסף מהתוצאות.')
-        result['human_review']='required';result['halachic_verified']=False
-        return result
+        from .orchestration import HalachicOrchestrator
+        return HalachicOrchestrator(self).answer(question,circumstances,research,**kwargs)
 
-    def research(self, question, top_k=5):
+    def conversation_turn(self, store, owner, conversation_id, question, circumstances=None, **kwargs):
+        """Trusted local service caller only; memory never replaces retrieval."""
+        return store.turn(self,owner,conversation_id,question,circumstances,**kwargs)
+
+    def research(self, question, top_k=5, answer_model=None, local_sources=None):
         from .web_research import WebResearchEngine
         if fastpath.is_out_of_scope(question):
             return self.ask(question)
@@ -230,8 +212,8 @@ class Agent:
                 store_path=os.environ.get('WEB_STORE_PATH','data/store/web/sources.jsonl'))
         engine = self.research_engine
         result = engine.answer(question, self.base_url, self.model, limit=top_k,
-                             local_sources=[s for s in self.search_only(question,top_k=top_k) if rag_eligible(s)],
-                             answer_model=self.answer_model, source_verifier=self.source_verifier)
+                             local_sources=[s for s in (self.search_only(question,top_k=top_k) if local_sources is None else local_sources) if rag_eligible(s)],
+                             answer_model=answer_model if answer_model is not None else self.answer_model, source_verifier=self.source_verifier)
         approved = [s for s in result.get('sources',[]) if s.get('source_project')=='verified-web'
                     and s.get('metadata',{}).get('persistence_allowed')]
         if approved and engine.store_path:

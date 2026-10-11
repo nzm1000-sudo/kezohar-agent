@@ -74,6 +74,11 @@ class FederatedSearch:
         return len(self.bm25.docs)+sum(getattr(backend,'source_count',0) for backend in self.backends)
 
     def search(self, query, top_k=5):
-        ranked = [self.primary.search(query, top_k=top_k*2)]
-        ranked.extend(backend.search(query, top_k=top_k*2) for backend in self.backends)
+        # SQLite backends open a connection per search. Keep the primary index
+        # in the calling thread; overlap independent disk lookups only.
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(3,max(1,len(self.backends)))) as pool:
+            futures=[pool.submit(backend.search,query,top_k=top_k*2) for backend in self.backends]
+            ranked=[self.primary.search(query,top_k=top_k*2)]
+            ranked.extend(future.result() for future in futures)
         return rrf_fuse(ranked, top_k=top_k)

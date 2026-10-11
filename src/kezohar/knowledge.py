@@ -33,6 +33,21 @@ class KnowledgeBase:
         return {'source_count': count, 'vector_status': state,
                 'vector_index': spec.manifest() if spec is not None else None}
 
+    def source_by_id(self, source_id):
+        primary=getattr(self.search,'primary',self.search)
+        matches=[]
+        for source in getattr(getattr(primary,'bm25',None),'docs',[]):
+            if source.source_id==source_id:matches.append(source.to_dict())
+        for backend in getattr(self.search,'backends',[]):
+            lookup=getattr(backend,'source_by_id',None)
+            if lookup is not None:
+                source=lookup(source_id)
+                if source is not None:matches.append(source)
+        if not matches:return None
+        # An ID collision must not silently serve a different text or locator.
+        identities={(s.get('work_title'),s.get('reference'),s.get('text')) for s in matches}
+        return matches[0] if len(identities)==1 else None
+
     def upsert_verified(self, sources):
         """Update the small verified-source corpus, preserving app disk backends."""
         primary = getattr(self.search, 'primary', self.search)

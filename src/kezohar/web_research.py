@@ -336,6 +336,8 @@ class WebResearchEngine:
         generator = answer_model if answer_model is not None else ConfiguredAnswerModel(base_url, model)
         try:
             generated = generator.generate(question, result['sources'], timeout=timeout)['answer']
+            if hasattr(generator,'sent_sources'):
+                result['sources']=generator.sent_sources
             verification = verifier.verify(question, generated, result['sources'])
             result['verification'] = verification
             if verification['verdict']=='ok':

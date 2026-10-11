@@ -1,0 +1,74 @@
+"""Present only the existing verifier's approved output; never fill gaps by AI."""
+from .permissions import rag_eligible
+from urllib.parse import quote
+
+
+def verification_layers(verification, sources):
+    checks = verification.get('checks', {})
+    index={s['source_id']:s for s in sources}
+    evidence=verification.get('evidence',[])
+    literal=bool(evidence) and all(e.get('source_id') in index and e.get('quote')
+                                 and e['quote'] in index[e['source_id']].get('text','') for e in evidence)
+    support=checks.get('claim_support','not-proved')
+    return {
+        'source_identity': {'existence': checks.get('source_exists', 'not-checked'),
+                            'locator': checks.get('reference_identity', 'not-checked')},
+        'quotation_integrity': 'passed-exact-extract' if literal else 'not-proved',
+        'claim_support': {'status':'supported-bounded' if support=='supported-bounded' else 'not-proved-as-answer-to-case',
+                          'method':support,'general_entailment_verified':False},
+        'format': checks.get('format', 'not-checked'),
+        'human_review': 'required', 'halachic_verified': False,
+    }
+
+
+class VerifiedAnswerComposer:
+    def compose(self, result, reasoning=None):
+        result = dict(result)
+        verification = result.get('verification', {})
+        layers = verification_layers(verification,result.get('sources',[]))
+        if result.get('mode')=='web-sources-only' and verification.get('verdict')!='ok':
+            result['answer']='מצב חיפוש: המקורות זמינים לבדיקה; לא הופקה תשובה מאומתת.'
+        sources = {s['source_id']: s for s in result.get('sources', [])}
+        citations = []
+        quotes = []
+        for evidence in verification.get('evidence', []):
+            source = sources.get(evidence.get('source_id'))
+            if (verification.get('verdict') != 'ok' or not source or not rag_eligible(source)
+                    or not source.get('reference')
+                    or not evidence.get('quote') or evidence['quote'] not in source.get('text', '')):
+                continue
+            citations.append({k: source.get(k, '') for k in
+                              ('source_id', 'work_title', 'author', 'reference', 'version', 'source_url')})
+            citations[-1]['local_url']='/sources/'+quote(source['source_id'],safe='')
+            quotes.append({'source_id': source['source_id'], 'text': evidence['quote'],
+                           'kind': 'original-quotation'})
+        if verification.get('verdict')=='ok' and (not citations or len(citations)!=len(verification.get('evidence',[]))):
+            # The independent display boundary also fails closed if its source
+            # snapshot no longer agrees with the verifier result.
+            verification=dict(verification,verdict='invalid_citation',support='composer source snapshot mismatch')
+            result.update(verdict='invalid_citation',mode='llm-guarded',verification=verification,
+                          answer='אין בסיס מאומת לתשובה; המקור או הציטוט דורשים בירור נוסף.')
+            citations=[];quotes=[]
+            layers=verification_layers(verification,result.get('sources',[]))
+        claims = [{'source_id': c['source_id'], 'text': c['text'], 'kind': 'AI-bounded-reformulation'}
+                  for c in verification.get('claims', []) if c.get('assessment', {}).get('status') == 'supported'
+                  and c.get('source_id') in {s['source_id'] for s in citations}]
+        # Source reading is distinct from a source-supported answer to the case.
+        result['structured_answer'] = {
+            'short_answer': result.get('answer', ''),
+            'explanation': ('הציטוט נבדק מול המקור; התאמת משמעותו למקרה עדיין דורשת בדיקה.'
+                            if citations and not claims else
+                            'הסבר מאומת רק בגבולות הטענות והתנאים המקובעים למקור.' if claims else
+                            'אין בסיס מאומת להכרעה; אין להשלים דין מן ההשערה.'),
+            'quotations': quotes, 'explanations': claims,
+            'case_conditions': [c.get('assessment', {}).get('conditions', [])
+                                for c in verification.get('claims', []) if verification.get('verdict')=='ok'
+                                and c.get('assessment', {}).get('status') == 'supported'],
+            'sources': citations,
+            'difference_candidates': (reasoning or {}).get('difference_candidates', []),
+            'caveat': 'אימות תוכנה אינו אישור הלכתי. נדרשת ביקורת הלכתית אנושית.',
+        }
+        result['verification_layers'] = layers
+        result['human_review'] = 'required'
+        result['halachic_verified'] = False
+        return result

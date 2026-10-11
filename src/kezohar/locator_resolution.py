@@ -115,6 +115,8 @@ def build_queue(db_path):
     registry,catalogs=trusted_catalogs()
     with sqlite3.connect(path.as_uri()+'?mode=ro',uri=True) as db:
         sources=[json.loads(r[0]) for r in db.execute('SELECT payload FROM records')]
+    from .locator_hierarchy import hierarchy_diagnostics
+    hierarchy=hierarchy_diagnostics([s for s in sources if s.get('book_id')==BOOK_ID])
     rows=[]
     for s in sources:
         if s.get('book_id')!=BOOK_ID or s['metadata'].get('locator_status')!='ambiguous-file-fields':continue
@@ -124,6 +126,9 @@ def build_queue(db_path):
                      'file_sha256':m['file_sha256'],'text_sha256':m['text_sha256'],
                      'original_rows':m['original_rows'],'heading':m.get('heading',''),
                      'original_locator_fields':m.get('original_locator_fields',[]),
+                     'hierarchy_diagnostics':hierarchy.get(s['source_id'],[]),
+                     'proposed_locator':None,
+                     'admission_rule':'file order and headings cannot authorize a locator; trusted same-edition evidence and review required',
                      'reasons':{'conflict':m['locator_conflict'],'opaque_numbering':m['opaque_numbering']},
                      'candidates':candidates,'status':'needs-human-review' if candidates else 'needs-trusted-same-work-evidence'})
     return {'created_at':utcnow_iso(),'work_id':BOOK_ID,'rows':rows,
