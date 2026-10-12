@@ -4,7 +4,7 @@ from .source_quality import exclusion_reason, applicability_issue
 from .semantic_claims import verify_claim_packet, catalog_revision
 from .permissions import rag_eligible
 import json
-from .source_snapshot import admissible, snapshots
+from .source_snapshot import admissible, snapshots, structurally_valid
 
 
 class ExtractiveSourceVerifier:
@@ -21,6 +21,10 @@ class ExtractiveSourceVerifier:
         except ValueError:
             return {'verdict':'invalid_citation','support':'ambiguous source identity',
                     'human_review':'required','halachic_verified':False}
+        # Preserve the identity collision audit above; quarantine malformed
+        # distinct records before any string/quote operation. They cannot be
+        # cited, while healthy independently identified units remain usable.
+        sources=[s for s in sources if structurally_valid(s)]
         if answer.strip().rstrip('.') == 'אין לי מקור לכך':
             return {'verdict': 'no_source', 'support': 'no claim'}
         try:

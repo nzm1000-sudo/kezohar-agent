@@ -13,6 +13,9 @@ CASES=[
  ('purity','האם מותר לטבול ביום?'),
  ('money','מצאתי כסף ברחוב, האם מותר לי לקחת?'),
  ('meal-blessing','שכחתי לברך ברכת המזון, מה עושים?'),
+ ('speech-colloquial','מותר לשוחח בין תפילין של יד לשל ראש?'),
+ ('spelling-blessing','מה מברכים על פקן?'),
+ ('abbreviation-prayer','שכחתי יעלה ויבוא בר"ח בשחרית, מה עושים?'),
 ]
 def main():
  p=argparse.ArgumentParser();p.add_argument('cycle');p.add_argument('--domains',nargs='+');p.add_argument('--repeat',type=int,default=1);p.add_argument('--circumstances');args=p.parse_args()

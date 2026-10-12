@@ -18,4 +18,5 @@ def permission_for(license_id, licenses, grants=None, resource='', purposes=PURP
 
 
 def rag_eligible(source):
-    return source.get('metadata', {}).get('rag_answers_allowed', True) is True
+    metadata=source.get('metadata',{})
+    return isinstance(metadata,dict) and metadata.get('rag_answers_allowed',True) is True

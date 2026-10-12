@@ -45,8 +45,13 @@ def _stem(t):
     return t
 
 def _tok_match(a, b):
+    from .ranking import canonical_query_token
+    a=canonical_query_token(a)
     if a == b:
         return True
+    from .ranking import FAMILY_TERMS,word_variants
+    for terms in FAMILY_TERMS:
+        if word_variants(a)&terms and word_variants(b)&terms:return True
     sa, sb = _stem(a), _stem(b)
     if sa == sb and len(sa) >= 3:
         return True

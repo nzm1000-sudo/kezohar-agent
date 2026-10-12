@@ -13,6 +13,8 @@ SAMPLES=[
  ('32ac824faedcec19',['מותר לדבר בין תפילין של יד לתפילין של ראש?','האם אפשר לשוחח באמצע הנחת תפילין?']),
 ]
 def main():
+ root=Path('data/store/autonomous-evaluation');p=root/'existing-embeddings-probe.json'
+ if p.exists():raise FileExistsError('existing real probe must be preserved; no repeated model calls')
  a=get_agent();rows=[];sources=[]
  for sid,queries in SAMPLES:
   source=a.knowledge.source_by_id(sid)

@@ -10,7 +10,7 @@ from . import evidence
 from .source_quality import classify, exclusion_reason
 from .halachic_authority import profile as authority_profile, selection_key
 from .question_understanding import analyze, case_coverage
-from .source_snapshot import fingerprint
+from .source_snapshot import fingerprint,structurally_valid
 from .hybrid import SearchResults
 from .semantic_claims import catalog_revision
 
@@ -43,7 +43,7 @@ def diverse_sources(ordered, limit):
 
 def order_sources(sources, question=""):
     """Maran/Sephardi first, then others — stable within groups."""
-    sources = [s for s in sources if not exclusion_reason(question, s)]
+    sources = [s for s in sources if structurally_valid(s) and not exclusion_reason(question, s)]
     if question:
         terms = topic_tokens(question)
         if terms:

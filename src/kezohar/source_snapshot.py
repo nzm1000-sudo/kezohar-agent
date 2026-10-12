@@ -13,8 +13,14 @@ def fingerprint(source):
     record['metadata'] = source.get('metadata', {})
     return hashlib.sha256(json.dumps(record, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
+def structurally_valid(source):
+    return (isinstance(source,dict)
+            and all(isinstance(source.get(k,''),str) for k in ('source_id','work_title','reference','text'))
+            and isinstance(source.get('metadata',{}),dict))
+
+
 def admissible(source):
-    return (rag_eligible(source) and bool(source.get('source_id'))
+    return (structurally_valid(source) and rag_eligible(source) and bool(source.get('source_id'))
             and bool(source.get('reference')) and not source.get('identity_conflict')
             and source.get('metadata', {}).get('locator_status') != 'ambiguous-file-fields')
 

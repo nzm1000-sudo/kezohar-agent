@@ -17,11 +17,13 @@ FAMILIES = [
     ('הדלקת','הדלקה','להדליק','מדליקה','מדליקות','מדליק','מדליקים','ידליק','להדליקה'),
     ('להטביל','להטבילם','להטבילו','טבילת','טבילה','מטביל','מטבילים','לטבול','טובל','טובלת','תטבול','יטבול','תטבל','יטבל','טבלה'),
     ('חודש','חדש','ר״ח','ר"ח'),
-    ('לדבר','דיבור','דבור','לדבר','שח','סח','יפסיק','להפסיק','הפסק','הפסיק','ישיח'),
+    ('לדבר','דיבור','דבור','לדבר','שח','סח','לשוחח','לפטפט','שיחה','דיברתי','דברתי','יפסיק','להפסיק','הפסק','הפסיק','ישיח'),
     ('תפילין','תפלין','תפלה','תפילה'),
     ('לחמם','חימום','חמום','בישול','בשול','חזרה','להחזיר','מבשל'),
     ('מרק','תבשיל'),
 ]
+
+FAMILY_TERMS=tuple(frozenset(hebrew.normalize(w) for w in family) for family in FAMILIES)
 
 def word_variants(token):
     result={token}
@@ -55,10 +57,14 @@ class RetrievalQuery(str):
         result.concept_groups=groups
         return result
 
+QUERY_SPELLINGS={hebrew.normalize('פקן'):hebrew.normalize('פקאן')}
+
+def canonical_query_token(token):return QUERY_SPELLINGS.get(token,token)
+
 def topic_tokens(question):
     # Response-scope instructions and appended facts are not search subjects.
     # Circumstances remain available separately for case coverage/verification.
-    return [t for t in hebrew.tokens(question.split('\n')[0]) if t not in STOP and len(t)>1]
+    return [canonical_query_token(t) for t in hebrew.tokens(question.split('\n')[0]) if t not in STOP and len(t)>1]
 
 def retrieval_query(question):
     terms = topic_tokens(question)
@@ -130,6 +136,8 @@ def topic_overlap(text, question):
     overlap = 0
     for term in terms:
         choices = variants(term)
+        for family in FAMILY_TERMS:
+            if choices & family:choices.update(family)
         if any('חלב' in c for c in choices):
             choices.add('גבינה')
         if choices & expanded:

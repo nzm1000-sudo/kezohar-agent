@@ -990,3 +990,43 @@ def test_embedding_preprocessing_is_an_independent_index_identity(tmp_path,monke
     changed=VectorIndexSpec.from_settings(replace(client.settings,normalization='raw-text-v1'))
     assert original.namespace!=changed.namespace
     with pytest.raises(VectorIndexMismatch):original.check_manifest(changed.manifest())
+
+
+def test_colloquial_speech_and_spelling_variants_only_affect_relevance():
+    s=source(text='בדיקה סינתטית: אסור להפסיק בדיבור בין תפילין של יד לתפילין של ראש, רק כשדגל אלפא פעיל.')
+    v=ExtractiveSourceVerifier().verify('מותר לשוחח בין תפילין של יד לשל ראש?',json.dumps({'selected_sources':['s1']}),[s])
+    assert v['verdict']=='ok' and v['evidence'][0]['quote']==s['text']
+    assert not v['halachic_verified']
+    fruit=source(text='פקאן – העץ / נפשות.',reference='לוח ברכות בדיקה א:א')
+    a=agent([fruit],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    r=a.converse('מה מברכים על פקן?')
+    assert r['verification']['verdict']=='ok' and r['structured_answer']['quotations'][0]['text']==fruit['text']
+
+@pytest.mark.parametrize('bad_field,value',[('metadata',None),('metadata',['unverified']),('text',None),('work_title',['bad'])])
+def test_malformed_record_cannot_hide_or_replace_a_healthy_source(bad_field,value):
+    from kezohar.agent import order_sources
+    from kezohar.source_snapshot import admissible,public_sources
+    malformed=source('bad');malformed[bad_field]=value
+    good=source('good')
+    ranked=order_sources([malformed,good],'בדיקת מקור סינתטי')
+    assert [s['source_id'] for s in ranked]==['good']
+    assert not admissible(malformed)
+    assert public_sources([malformed])[0]['text']==''
+    assert ExtractiveSourceVerifier().eligible_sources('בדיקת מקור סינתטי',[malformed,good])==[good]
+
+@pytest.mark.parametrize('value',[None,[],{'wrong':'shape'}])
+def test_malformed_quote_target_rejected_without_approving_or_crashing(value):
+    bad=source('bad');bad['text']=value
+    good=source('good')
+    v=ExtractiveSourceVerifier()
+    blocked=v.verify('בדיקת מקור סינתטי',json.dumps({'selected_sources':['bad']}),[bad,good])
+    assert blocked['verdict']=='invalid_citation'
+    valid=v.verify('בדיקת מקור סינתטי',json.dumps({'selected_sources':['good']}),[bad,good])
+    assert valid['verdict']=='ok' and valid['evidence'][0]['source_id']=='good'
+
+
+def test_spelling_expansion_does_not_turn_aramaic_issuing_into_a_nut():
+    from kezohar.agent import order_sources
+    fruit=source('fruit',text='פקאן – העץ / נפשות.',reference='לוח ברכות בדיקה א:א')
+    noise=source('noise',text='מפקן בפרק אחר, בדיקה סינתטית שאינה עוסקת באוכל.')
+    assert [s['source_id'] for s in order_sources([noise,fruit],'מה מברכים על פקן?')]==['fruit']
