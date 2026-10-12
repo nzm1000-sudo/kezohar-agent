@@ -928,3 +928,65 @@ def test_contents_index_is_not_a_complete_practical_source():
              text='בדיקה סינתטית: האם מותר לטבול ביום? ראו תשובה אחרת בספר.')
     v=ExtractiveSourceVerifier().verify('האם מותר לטבול ביום?\nטבילת אישה לטהרה',json.dumps({'selected_sources':['s1']}),[s])
     assert v['verdict']!='ok'
+
+
+def local_embedding(tmp_path,monkeypatch):
+    from kezohar import config,model_gate
+    from kezohar.local_embeddings import LocalEmbeddingModel
+    monkeypatch.setattr(model_gate,'ROOT',tmp_path)
+    spec=config.EmbeddingSettings('openai-compatible-local','text-embedding-nomic-embed-text-v1.5',3,'test','raw-text+nomic-prefix-v1')
+    return LocalEmbeddingModel(spec,base_url='http://127.0.0.1:1234/v1')
+
+@pytest.mark.parametrize('url',['https://example.com/v1','http://8.8.8.8/v1','http://169.254.169.254/v1',
+                                'http://localhost/v1?secret=x','http://user:secret@localhost/v1'])
+def test_embedding_adapter_cannot_send_books_to_external_or_credential_endpoint(tmp_path,monkeypatch,url):
+    from kezohar.local_embeddings import LocalEmbeddingModel
+    client=local_embedding(tmp_path,monkeypatch)
+    with pytest.raises(ValueError):LocalEmbeddingModel(client.settings,base_url=url)
+
+
+def test_real_embedding_batch_roles_order_and_dimension_validation(tmp_path,monkeypatch):
+    from kezohar import local_embeddings
+    client=local_embedding(tmp_path,monkeypatch);bodies=[]
+    def transport(url,body,timeout):
+        bodies.append(body)
+        return {'model':client.settings.model,'data':[{'index':1,'embedding':[0,3,4]},{'index':0,'embedding':[3,4,0]}]}
+    monkeypatch.setattr(local_embeddings,'request_embeddings',transport)
+    result=client.embed_many(['alpha','beta'],task='query')
+    assert result==[[0.6,0.8,0.0],[0.0,0.6,0.8]]
+    assert bodies[0]['input']==['search_query: alpha','search_query: beta']
+    assert client.spec.normalization=='raw-text+nomic-prefix-v1'
+
+@pytest.mark.parametrize('rows,model',[
+    ([{'index':0,'embedding':[1,2]}],None),
+    ([{'index':0,'embedding':[True,0,1]}],'same'),
+    ([{'index':0,'embedding':[float('nan'),0,1]}],'same'),
+    ([{'index':0,'embedding':[0,0,0]}],'same'),
+    ([{'index':0,'embedding':[1,2,3]}],'other-model'),
+    ([{'index':1,'embedding':[1,2,3]}],'same'),
+])
+def test_real_embeddings_fail_closed_on_invalid_space_or_values(tmp_path,monkeypatch,rows,model):
+    from kezohar import local_embeddings
+    from kezohar.embeddings import VectorIndexMismatch
+    client=local_embedding(tmp_path,monkeypatch)
+    monkeypatch.setattr(local_embeddings,'request_embeddings',lambda *a,**kw:
+        {'data':rows,'model':client.settings.model if model=='same' else model})
+    with pytest.raises(VectorIndexMismatch):client.embed('alpha')
+
+
+def test_real_embedding_configuration_does_not_autoload_or_index_corpus(monkeypatch):
+    monkeypatch.setenv('EMBEDDINGS_PROVIDER','openai-compatible-local')
+    monkeypatch.setenv('EMBEDDINGS_MODEL','text-embedding-nomic-embed-text-v1.5')
+    a=agent([source()])
+    assert a.search.vector is None
+    assert a.knowledge.status()['vector_kind']=='disabled'
+
+
+def test_embedding_preprocessing_is_an_independent_index_identity(tmp_path,monkeypatch):
+    from dataclasses import replace
+    from kezohar.embeddings import VectorIndexSpec,VectorIndexMismatch
+    client=local_embedding(tmp_path,monkeypatch)
+    original=client.spec
+    changed=VectorIndexSpec.from_settings(replace(client.settings,normalization='raw-text-v1'))
+    assert original.namespace!=changed.namespace
+    with pytest.raises(VectorIndexMismatch):original.check_manifest(changed.manifest())

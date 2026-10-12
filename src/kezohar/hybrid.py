@@ -1,5 +1,6 @@
 """Hybrid search: BM25 + Vector with RRF fusion (k=60)."""
 from .bm25 import BM25Index
+from . import config
 from .vector import MockVectorStore
 from .embeddings import VectorIndexMismatch
 from .source_snapshot import fingerprint
@@ -46,7 +47,8 @@ class HybridSearch:
     def __init__(self, sources=None, vector_store=None):
         self.bm25 = BM25Index()
         self.vector = None if vector_store is False else (vector_store if vector_store is not None else
-            (MockVectorStore() if not sources or len(sources) <= 10000 else None))
+            (MockVectorStore() if config.get('EMBEDDINGS_PROVIDER','mock')=='mock'
+             and (not sources or len(sources) <= 10000) else None))
         self.vector_status = 'ready' if self.vector is not None else 'disabled'
         if sources:
             self.bm25.build(sources)

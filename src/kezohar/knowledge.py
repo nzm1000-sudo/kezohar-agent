@@ -32,6 +32,7 @@ class KnowledgeBase:
             state = 'reindex-required'
         spec = getattr(vector, 'index_spec', None)
         return {'source_count': count, 'vector_status': state,
+                'vector_kind':'disabled' if vector is None else 'heuristic-mock' if spec and spec.provider=='mock' else 'semantic-real' if spec and spec.provider=='openai-compatible-local' else 'external-unclassified',
                 'vector_index': spec.manifest() if spec is not None else None}
 
     def source_by_id(self, source_id, request_budget=None):

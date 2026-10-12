@@ -1,7 +1,7 @@
 """Independent embedding configuration and versioned vector-index identity.
 
-Only the existing free heuristic mock is enabled. No semantic provider or paid
-service is installed; future adapters implement EmbeddingModel and register here.
+The default remains the free heuristic mock. A strictly local real-compatible
+provider is opt-in; answer settings and vector index identity remain separate.
 """
 import hashlib
 import json
@@ -24,7 +24,7 @@ class VectorIndexSpec:
 
     @classmethod
     def from_settings(cls, settings):
-        return cls(settings.provider, settings.model, settings.dimensions, settings.revision)
+        return cls(settings.provider, settings.model, settings.dimensions, settings.revision,settings.normalization)
 
     @property
     def namespace(self):
@@ -61,7 +61,11 @@ class MockEmbeddingModel:
         return _embed_heuristic(text, self.spec.dimensions)
 
 
-_PROVIDERS = {'mock': MockEmbeddingModel}
+def _local_factory(settings):
+    from .local_embeddings import LocalEmbeddingModel
+    return LocalEmbeddingModel(settings)
+
+_PROVIDERS = {'mock': MockEmbeddingModel,'openai-compatible-local':_local_factory}
 
 
 def register_embedding_provider(name, factory):

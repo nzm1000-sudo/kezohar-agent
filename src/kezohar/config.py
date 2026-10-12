@@ -78,6 +78,7 @@ class EmbeddingSettings:
     model: str
     dimensions: int
     revision: str
+    normalization: str = 'hebrew-normalize-v1'
 
 
 def embedding_settings():
@@ -87,4 +88,5 @@ def embedding_settings():
     return EmbeddingSettings(provider=get('EMBEDDINGS_PROVIDER', 'mock'),
                              model=get('EMBEDDINGS_MODEL', 'hash-trigram-v1'),
                              dimensions=dimensions,
-                             revision=get('EMBEDDINGS_REVISION', '1'))
+                             revision=get('EMBEDDINGS_REVISION', '1'),
+                             normalization=get('EMBEDDINGS_NORMALIZATION','hebrew-normalize-v1'))
