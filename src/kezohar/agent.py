@@ -25,8 +25,10 @@ def diverse_sources(ordered, limit):
     # Diversity must not promote a tangential work over a complete case match.
     complete=[s for s in ordered if s.get('concept_coverage',{}).get('complete')]
     if complete and len(complete)<len(ordered):
-        rest=[s for s in ordered if not s.get('concept_coverage',{}).get('complete')]
-        return diverse_sources(complete,limit)+diverse_sources(rest,max(0,limit-len(complete)))
+        # Do not fill unused prompt slots with partial-topic matches when a
+        # directly matching unit exists. A smaller context is preferable here;
+        # the verifier's support and source guards are completely unchanged.
+        return diverse_sources(complete,limit)
     chosen=[];works=set();ids=set()
     for source in ordered:
         work=(source.get('work_title'),source.get('author'),source.get('tradition'))

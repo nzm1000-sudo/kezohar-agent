@@ -63,7 +63,7 @@ def check_relevance(source_text, question, min_overlap=1):
     Uses light prefix-stripping so 'האורז' matches 'אורז' and
     'מברכים' matches 'מברך'. Exact matching would reject valid sources.
     """
-    qt = [t for t in hebrew.tokens(question)]
+    qt = [t for t in hebrew.tokens(question.split("\n")[0])]
     st = [t for t in hebrew.tokens(source_text)]
     # drop tiny stopwords
     stop = {"מה", "מתי", "מותר", "איך", "האם", "על", "עם", "בין", "של", "את", "זה", "זו"}

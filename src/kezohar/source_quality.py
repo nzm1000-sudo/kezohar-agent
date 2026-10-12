@@ -69,6 +69,17 @@ def applicability_issue(question, text):
             and any(w in q for w in ('לדבר','דיבור','דבור','בשיחה'))):
         if not re.search(r'(?:להפסיק|יפסיק).{0,15}(?:בדיבור|בדבור|בשיחה|בדברימ)|(?:מותר|אסור|אינ|לא).{0,15}(?:לדבר|ישיח)', t):
             return 'explicit speech interruption absent; related action is not a substitute'
+    if (any(w in q for w in ('מצאתי','מוצא','מציאה'))
+            and any(w in q for w in ('כספ','מעות','מטבע')) and 'שבת' not in q):
+        ownership=('אבדה','אבידה','יאוש','ייאוש','סימנ','להכריז','הרי אלו שלו','הרי אלוה שלו','זכה','זוכה')
+        if not any(w in t for w in ownership):
+            return 'lost-money ownership absent; movement of money is not permission to acquire it'
+    if (any(w in q for w in ('לטבול','טבילה','טובל')) and ('ביומ' in q or 'בלילה' in q)):
+        if not any(w in q for w in ('טבילת אישה','טבילת אשה','נדה','נידה','טבילת כלימ','כלי','טבילת גבר','כמנהג')):
+            return 'immersion purpose unspecified; distinct types cannot be assumed'
+        clauses=[normalize(c) for c in re.split(r'[.!?;:\n]',text)]
+        if not any(re.search(r'(?:טביל|לטבול|טובל|יטבול|תטבול).{0,100}(?:ביומ|בליל)|(?:ביומ|בליל).{0,100}(?:טביל|לטבול|טובל|יטבול|תטבול)',c) for c in clauses):
+            return 'immersion timing absent; bathing time does not prove immersion time'
     if 'דג' in q and 'חלב' in q:
         # Kashrut of each item alone does not answer mixing fish and milk.
         if not (re.search(r'(?:דג(?:ימ)?\s+(?:עמ\s+(?:ה)?חלב|בחלב)|חלב\s+עמ\s+דג|דג.{0,40}(?:תערובת|תערב|לבשל.{0,12}בחלב))', t)

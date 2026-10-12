@@ -91,6 +91,20 @@ class HalachicOrchestrator:
                 result['structured_answer']['short_answer']=result['answer']
                 from .answer_status import describe
                 result['answer_status']=describe(result)
+        if (analysis['intent']=='immersion-time' and 'immersion_purpose' in analysis['missing_fields']
+                and not analysis['unable_to_clarify'] and not result.get('clarifications')
+                and result.get('verdict') in ('ok','no_source','insufficient_context')):
+            # The type of action is unknown, not merely a detail inside a
+            # known rule. Search was attempted; no unrelated bathing rule is
+            # substituted for personal ritual immersion.
+            c=next(c for c in analysis['clarifications'] if c['field']=='immersion_purpose')
+            result['clarifications']=[c]
+            result['answer']='לא ברור אם שאלת על טבילת אישה, כלים או טבילה כמנהג. '+c['question']
+            result['verdict']='rule_needs_clarification' if result.get('verification',{}).get('verdict')=='ok' else 'needs_clarification'
+            result['mode']='clarification'
+            result['structured_answer']['short_answer']=result['answer']
+            from .answer_status import describe
+            result['answer_status']=describe(result)
         result['answer_policy']={'name':'verified-rules-first','personal_ruling_verified':False,
             'missing_case_fields':analysis['missing_fields'],'conflicting_fields':analysis['conflicting_fields'],
             'clarification_count':len(result.get('clarifications',[])),

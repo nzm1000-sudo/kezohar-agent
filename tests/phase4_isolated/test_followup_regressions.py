@@ -695,3 +695,60 @@ def test_confirmation_memory_is_separate_for_other_conversation_and_new_case(tmp
     assert len(bob['clarifications'])==1 and not store.load('bob',other)[1]['clarification_answers']
     store.turn(a,'alice',cid,Q+' NEW_CASE',circumstances=complete())
     assert store.load('alice',cid)[1]['clarification_answers']=={}
+
+
+def test_scope_boilerplate_does_not_make_unrelated_source_relevant_for_ranking():
+    from kezohar.ranking import topic_tokens,retrieval_query
+    q='מה מברכים על אלפא?'
+    scoped=q+'\nתחום המענה הכללי ברכה ראשונה בלבד; נסיבות אכילה מקור אחר.'
+    assert topic_tokens(q)==topic_tokens(scoped)
+    assert str(retrieval_query(q))==str(retrieval_query(scoped))
+
+
+def test_prompt_does_not_fill_remaining_slots_with_partial_subject_matches():
+    from kezohar.agent import diverse_sources,order_sources
+    exact=source('exact',text='בדיקת סמל אלפא ביתא גמא: אם דגל פעיל מציגים אלפא.')
+    partial=source('partial',text='בדיקה סינתטית גמא בלבד; אין כאן שאר נושאי השאלה.')
+    ordered=order_sources([partial,exact],'בדיקת סמל אלפא ביתא גמא')
+    assert [s['source_id'] for s in diverse_sources(ordered,5)]==['exact']
+
+
+def test_generic_request_verbs_do_not_hide_meal_blessing_subject():
+    from kezohar.ranking import concept_groups,topic_tokens
+    q='שכחתי לברך ברכת המזון, מה עושים?'
+    assert 'עושימ' not in topic_tokens(q)
+    assert not any('עושימ' in g for g in concept_groups(q))
+
+
+def test_no_complete_subject_match_retains_lexical_candidates_for_verification():
+    from kezohar.agent import diverse_sources,order_sources
+    partial=source('partial',text='בדיקה סינתטית אלפא בלבד, יחידה שלמה.')
+    ordered=order_sources([partial],'בדיקה סינתטית אלפא ביתא גמא')
+    assert [s['source_id'] for s in diverse_sources(ordered,5)]==['partial']
+
+
+def test_model_cannot_use_response_scope_words_as_source_relevance():
+    q='בדיקת סמל אלפא'+'\nתחום מענה: כשרות ובשר וחלב וכללי אכילה.'
+    s=source(text='מקור אחר סינתטי על כשרות ובשר וחלב וכללי אכילה; אין בו הקשר מתאים.')
+    v=ExtractiveSourceVerifier().verify(q,json.dumps({'selected_sources':['s1']}),[s])
+    assert v['verdict']=='irrelevant' and not v['halachic_verified']
+
+
+def test_muktzeh_movement_is_not_ownership_of_found_money():
+    s=source(text='בדיקה סינתטית: המוצא כסף בשבת רשאי להזיז אותו ברגלו ולהניחו במקום אחר.')
+    v=ExtractiveSourceVerifier().verify('מצאתי כסף ברחוב, האם מותר לי לקחת?',json.dumps({'selected_sources':['s1']}),[s])
+    assert v['verdict'] in ('irrelevant','insufficient_context')
+
+
+def test_bathing_time_does_not_establish_immersion_time():
+    s=source(text='בדיקה סינתטית: נכון לטבול לכבוד שבת. אחר כך יש להתרחץ ביום שישי.')
+    v=ExtractiveSourceVerifier().verify('האם מותר לטבול ביום?',json.dumps({'selected_sources':['s1']}),[s])
+    assert v['verdict'] in ('irrelevant','insufficient_context')
+
+
+def test_ambiguous_immersion_action_asks_one_after_search_and_stops_on_unknown(monkeypatch):
+    a=agent();seen=[];monkeypatch.setattr(a,'search_only',lambda q,**kw:seen.append(q) or [])
+    r=a.converse('האם מותר לטבול ביום?')
+    assert seen and len(r['clarifications'])==1 and not r['halachic_verified']
+    unknown=a.converse('האם מותר לטבול ביום?',circumstances={'immersion_purpose':'unknown'})
+    assert not unknown.get('clarifications')

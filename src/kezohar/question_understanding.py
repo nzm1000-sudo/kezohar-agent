@@ -3,6 +3,7 @@ from .hebrew import normalize
 from .semantic_claims import question_intent
 
 SLOTS = {
+    'immersion_purpose': ('לאיזו טבילה התכוונת?', {'woman_purity':'טבילת אישה לטהרה','vessels':'טבילת כלים','custom':'טבילה של גבר כמנהג','unknown':'סוג הטבילה אינו ידוע'}),
     'rice_form': ('באיזה אופן האורז נאכל?', {'raw':'אורז לא מבושל', 'cooked':'אורז מבושל', 'mixed':'אורז בתערובת', 'bread':'פת מאורז'}),
     'prayer_stage': ('באיזה שלב נזכרת שלא אמרת יעלה ויבוא?', {'during':'עדיין באמצע התפילה', 'finished':'סיימתי ועקרתי רגליים', 'after_musaf':'לאחר תפילת מוסף'}),
     'oil_case': ('האם זה אותו שמן ששימש לטיגון הבשר, או שמן חדש?', {'same':'אותו שמן ששימש לטיגון הבשר', 'new_clean':'שמן חדש בכלי נקי', 'unknown':'לא ידוע מה מצב השמן'}),
@@ -46,7 +47,12 @@ def analyze(question, circumstances=None):
     if discovery['shared_oil_candidate'] and discovery['waiting_requested']:intent='shared-oil'
     if 'טלפונ' in q and 'שבת' in q:intent='phone-shabbat'
     if 'מיחמ' in q and any(t in q for t in ('להוסיפ','להכניס')):intent='water-urn'
+    if any(t in q for t in ('לטבול','טבילה','טובל')) and any(t in q for t in ('ביומ','בלילה')):intent='immersion-time'
     facts = {}
+    if intent=='immersion-time':
+        if any(w in q for w in ('כלימ','כלי')):facts['immersion_purpose']='vessels'
+        elif any(w in q for w in ('נדה','נידה','טבילת אישה','טבילת אשה')):facts['immersion_purpose']='woman_purity'
+        elif 'טבילת גבר' in q:facts['immersion_purpose']='custom'
     if intent=='food-blessing':
         if 'ראשונה' in q: facts['blessing_stage']='before'
         if 'אחרונה' in q: facts['blessing_stage']='both' if 'ראשונה' in q else 'after'
@@ -97,7 +103,7 @@ def analyze(question, circumstances=None):
         origins['tradition']='policy-default'
     facts.update(supplied)
     origins.update({k:'user-supplied-slot' for k in supplied})
-    requirements = {'rice':['rice_form'], 'yaaleh-shachrit':['prayer_stage'],
+    requirements = {'immersion-time':['immersion_purpose'], 'rice':['rice_form'], 'yaaleh-shachrit':['prayer_stage'],
                     'food-blessing':['blessing_stage'],
                     'yaaleh-general':['prayer_service','prayer_stage'],
                     'soup-reheat':['soup_cooked','soup_temperature','reheating_method'],

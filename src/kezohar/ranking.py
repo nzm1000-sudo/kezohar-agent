@@ -5,11 +5,17 @@ STOP = {'מה','מתי','האם','איך','כמה','זמן','על','של','עם'
         'אפשר','צריך','לאכול','ברכה','ברכות','ברכת','מברכים','הלכה','הלכות','מחכים','לגבי'}
 
 STOP = {hebrew.normalize(word) for word in STOP}
-STOP.update(hebrew.normalize(word) for word in ('שכחתי','לומר','חוזרים','ראשונה','אחרונה'))
+STOP.update(hebrew.normalize(word) for word in ('שכחתי','לומר','חוזרים','ראשונה','אחרונה','עושים','לעשות','עושה','אני','לי','עכשיו','שאלה','רוצה','לדעת','צריך','צריכה','לשל'))
 
 # Retrieval vocabulary, never a ruling or an evidence approval.
 FAMILIES = [
     ('ויבוא','ויבא'),
+    ('אישה','אשה','נשים'),
+    ('חייב','חייבת','חייבים','חייבות'),
+    ('מצאתי','מצא','המוצא','מוצא','מציאה','אבידה','אבדה'),
+    ('כסף','מעות','מטבע','מטבעות'),
+    ('הדלקת','הדלקה','להדליק','מדליקה','מדליקות','מדליק','מדליקים','ידליק','להדליקה'),
+    ('להטביל','להטבילם','להטבילו','טבילת','טבילה','מטביל','מטבילים'),
     ('חודש','חדש','ר״ח','ר"ח'),
     ('לדבר','דיבור','דבור','לדבר','שח','סח','יפסיק','להפסיק','הפסק','הפסיק','ישיח'),
     ('תפילין','תפלין','תפלה','תפילה'),
@@ -50,7 +56,9 @@ class RetrievalQuery(str):
         return result
 
 def topic_tokens(question):
-    return [t for t in hebrew.tokens(question) if t not in STOP and len(t)>1]
+    # Response-scope instructions and appended facts are not search subjects.
+    # Circumstances remain available separately for case coverage/verification.
+    return [t for t in hebrew.tokens(question.split('\n')[0]) if t not in STOP and len(t)>1]
 
 def retrieval_query(question):
     terms = topic_tokens(question)
