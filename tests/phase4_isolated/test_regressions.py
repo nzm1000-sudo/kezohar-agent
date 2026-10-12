@@ -116,7 +116,9 @@ def test_free_conditions_survive_unrecognized_turns_and_history_pruning(tmp_path
     store=memory(tmp_path,max_turns=1);cid=store.create('a');a=MemoryAgent()
     store.turn(a,'a',cid,Q+' ORIGINAL_FREE_CONDITION',circumstances=complete())
     no_slot=store.turn(a,'a',cid,'UNPARSED_FOLLOWUP_CONDITION')
-    assert no_slot['mode']=='clarification'
+    assert no_slot['verdict']=='test-only' and not no_slot['halachic_verified']
+    assert len(a.calls)==2 and 'UNPARSED_FOLLOWUP_CONDITION' in a.calls[-1][0]
+    assert a.calls[-1][1]['circumstances']=={'rice_form':'cooked'}
     store.turn(a,'a',cid,'LATEST_FREE_CONDITION',circumstances={'rice_form':'raw'})
     sent=a.calls[-1][0]
     assert all(x in sent for x in ('ORIGINAL_FREE_CONDITION','UNPARSED_FOLLOWUP_CONDITION','LATEST_FREE_CONDITION'))
@@ -129,7 +131,8 @@ def test_conflicting_original_wording_and_updated_slot_require_clarification(tmp
     store.turn(a,'a',cid,Q+' לא מבושל',circumstances={'rice_form':'raw'})
     count=len(a.answer_model.calls)
     r=store.turn(a,'a',cid,'TEST_CORRECTION',circumstances=complete())
-    assert r['mode']=='clarification' and len(a.answer_model.calls)==count
+    assert r['mode']=='rule-with-clarification' and len(a.answer_model.calls)==count+1
+    assert len(r['clarifications'])==1 and not r['answer_policy']['personal_ruling_verified']
     assert store.load('a',cid)[1]['root_question']==Q+' לא מבושל'
 
 @pytest.mark.parametrize('changed',[{'text':'different text'},{'version':'other'},

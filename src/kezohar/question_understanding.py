@@ -129,6 +129,14 @@ def contextual_question(question, analysis):
 def effective_question(question, analysis):
     """One case/tradition representation for streaming and orchestration."""
     effective=contextual_question(question,analysis)
+    if analysis['intent']=='food-blessing' and analysis['circumstances'].get('blessing_stage') in (None,'unknown'):
+        # Explicit response scope, not a fact about what the user ate or when.
+        # The existing table verifier can approve a first-column classification;
+        # it still cannot prove an obligation after eating from that column.
+        effective+='\nתחום המענה הכללי: ברכה ראשונה בלבד. אין הנחה בדבר נסיבות האכילה של המשתמש.'
+    if analysis['requires_clarification']:
+        effective+='\nחסרים פרטים להכרעה אישית: הצג רק מקורות לכללים מותנים בשלמותם. אל תניח נסיבות שלא נמסרו.'
+
     tradition=analysis['circumstances']['tradition']
     if tradition=='ashkenazi':effective+='\nלפי פסיקת האשכנזים'
     elif tradition=='both':effective+='\nהשוואת מסורות'
@@ -148,3 +156,23 @@ def case_coverage(question, source):
              'started':('החזיק','יצא')}
     return sum(any(m in text for m in markers.get(v,()))
                for k,v in analysis['circumstances'].items() if k!='tradition')
+
+
+def conflict_confirmation(question, analysis):
+    """One source-independent fact confirmation; never halachic evidence.
+
+    Reuses the existing bounded answer-id transport. The id binds the original
+    question, field and currently reported value, so stale answers cannot settle
+    a different discrepancy. yes/no/unknown all stop repeating that question.
+    """
+    import hashlib
+    if not analysis['conflicting_fields']:return None
+    field=analysis['conflicting_fields'][0]
+    value=analysis['circumstances'][field]
+    key=hashlib.sha256(('case-confirmation-v1|'+normalize(question.split('\n')[0])+'|'+field+'|'+value).encode()).hexdigest()[:32]
+    return {'condition_id':key,'field':key,'kind':'case-confirmation',
+        'circumstance_field':field,'reported_slot_value':value,
+        'question':'הפרט שמסרת כעת הוא ״'+SLOTS[field][1][value]+'״, והוא שונה מהנוסח בשאלה. האם הוא מחליף את הפרט הקודם?',
+        'options':[{'value':'yes','label':'כן, הפרט האחרון מחליף את הקודם'},
+                   {'value':'no','label':'לא; הפרטים עדיין טעונים בירור'},
+                   {'value':'unknown','label':'לא ידוע לי'}]}

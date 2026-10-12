@@ -407,7 +407,9 @@ def test_blessing_table_requires_stage_and_never_proves_last_blessing_conditions
 def test_unknown_circumstance_stops_instead_of_clarification_loop():
     a=agent()
     r=a.converse('מה מברכים על אלפא?',circumstances={'blessing_stage':'unknown'})
-    assert r['verdict']=='insufficient_context' and not r.get('clarifications') and not a.answer_model.calls
+    assert not r.get('clarifications') and not r['halachic_verified']
+    assert r['answer_policy']['missing_case_fields']==['blessing_stage']
+    assert r['question_analysis']['unable_to_clarify']==['blessing_stage']
 
 
 def test_blessing_clarification_is_bounded_and_separates_before_from_after():
@@ -545,8 +547,151 @@ def test_source_condition_roundtrip_normal_http_and_sse(monkeypatch):
     done=streamed[-1][1]
     assert done['answer_status']==normal['answer_status']
     assert done['known_rule_context']==normal['known_rule_context']
-    key=normal['clarifications'][0]['condition_id']
+    assert not normal.get('clarifications') and normal['answer_policy']['conditional_source_reading']
+    key=normal['known_rule_context']['conditions'][0]['condition_id']
     follow=request('/ask',{'question':q,'rule_answers':{key:'unknown'}}).json()
     assert not follow.get('clarifications') and not follow['halachic_verified']
     bad=request('/ask',{'question':q,'stream':True,'rule_answers':{'bad':'yes'}})
     assert bad.status_code==400 and 'event: answer' not in bad.text
+
+# Answer-first policy: facts never become evidence, nor bypass source guards.
+@pytest.mark.parametrize('question',[
+    'מה מברכים על אלפא?',
+    'האם מותר לחמם בשבת מרק אלפא?',
+    'שכחתי לומר יעלה ויבוא בראש חודש אלפא',
+    'מתי מברכים ברכת המזון אלפא?',
+])
+def test_answer_first_retrieves_before_missing_fact_decision(monkeypatch,question):
+    s=source(text=question+' בדיקה סינתטית: אם דגל אלפא פעיל מציגים אלפא, ואם כבוי אין להציג אלפא.')
+    a=agent([s],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    searched=[]
+    monkeypatch.setattr(a,'search_only',lambda q,**kw:searched.append(q) or [s])
+    r=a.converse(question)
+    assert searched and not r.get('clarifications') and not r['halachic_verified']
+    assert r['answer_policy']['search_before_clarification']
+    if r['verification'].get('verdict')=='ok':
+        assert s['text'] in r['structured_answer']['quotations'][0]['text']
+        assert 'אם כבוי' in r['answer']
+
+
+def test_conditional_duration_rule_does_not_force_personal_intake():
+    a=agent([source(text=RULE_TEXT)],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    r=a.converse('בדיקת סמל אלפא')
+    assert not r.get('clarifications') and r['verification']['verdict']=='ok'
+    assert 'משעה' in r['answer'] and 'תנאי נוסף' in r['answer']
+    assert not r['known_rule_context']['case_ruling_verified']
+
+
+def test_unspecified_blessing_scope_is_not_an_assumed_user_fact():
+    a=agent([source(text='אלפא – העץ / נפשות.',reference='לוח ברכות בדיקה א:א')],
+            FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    r=a.converse('מה מברכים על אלפא?')
+    assert not r.get('clarifications') and r['verification']['verdict']=='ok'
+    assert 'blessing_stage' not in r['question_analysis']['circumstances']
+    assert 'ברכה ראשונה לפי הטבלה' in r['answer'] and 'לא אומתו' in r['answer']
+    assert not r['structured_answer']['table_readings'][0]['after_blessing_case_verified']
+
+@pytest.mark.parametrize('slots',[{}, {'blessing_stage':'after'}, {'blessing_stage':'both','food_amount':'at_least_kezayit','eating_time':'within_pras'}])
+def test_table_cannot_issue_after_blessing_ruling_even_after_clarification(slots):
+    a=agent([source(text='אלפא – העץ / נפשות.',reference='לוח ברכות בדיקה א:א')],
+            FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    q='מה הברכה האחרונה על אלפא?'
+    r=a.converse(q,circumstances=slots)
+    assert r['verification']['verdict']=='insufficient_context'
+    assert not r['structured_answer']['quotations'] and not r['halachic_verified']
+
+@pytest.mark.parametrize('target',['',' לפני אכילת חלב'])
+def test_missing_dairy_target_never_disables_shared_oil_waiting_guard(target):
+    q='האם צריך להמתין שש שעות אחרי ציפס שטוגן בשמן שבו טוגנו שניצלים'+target+'?'
+    s=source(text='בדיקה סינתטית: בשר וחלב אין לאכול יחד. אחרי בשר יש להמתין שש שעות. שמן ושניצלים וציפס נזכרים כאן רק ברשימה.')
+    a=agent([s],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    r=a.converse(q)
+    assert r['verdict']=='insufficient_context' and not a.answer_model.calls
+    assert not r['structured_answer']['quotations'] and not r.get('clarifications')
+
+
+def test_neighbouring_physical_action_cannot_answer_explicit_speech_question():
+    s=source(text='בדיקה סינתטית: אין להפסיק במעשה בין תפילין של יד לתפילין של ראש. מעשה הוא כמו דיבור.')
+    q='האם מותר לדבר בין תפילין של יד לתפילין של ראש?'
+    v=ExtractiveSourceVerifier().verify(q,json.dumps({'selected_sources':['s1']}),[s])
+    assert v['verdict'] in ('irrelevant','insufficient_context')
+    a=agent([s],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    r=a.converse(q)
+    assert not a.answer_model.calls and not r['structured_answer']['quotations']
+
+
+def test_one_conflict_question_after_rules_preserves_both_facts_and_no_case_ruling():
+    a=agent([source()],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    r=a.converse(Q+' לא מבושל',circumstances={'rice_form':'cooked'})
+    assert r['verification']['verdict']=='ok' and len(r['clarifications'])==1
+    assert r['question_analysis']['conflicting_fields']==['rice_form']
+    assert not r['answer_policy']['personal_ruling_verified']
+    assert r['structured_answer']['quotations']
+
+
+def test_budget_failure_cannot_be_disguised_as_conflict_clarification():
+    from kezohar.request_budget import RequestBudget
+    a=agent([source()],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    r=a.converse(Q+' לא מבושל',circumstances={'rice_form':'cooked'},request_budget=RequestBudget(max_calls=0))
+    assert r['verdict']=='budget_exhausted' and not r.get('clarifications')
+
+
+def test_source_absence_never_generates_a_case_question_or_a_rule(monkeypatch):
+    a=agent();monkeypatch.setattr(a,'search_only',lambda *a,**kw:[])
+    r=a.converse('האם מותר לחמם מרק בשבת?')
+    assert r['verdict']=='no_source' and not r.get('clarifications')
+    assert not r['structured_answer']['quotations'] and not a.answer_model.calls
+
+@pytest.mark.parametrize('statement',[
+    'בדיקה סינתטית: אסור להפסיק בדיבור בין תפילין של יד לתפילין של ראש כאשר דגל אלפא פעיל.',
+    'בדיקה סינתטית: מותר להפסיק בדיבור בין תפילין של יד לתפילין של ראש כאשר דגל אלפא פעיל.',
+])
+def test_action_coverage_checks_subject_not_predetermined_ruling(statement):
+    s=source(text=statement)
+    v=ExtractiveSourceVerifier().verify('האם מותר לדבר בין תפילין של יד לתפילין של ראש?',
+                                      json.dumps({'selected_sources':['s1']}),[s])
+    assert v['verdict']=='ok' and v['evidence'][0]['quote']==statement
+    assert not v['halachic_verified']
+
+@pytest.mark.parametrize('answer',['yes','no','unknown'])
+def test_answered_conflict_confirmation_is_not_repeated_or_a_case_ruling(answer):
+    a=agent([source()],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    q=Q+' לא מבושל';slots={'rice_form':'cooked'}
+    first=a.converse(q,circumstances=slots);key=first['clarifications'][0]['condition_id']
+    follow=a.converse(q,circumstances=slots,rule_answers={key:answer})
+    assert not follow.get('clarifications')
+    assert follow['answer_policy']['conflict_confirmation']['reported_answer']==answer
+    assert not follow['answer_policy']['personal_ruling_verified']
+    stale=a.converse(q+' נסיבה אחרת',circumstances=slots,rule_answers={key:answer})
+    assert len(stale['clarifications'])==1 and stale['clarifications'][0]['condition_id']!=key
+
+
+def test_memory_retains_answered_confirmation_without_repeating_or_guessing(tmp_path):
+    a=agent([source()],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    store=memory(tmp_path);cid=store.create('alice')
+    store.turn(a,'alice',cid,Q+' לא מבושל',circumstances={'rice_form':'raw'})
+    asked=store.turn(a,'alice',cid,'TEST_CORRECTION',circumstances={'rice_form':'cooked'})
+    key=asked['clarifications'][0]['condition_id']
+    confirmed=store.turn(a,'alice',cid,'TEST_CONFIRM',rule_answers={key:'yes'})
+    assert not confirmed.get('clarifications')
+    follow=store.turn(a,'alice',cid,'TEST_NEXT')
+    assert not follow.get('clarifications') and not follow['halachic_verified']
+    assert follow['answer_policy']['conflict_confirmation']['reported_answer']=='yes'
+    state=store.load('alice',cid)[1]
+    assert state['user_facts']=={'rice_form':'cooked'}
+    assert all(text in a.answer_model.calls[-1][0] for text in ('TEST_CORRECTION','TEST_CONFIRM','TEST_NEXT'))
+    before=len(a.answer_model.calls)
+    with pytest.raises(KeyError):store.turn(a,'bob',cid,'TEST_CONFIRM',rule_answers={key:'yes'})
+    assert len(a.answer_model.calls)==before
+
+
+def test_confirmation_memory_is_separate_for_other_conversation_and_new_case(tmp_path):
+    a=agent([source()],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    store=memory(tmp_path);cid=store.create('alice');other=store.create('bob')
+    slots={'rice_form':'cooked'};q=Q+' לא מבושל'
+    asked=store.turn(a,'alice',cid,q,circumstances=slots);key=asked['clarifications'][0]['condition_id']
+    store.turn(a,'alice',cid,'TEST_CONFIRM',rule_answers={key:'yes'})
+    bob=store.turn(a,'bob',other,q,circumstances=slots)
+    assert len(bob['clarifications'])==1 and not store.load('bob',other)[1]['clarification_answers']
+    store.turn(a,'alice',cid,Q+' NEW_CASE',circumstances=complete())
+    assert store.load('alice',cid)[1]['clarification_answers']=={}

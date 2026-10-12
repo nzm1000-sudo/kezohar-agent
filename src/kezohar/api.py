@@ -157,6 +157,7 @@ def _sse_events(result):
         'verification_layers':result.get('verification_layers'),
         'structured_answer':result.get('structured_answer'),
         'answer_status':result.get('answer_status'),
+        'answer_policy':result.get('answer_policy'),
         'known_rule_context':result.get('known_rule_context'),
         'orchestration':result.get('orchestration'),
         'source_relationships':result.get('source_relationships',[]),
@@ -171,7 +172,7 @@ def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumst
     budget=RequestBudget()
     from .question_understanding import analyze, effective_question
     analysis=analyze(question,circumstances)
-    if analysis['requires_clarification'] and not fastpath.is_out_of_scope(question):
+    if analysis['conflicting_fields'] and not fastpath.is_out_of_scope(question):
         yield from _sse_events(ag.converse(question,circumstances=circumstances,rule_answers=rule_answers,request_budget=budget))
         return
     fast = fastpath.is_out_of_scope(question) or fastpath.handle(question,

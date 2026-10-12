@@ -1,6 +1,6 @@
 """Deterministic specialists share retrieved evidence and one generation budget."""
 from . import fastpath
-from .question_understanding import analyze, effective_question
+from .question_understanding import analyze, effective_question, conflict_confirmation
 from .discovery import SourceDiscoveryAgent
 from .halachic_reasoning import HalachicReasoningAgent
 from .answer_composition import VerifiedAnswerComposer
@@ -22,6 +22,9 @@ class HalachicOrchestrator:
             budget = RequestBudget(seconds=45.0 if research else 5.0)
         trace = ['question-understanding']
         analysis = analyze(question, circumstances)
+        confirmation=conflict_confirmation(question,analysis)
+        confirmation_value=rule_answers.get(confirmation['condition_id']) if confirmation else None
+        source_answers={k:v for k,v in rule_answers.items() if not confirmation or k!=confirmation['condition_id']}
         quick = (fastpath.is_out_of_scope(question) or fastpath.handle(question,
                  lat=kwargs.get('lat') or fastpath.DEFAULT_LAT,
                  lon=kwargs.get('lon') or fastpath.DEFAULT_LON,
@@ -33,21 +36,9 @@ class HalachicOrchestrator:
             result['orchestration'] = {'stages': trace + ['fast-path'], 'budget': budget.report(),
                                        'complexity': 'deterministic-fast-path'}
             return self.composer.compose(result)
-        if analysis['requires_clarification']:
-            if analysis.get('unable_to_clarify'):
-                return self.composer.compose({'answer':'אין מספיק פרטים להכרעה. הפרטים שסומנו כלא ידועים לא יישאלו שוב באותה בקשה; ניתן לעדכן אותם לאחר בירור.',
-                    'mode':'sources-only','verdict':'insufficient_context','sources':[],
-                    'question_analysis':analysis,'missing_information':analysis['missing_fields'],
-                    'original_question':question,'orchestration':{'stages':trace+['clarification-stop'],'budget':budget.report()}})
-            result = {'answer': 'כדי להתאים את המקורות למקרה: ' + ' '.join(
-                        c['question'] for c in analysis['clarifications']),
-                      'mode':'clarification', 'verdict':'needs_clarification', 'sources':[],
-                      'question_analysis':analysis, 'clarifications':analysis['clarifications'],
-                      'explanation':'טרם ניתנה הכרעה הלכתית; חסרות נסיבות או שיש סתירה.',
-                      'original_question':question,
-                      'orchestration':{'stages':trace+['clarification'], 'budget':budget.report(),
-                                       'complexity':'incomplete-case'}}
-            return self.composer.compose(result)
+        # Missing case facts restrict personal applicability, not retrieval.
+        # Search and the independent verifier still run before any clarification.
+        # No default circumstance is created to manufacture a case ruling.
         effective = effective_question(question, analysis)
         try:
             budget.check('source discovery')
@@ -87,7 +78,24 @@ class HalachicOrchestrator:
             result.update(answer='מצב חיפוש: הבקשה הגיעה למגבלת הזמן, הקריאות או ההקשר; אין תשובה מאומתת.',
                           verdict='budget_exhausted',mode='sources-only')
         trace += ['independent-source-verifier', 'verified-answer-composer']
-        result = self.composer.compose(result, reasoning, question=question, rule_answers=rule_answers)
+        result = self.composer.compose(result, reasoning, question=question, rule_answers=source_answers, conditional_first=True)
+        # Contradictory supplied facts cannot be covered by an assumed branch.
+        # Ask only one, AFTER displaying any source-backed rule we could verify.
+        if confirmation and confirmation_value is None and result.get('verdict') in ('ok','no_source','insufficient_context'):
+            candidates=[confirmation]
+            if candidates:
+                result['clarifications']=candidates[:1]
+                result['answer']+='\nיש סתירה בפרטים שנמסרו; אין הכרעה אישית. '+candidates[0]['question']
+                result['mode']='rule-with-clarification' if result.get('verification',{}).get('verdict')=='ok' else 'clarification'
+                result['verdict']='rule_needs_clarification' if result.get('verification',{}).get('verdict')=='ok' else 'needs_clarification'
+                result['structured_answer']['short_answer']=result['answer']
+                from .answer_status import describe
+                result['answer_status']=describe(result)
+        result['answer_policy']={'name':'verified-rules-first','personal_ruling_verified':False,
+            'missing_case_fields':analysis['missing_fields'],'conflicting_fields':analysis['conflicting_fields'],
+            'clarification_count':len(result.get('clarifications',[])),
+            'search_before_clarification':True,'conditional_source_reading':True,
+            'conflict_confirmation':{'id':confirmation['condition_id'],'reported_answer':confirmation_value} if confirmation else None}
         if result.get('verification',{}).get('verdict')!='ok':
             reasoning=dict(reasoning,supported_statement_units=[],distinction_candidates=[],difference_candidates=[])
         graph=getattr(self.agent,'source_graph',None)

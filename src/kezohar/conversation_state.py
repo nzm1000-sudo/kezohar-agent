@@ -91,6 +91,11 @@ class ConversationStore:
         q=normalize(question)
         followup=bool(state['root_question']) and (q.startswith(('ואמ','ומה','אז','בעצמ','תיקונ','לא ','והאמ'))
                                                   or incoming['intent']=='general-halacha')
+        from .source_rules import validate_answers
+        incoming_answers=validate_answers(kwargs.get('rule_answers'))
+        retained=validate_answers(state.get('clarification_answers')) if followup else {}
+        retained.update(incoming_answers)
+        kwargs['rule_answers']=dict(list(retained.items())[-8:])
         if fastpath.is_out_of_scope(question):
             return agent.converse(question,**kwargs)
         if followup:
@@ -105,21 +110,12 @@ class ConversationStore:
                 elif 'נשארו' in q or 'יש פירור' in q:facts['oil_residue']='present'
             if circumstances:
                 facts.update(circumstances)
-            effective=CASE_QUESTIONS.get(state['intent'])
-            # Free-form follow-ups cannot silently add a condition outside the
-            # bounded slot vocabulary. Preserve the input and ask for a full case.
-            recognized=(circumstances or (state['intent']=='shared-oil' and 'oil_residue' in facts
-                         and 'פירור' in q and 'שמנ' in q))
-            if not effective or not recognized:
-                result={'answer':'נא לנסח את המקרה המלא או לבחור נסיבה להמשך; אין להסיק פרט מהזיכרון בלבד.',
-                        'mode':'clarification','verdict':'needs_clarification','sources':[],
-                        'human_review':'required','halachic_verified':False}
-            else:
-                effective=state['root_question']+'\nפרטי המשך שמסר המשתמש; אינם ראיות או הכרעה:\n'+'\n'.join(state['free_conditions'])
-                # Conflicts between earlier wording and updated slots are
-                # deliberately left visible to analyze(), which asks clarification.
-                result=agent.converse(effective,circumstances=facts,**kwargs)
-                state['user_facts']=facts
+            # Free user wording is retained; it is not a parsed circumstance
+            # or halachic evidence. Existing orchestration can now provide
+            # conditional source rules without demanding a recognized slot.
+            effective=state['root_question']+'\nפרטי המשך שמסר המשתמש; אינם ראיות או הכרעה:\n'+'\n'.join(state['free_conditions'])
+            result=agent.converse(effective,circumstances=facts,**kwargs)
+            state['user_facts']=facts
         else:
             result=agent.converse(question,circumstances=circumstances,**kwargs)
             state['root_question']=question
@@ -132,6 +128,7 @@ class ConversationStore:
             elif 'אשכנז' in q or 'ספרד' in q or 'השוואת מסורות' in q:
                 state['user_facts']['tradition']=incoming['circumstances']['tradition']
             state['system_hypotheses']=incoming.get('query_hypotheses',[])
+        state['clarification_answers']=kwargs['rule_answers']
         state['turns'].append({'question':question,'explicit_updates':circumstances or {},
                               'user_facts_snapshot':dict(state['user_facts']),
                               'verdict':result.get('verdict')})

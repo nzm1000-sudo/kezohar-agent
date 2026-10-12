@@ -40,7 +40,7 @@ def verification_layers(verification, sources):
 
 
 class VerifiedAnswerComposer:
-    def compose(self, result, reasoning=None, question=None, rule_answers=None):
+    def compose(self, result, reasoning=None, question=None, rule_answers=None, conditional_first=False):
         result = dict(result)
         # Rebuild derived case data; never trust an old presentation payload.
         result.pop('known_rule_context',None)
@@ -129,15 +129,18 @@ class VerifiedAnswerComposer:
             result['known_rule_context']=rule_context
             if rule_context['rules']:
                 result['structured_answer']['explanations']=rule_context['rules']
-                result['answer']='המקור המאומת, בשינויי לשון מוגבלים בלבד:\n'+'\n'.join(
+                result['answer']='לפי המקור, על תנאיו:\n'+'\n'.join(
                     r['text']+' ('+r['reference']+').' for r in rule_context['rules'])
                 result['structured_answer']['explanation']='הסבר שנוצר בשרת מתוך יחידת המקור המלאה; אין אימות סמנטי כללי או הכרעה במקרה.'
                 missing=[c for c in rule_context['conditions'] if c['status']=='missing']
-                if missing:
+                if missing and not conditional_first:
                     result.update(verdict='rule_needs_clarification',mode='rule-with-clarification',clarifications=missing)
                     result['answer']+='\nחסר פרט להחלת הכלל: '+' '.join(c['question'] for c in missing)
-                elif rule_context['conditions']:
+                elif rule_context['conditions'] and not conditional_first:
                     result['answer']+='\nהפרטים שנמסרו מתועדים בלבד; לא אומתה הכרעה במקרה. תנאים נוספים נשמרו בטקסט המקור.'
+                if conditional_first:
+                    rule_context['presentation']='conditional-rules-first'
+                    result['answer']+='\nזהו כלל לפי תנאיו במקור; אין כאן קביעה שכל התנאים מתקיימים במקרה שלך.'
                 result['structured_answer']['short_answer']=result['answer']
         status=describe(result)
         result['answer_status']=status

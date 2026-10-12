@@ -62,6 +62,13 @@ def classify(source):
 def applicability_issue(question, text):
     """Necessary scenario facets, not proof of entailment or a reference answer."""
     q, t = normalize(question), normalize(text)
+    # Retrieval aliases may match a neighbouring action (e.g. a physical
+    # interruption compared with speech). That is not evidence for the asked
+    # action. Require explicit speech language, independently of book priority.
+    if (any(w in q for w in ('תפילינ','תפלינ')) and 'יד' in q and 'ראש' in q
+            and any(w in q for w in ('לדבר','דיבור','דבור','בשיחה'))):
+        if not re.search(r'(?:להפסיק|יפסיק).{0,15}(?:בדיבור|בדבור|בשיחה|בדברימ)|(?:מותר|אסור|אינ|לא).{0,15}(?:לדבר|ישיח)', t):
+            return 'explicit speech interruption absent; related action is not a substitute'
     if 'דג' in q and 'חלב' in q:
         # Kashrut of each item alone does not answer mixing fish and milk.
         if not (re.search(r'(?:דג(?:ימ)?\s+(?:עמ\s+(?:ה)?חלב|בחלב)|חלב\s+עמ\s+דג|דג.{0,40}(?:תערובת|תערב|לבשל.{0,12}בחלב))', t)

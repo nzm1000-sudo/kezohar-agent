@@ -12,9 +12,9 @@ INSUFFICIENT = ('אין במקורות שנמצאו ראיה מפורשת ומס
 
 def shared_oil_waiting(question):
     q = normalize(question)
+    # An unspecified target food does not disable the waiting-evidence guard.
     return ('שמנ' in q and any(t in q for t in ('בשר', 'שניצל', 'עופ'))
-            and any(t in q for t in ('להמתינ', 'לחכות', 'מחכ', 'המתנה', 'שש שעות', '6 שעות'))
-            and any(t in q for t in ('חלב', 'גבינה')))
+            and any(t in q for t in ('להמתינ', 'לחכות', 'מחכ', 'המתנה', 'שש שעות', '6 שעות')))
 
 
 def explicit_oil_waiting(text):

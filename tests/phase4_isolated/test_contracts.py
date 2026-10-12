@@ -122,13 +122,19 @@ def test_T01_fast_refuse_no_retrieval_generation_or_persistence(monkeypatch):
         assert r['mode']==mode and r['sources']==[]
     assert a.answer_model.calls==[] and a.search.bm25.docs==before
 
-def test_T02_missing_and_conflicting_slots_stop_before_search(monkeypatch):
-    a=agent()
-    monkeypatch.setattr(a,'search_only',lambda *a,**kw:pytest.fail('search before clarification'))
-    for q,slots in [(Q,None),(Q+' לא מבושל', complete())]:
-        r=a.converse(q,circumstances=slots)
-        assert r['mode']=='clarification' and not r['halachic_verified']
-    assert not a.answer_model.calls
+def test_T02_missing_facts_allow_rules_but_conflicts_prevent_personal_ruling(monkeypatch):
+    # Updated by explicit answer-first policy: search precedes clarification.
+    a=agent();searched=[]
+    monkeypatch.setattr(a,'search_only',lambda q,**kw:searched.append(q) or [source()])
+    general=a.converse(Q)
+    assert searched and general['verification']['verdict']=='ok'
+    assert not general.get('clarifications') and not general['halachic_verified']
+    assert general['answer_policy']['missing_case_fields']==['rice_form']
+    conflict=a.converse(Q+' לא מבושל',circumstances=complete())
+    assert len(searched)==2 and len(a.answer_model.calls)==2
+    assert conflict['verdict']=='rule_needs_clarification' and len(conflict['clarifications'])==1
+    assert not conflict['answer_policy']['personal_ruling_verified']
+    assert source()['text'] in conflict['structured_answer']['quotations'][0]['text']
 
 def test_T03_json_and_sse_effective_questions_match_three_traditions(monkeypatch):
     for tradition in ('sephardi','ashkenazi','both'):
