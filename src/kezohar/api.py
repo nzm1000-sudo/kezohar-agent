@@ -158,11 +158,13 @@ def _sse_events(result):
         'structured_answer':result.get('structured_answer'),
         'answer_status':result.get('answer_status'),
         'answer_policy':result.get('answer_policy'),
+        'timings':result.get('timings'),
+        'retrieval_metrics':result.get('retrieval_metrics'),
         'known_rule_context':result.get('known_rule_context'),
         'orchestration':result.get('orchestration'),
         'source_relationships':result.get('source_relationships',[]),
         'verification':result.get('verification'), 'search_status':result.get('search_status',{'partial':False,'errors':[]}),
-        'error':result.get('error'),
+        'error':result.get('error'), 'technical_error':result.get('technical_error'),
         'human_review':result.get('human_review'),'halachic_verified':result.get('halachic_verified')}, ensure_ascii=False) + "\n\n"
 
 def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumstances=None, rule_answers=None):

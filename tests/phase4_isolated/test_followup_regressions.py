@@ -796,3 +796,135 @@ def test_reference_notes_are_not_split_into_ordinary_rule_paragraphs():
     rendered=explain(s)
     assert note in rendered and '\n\n' in rendered
     assert 'אם דגל פעיל' in rendered
+
+
+def test_retrieval_cache_resolves_current_source_and_never_stores_text(monkeypatch):
+    a=agent();calls=[];original=a.search.search
+    monkeypatch.setattr(a.search,'search',lambda *args,**kw:calls.append(1) or original(*args,**kw))
+    first=a.search_only(Q,cache_namespace='alice');second=a.search_only(Q,cache_namespace='alice')
+    assert len(calls)==1 and second.metrics['cache_hit']
+    first[0]['text']='PRIVATE_USER_MODIFICATION'
+    third=a.search_only(Q,cache_namespace='alice')
+    assert third[0]['text']==source()['text']
+    encoded=json.dumps(list(a.retrieval_cache.entries.items()))
+    assert Q not in encoded and source()['text'] not in encoded and 'PRIVATE_USER_MODIFICATION' not in encoded
+
+@pytest.mark.parametrize('change',[{'version':'new-edition'},{'text':TEXT+' שינוי'},{'metadata':{'rag_answers_allowed':False}}])
+def test_retrieval_cache_never_returns_old_edition_text_or_grant(change):
+    a=agent();old=a.search_only(Q,cache_namespace='alice')
+    for k,v in change.items():setattr(a.search.bm25.docs[0],k,v)
+    fresh=a.search_only(Q,cache_namespace='alice')
+    assert not fresh.metrics['cache_hit'] and fresh
+    for k,v in change.items():assert fresh[0][k]==v
+    if 'metadata' in change:
+        from kezohar.source_snapshot import public_sources
+        assert public_sources(fresh)[0]['text']==''
+
+
+def test_retrieval_cache_disabled_without_trusted_namespace_and_separate_for_owners():
+    a=agent()
+    assert not a.search_only(Q).metrics['cache_hit']
+    assert not a.search_only(Q).metrics['cache_hit']
+    assert not a.search_only(Q,cache_namespace='alice').metrics['cache_hit']
+    assert not a.search_only(Q,cache_namespace='bob').metrics['cache_hit']
+    assert a.search_only(Q,cache_namespace='alice').metrics['cache_hit']
+    assert not a.search_only(Q+' PRIVATE_OTHER_CASE',cache_namespace='alice').metrics['cache_hit']
+
+
+def test_retrieval_cache_expiry_and_capacity_are_bounded(monkeypatch):
+    a=agent();now=[10.0];monkeypatch.setattr('kezohar.retrieval_cache.time.monotonic',lambda:now[0])
+    a.retrieval_cache.ttl=1;a.retrieval_cache.capacity=2
+    a.search_only(Q,cache_namespace='alice');now[0]+=2
+    assert not a.search_only(Q,cache_namespace='alice').metrics['cache_hit']
+    for i in range(5):a.search_only(Q+str(i),cache_namespace='alice')
+    assert len(a.retrieval_cache.entries)<=2
+
+
+def test_sqlite_wal_changes_invalidate_retrieval_revision(tmp_path):
+    import sqlite3
+    from kezohar.library_search import SQLiteLibrarySearch
+    db=make_db(tmp_path,[source()]);backend=SQLiteLibrarySearch(db)
+    with sqlite3.connect(str(db)) as connection:
+        connection.execute('PRAGMA journal_mode=WAL')
+        initial=backend.revision
+        changed=source('other',text=TEXT+' another')
+        connection.execute('INSERT INTO records(id,payload) VALUES (?,?)',('other',json.dumps(changed)))
+        connection.commit()
+        assert backend.revision!=initial
+
+
+def test_direct_table_reading_uses_no_model_but_same_verifier():
+    s=source(text='אלפא – העץ / נפשות.',reference='לוח ברכות בדיקה א:א')
+    a=agent([s],FixedAnswer('MALICIOUS_MODEL_OUTPUT'))
+    r=a.converse('מה מברכים על אלפא?')
+    assert not a.answer_model.calls and r['mode']=='direct-source-reading'
+    assert r['verification']['verdict']=='ok' and r['verification_layers']['permissions']=='passed-current-snapshot'
+    assert r['structured_answer']['quotations'][0]['text']==s['text']
+    assert 'בורא פרי העץ' in r['answer'] and 'תנאי החיוב לא אומתו' in r['answer']
+
+
+def test_direct_table_cannot_skip_conditions_or_after_blessing_guard():
+    s=source(text='אלפא – העץ / נפשות.',reference='לוח ברכות בדיקה א:א')
+    a=agent([s],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    r=a.converse('מה הברכה האחרונה על אלפא?')
+    assert r['verdict']=='insufficient_context' and not r['structured_answer']['quotations']
+    conditional=source(text='אלפא – העץ / נפשות רק אם דגל פעיל.',reference='לוח ברכות בדיקה א:א')
+    a=agent([conditional],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    r=a.converse('מה מברכים על אלפא?')
+    assert a.answer_model.calls and r['mode']!='direct-source-reading'
+
+
+def test_timing_breakdown_and_cache_metadata_are_consistent_in_sse(monkeypatch):
+    a=agent();monkeypatch.setattr(api,'get_agent',lambda:a)
+    r=request('/ask',{'question':Q,'circumstances':complete()}).json()
+    assert r['timings']['total_s']>=r['timings']['model_call_s']>=0
+    assert r['timings']['model_loading_s'] is None
+    done=events(request('/ask',{'question':Q,'circumstances':complete(),'stream':True}).text)[-1][1]
+    assert done['timings']['total_s']>=0 and not done['retrieval_metrics']['cache_hit']
+
+
+def test_local_model_capacity_wait_never_starts_work_after_timeout(tmp_path):
+    from kezohar.model_gate import model_slot,ModelBusy
+    path=tmp_path/'model.lock'
+    with model_slot(1,path=path):
+        with pytest.raises(ModelBusy):
+            with model_slot(0.01,path=path):pytest.fail('overlapping local model work')
+    # A failed waiter never damages/revokes the existing lock or future work.
+    with model_slot(1,path=path) as slot:assert 0<slot['remaining_s']<=1
+
+
+def test_local_model_slot_is_released_on_provider_error(tmp_path):
+    from kezohar.model_gate import model_slot
+    path=tmp_path/'model.lock'
+    with pytest.raises(RuntimeError):
+        with model_slot(1,path=path):raise RuntimeError('synthetic provider failure')
+    with model_slot(1,path=path):pass
+
+
+def test_verification_and_presentation_cannot_publish_after_deadline(monkeypatch):
+    from kezohar.request_budget import RequestBudget
+    now=[10.0];monkeypatch.setattr('kezohar.request_budget.time.monotonic',lambda:now[0])
+    a=agent(model=FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    original=a.source_verifier.verify
+    def late(*args):
+        result=original(*args);now[0]+=10;return result
+    monkeypatch.setattr(a.source_verifier,'verify',late)
+    r=a.converse(Q,circumstances=complete(),request_budget=RequestBudget(seconds=1))
+    assert r['verdict']=='budget_exhausted' and not r['structured_answer']['quotations']
+    assert not r.get('known_rule_context') and not r['halachic_verified']
+
+
+def test_vessel_and_personal_immersion_are_not_interchangeable():
+    woman=source(text='בדיקה סינתטית: אשה נדה תטבול בלילה; אין לטבול ביום במקרה זה.')
+    vessel=source(text='בדיקה סינתטית: כלי זכוכית מותר להטביל ביום, כאשר דגל אלפא פעיל.')
+    v=ExtractiveSourceVerifier()
+    packet=json.dumps({'selected_sources':['s1']})
+    assert v.verify('האם מותר לטבול ביום?\nטבילת כלים',packet,[woman])['verdict']!='ok'
+    assert v.verify('האם מותר לטבול ביום?\nטבילת אישה לטהרה',packet,[vessel])['verdict']!='ok'
+
+
+def test_contents_index_is_not_a_complete_practical_source():
+    s=source(work_title='רב פעלים',reference='רב פעלים, מפתחות א:א',
+             text='בדיקה סינתטית: האם מותר לטבול ביום? ראו תשובה אחרת בספר.')
+    v=ExtractiveSourceVerifier().verify('האם מותר לטבול ביום?\nטבילת אישה לטהרה',json.dumps({'selected_sources':['s1']}),[s])
+    assert v['verdict']!='ok'

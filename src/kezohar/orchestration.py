@@ -15,8 +15,11 @@ class HalachicOrchestrator:
         self.composer = VerifiedAnswerComposer()
 
     def answer(self, question, circumstances=None, research=False, **kwargs):
+        import time
+        started=time.perf_counter()
         from .source_rules import validate_answers
         rule_answers=validate_answers(kwargs.pop('rule_answers',None))
+        cache_namespace=kwargs.pop('cache_namespace',None)
         budget = kwargs.pop('request_budget', None)
         if budget is None:
             budget = RequestBudget(seconds=45.0 if research else 5.0)
@@ -39,10 +42,11 @@ class HalachicOrchestrator:
         # Missing case facts restrict personal applicability, not retrieval.
         # Search and the independent verifier still run before any clarification.
         # No default circumstance is created to manufacture a case ruling.
+        analysis_s=time.perf_counter()-started
         effective = effective_question(question, analysis)
         try:
             budget.check('source discovery')
-            discovery = self.discovery.discover(effective, kwargs.get('top_k',5), kwargs.pop('retrieved_sources',None),budget)
+            discovery = self.discovery.discover(effective, kwargs.get('top_k',5), kwargs.pop('retrieved_sources',None),budget,cache_namespace=cache_namespace)
             budget.check('source inventory')
         except BudgetExceeded:
             result=self.composer.compose({'answer':'הבקשה הגיעה למגבלת הזמן; אין תשובה מאומתת.',
@@ -78,7 +82,16 @@ class HalachicOrchestrator:
             result.update(answer='מצב חיפוש: הבקשה הגיעה למגבלת הזמן, הקריאות או ההקשר; אין תשובה מאומתת.',
                           verdict='budget_exhausted',mode='sources-only')
         trace += ['independent-source-verifier', 'verified-answer-composer']
+        composing=time.perf_counter()
         result = self.composer.compose(result, reasoning, question=question, rule_answers=source_answers, conditional_first=True)
+        compose_s=time.perf_counter()-composing
+        if budget.remaining()<=0:
+            budget.reason=budget.reason or result.get('technical_error',{}).get('code') or 'answer composition exceeded request deadline'
+            result=self.composer.compose({'answer':'הבקשה הגיעה למגבלת הזמן; אין תשובה מאומתת.',
+                'sources':[],'verdict':'budget_exhausted','mode':'sources-only',
+                'search_status':result.get('search_status',discovery['search_status']),
+                'technical_error':result.get('technical_error',{}),
+                'verification':{'verdict':'budget_exhausted','support':budget.reason}})
         # Contradictory supplied facts cannot be covered by an assumed branch.
         # Ask only one, AFTER displaying any source-backed rule we could verify.
         if confirmation and confirmation_value is None and result.get('verdict') in ('ok','no_source','insufficient_context'):
@@ -127,6 +140,11 @@ class HalachicOrchestrator:
                       differences=reasoning['difference_candidates'])
         result['explanation'] = result['structured_answer']['explanation']
         result.setdefault('search_status',discovery['search_status'])
+        result['timings']=dict(result.get('timings',{}),**generator.timings,
+            question_analysis_s=round(analysis_s,6),retrieval_s=discovery['timing_s'],
+            composition_s=round(compose_s,6),total_s=round(time.perf_counter()-started,6),
+            model_loading_s=None,model_time_scope='transport, queue and generation; loading not separately measurable')
+        result['retrieval_metrics']=discovery['retrieval_metrics']
         result['orchestration'] = {'stages':trace, 'budget':budget.report(),
                                    'retrieval_reused':discovery['reused_retrieval'],
                                    'complexity':'multi-source-review' if reasoning['difference_candidates'] or research else 'focused-case',

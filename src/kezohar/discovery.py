@@ -49,16 +49,24 @@ class SourceDiscoveryAgent:
     def __init__(self, agent):
         self.agent = agent
 
-    def discover(self, question, top_k=5, retrieved_sources=None, request_budget=None):
+    def discover(self, question, top_k=5, retrieved_sources=None, request_budget=None, cache_namespace=None):
+        import time
+        started=time.perf_counter()
         from .retrieval_budget import accepts_budget
         if request_budget:request_budget.check('source discovery')
         analysis = interpret(question)
         if retrieved_sources is None:
             kwargs={'top_k':top_k}
+            import inspect
+            params=inspect.signature(self.agent.search_only).parameters
+            if cache_namespace and ('cache_namespace' in params or any(p.kind==p.VAR_KEYWORD for p in params.values())):
+                kwargs['cache_namespace']=cache_namespace
             if request_budget and accepts_budget(self.agent.search_only):kwargs['request_budget']=request_budget
             sources=self.agent.search_only(question,**kwargs)
         else:sources=retrieved_sources
         # Hints cannot manufacture an identity or turn a pending row into RAG.
         return {'sources': sources, 'query_analysis': analysis,
+                'timing_s':round(time.perf_counter()-started,6),
+                'retrieval_metrics':getattr(sources,'metrics',{}),
                 'search_status':getattr(sources,'status',{'partial':False,'errors':[]}),
                 'reused_retrieval': retrieved_sources is not None}

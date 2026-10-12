@@ -78,6 +78,7 @@ class BudgetedAnswerModel:
         self.model = model
         self.budget = budget
         self.sent_sources = []
+        self.timings={}
         self.source_resolver=source_resolver
 
     @property
@@ -85,6 +86,7 @@ class BudgetedAnswerModel:
         return self.model.identity
 
     def generate(self, question, sources, timeout=4.5):
+        started=time.perf_counter()
         budget = self.budget
         budget.check('generation preparation')
         self.sent_sources = budget.fit(question, sources)
@@ -99,7 +101,12 @@ class BudgetedAnswerModel:
             self.sent_sources=revalidate_sources(self.sent_sources,self.source_resolver,budget)
         budget.check('model call')
         budget.calls += 1
-        result = self.model.generate(question, self.sent_sources, timeout=min(timeout, budget.remaining()))
+        self.timings['context_and_source_revalidation_s']=round(time.perf_counter()-started,6)
+        called=time.perf_counter()
+        try:
+            result = self.model.generate(question, self.sent_sources, timeout=min(timeout, budget.remaining()))
+        finally:
+            self.timings['model_call_s']=round(time.perf_counter()-called,6)
         # A provider can return after its timeout; late output must not be used.
         if budget.remaining() <= 0:
             budget.reason = 'generation exceeded request deadline'

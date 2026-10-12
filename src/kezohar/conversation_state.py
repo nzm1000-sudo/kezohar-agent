@@ -87,6 +87,9 @@ class ConversationStore:
         if not isinstance(question,str) or not question.strip() or len(question)>2000:
             raise ValueError('question must contain 1 to 2000 characters')
         revision,state=self.load(owner,conversation_id)
+        # A caller cannot select another owner's cache namespace. load() has
+        # already verified the trusted owner before any retrieval/generation.
+        kwargs['cache_namespace']=self._owner(owner)
         incoming=analyze(question,circumstances)
         q=normalize(question)
         followup=bool(state['root_question']) and (q.startswith(('ואמ','ומה','אז','בעצמ','תיקונ','לא ','והאמ'))

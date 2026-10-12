@@ -31,7 +31,11 @@ class SQLiteLibrarySearch:
 
     @property
     def revision(self):
-        revision=self.path.stat().st_mtime_ns if self.path.exists() else None
+        def signature(path):
+            stat=path.stat() if path.exists() else None
+            return (stat.st_mtime_ns,stat.st_size,stat.st_ino) if stat else None
+        # Active WAL writes need not touch the main database mtime.
+        revision=(signature(self.path),signature(Path(str(self.path)+'-wal')))
         if self.locator_overlay is not None:
             # Any review/registry/grant change invalidates answers from prior evidence.
             root=Path(__file__).resolve().parents[2]

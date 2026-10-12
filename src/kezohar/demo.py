@@ -95,7 +95,7 @@ async def ask(request: Request):
         started = time.perf_counter()
         agent = demo_agent()
         budget = RequestBudget(seconds=45)
-        result = agent.converse(question, **opts, request_budget=budget, timeout=45, cache_ttl=0)
+        result = agent.converse(question, **opts, cache_namespace='private-loopback-demo', request_budget=budget, timeout=45, cache_ttl=0)
         result = dict(result, sources=public_sources(result.get('sources', [])),
                       demo_elapsed_s=round(time.perf_counter()-started, 3),
                       demo_model=agent.model, demo_model_calls=budget.calls)

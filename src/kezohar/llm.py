@@ -26,6 +26,9 @@ ANSWER_INSTRUCTIONS = """
 class LLMUnavailable(Exception):
     pass
 
+class LocalModelBusy(LLMUnavailable):
+    pass
+
 def _post(base_url, path, body, timeout=60, stream=False):
     url = base_url.rstrip("/") + path
     data = json.dumps(body).encode("utf-8")
@@ -88,8 +91,14 @@ def ask(question, sources, base_url, model, timeout=60, temperature=0.2, max_tok
             "temperature": temperature, "max_tokens": max_tokens,
             "reasoning_effort": "none", "stream": False}
     t0 = time.time()
+    from .model_gate import model_slot,ModelBusy
+    queue_s=0
     try:
-        resp = _post(base_url, "/chat/completions", body, timeout=timeout)
+        with model_slot(timeout) as slot:
+            queue_s=slot['queue_s']
+            resp = _post(base_url, "/chat/completions", body, timeout=slot['remaining_s'])
+    except ModelBusy:
+        raise LocalModelBusy('local model capacity wait exhausted') from None
     except LLMUnavailable:
         raise
     except Exception as e:
@@ -100,7 +109,7 @@ def ask(question, sources, base_url, model, timeout=60, temperature=0.2, max_tok
     except Exception:
         raise LLMUnavailable("LLM bad response")
     return {"answer": text.strip(), "elapsed_s": round(dt, 2), "model": model,
-            "finish_reason": resp['choices'][0].get('finish_reason'), "usage": resp.get('usage', {})}
+            "queue_s":round(queue_s,6),"finish_reason": resp['choices'][0].get('finish_reason'), "usage": resp.get('usage', {})}
 
 def check_health(base_url, timeout=8):
     """Non-destructive GET /models probe. Returns (ok, models|error). Never unloads models."""

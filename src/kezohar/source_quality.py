@@ -11,6 +11,10 @@ from .hebrew import normalize
 def classify(source):
     title = source.get('work_title', '')
     label = title + ' ' + unquote(urlsplit(source.get('source_url', '')).path).replace('_',' ')
+    # A contents/index entry is a locator aid, not the complete ruling unit.
+    if re.search(r'מפתחות|תוכן עניינימ|תוכן עניינים',normalize(source.get('reference',''))):
+        return {'domain':'torah-study','source_type':'reference-index',
+                'halachic_authority':'unclassified','classification_basis':'explicit index locator'}
     # Title/path override claimed metadata: Wikisource also hosts Israeli laws.
     if (re.search(r'(?:תקנות|פקודת)\s+[א-ת]', label)
             or re.search(r'חוק\s+(?:התקשורת|העונשין|שירות|רישוי|יסוד)|צו\s+(?:הפיקוח|רישוי)', label)):
@@ -77,6 +81,10 @@ def applicability_issue(question, text):
     if (any(w in q for w in ('לטבול','טבילה','טובל')) and ('ביומ' in q or 'בלילה' in q)):
         if not any(w in q for w in ('טבילת אישה','טבילת אשה','נדה','נידה','טבילת כלימ','כלי','טבילת גבר','כמנהג')):
             return 'immersion purpose unspecified; distinct types cannot be assumed'
+        if 'טבילת כלימ' in q and not any(w in t for w in ('כלי','כלימ')):
+            return 'vessel immersion not established by personal ritual immersion'
+        if any(w in q for w in ('טבילת אישה','טבילת אשה','נדה','נידה')) and not any(w in t for w in ('נדה','נידה','אשה','אישה','נשימ')):
+            return 'personal purity subject not established by vessel or custom immersion'
         clauses=[normalize(c) for c in re.split(r'[.!?;:\n]',text)]
         if not any(re.search(r'(?:טביל|לטבול|טובל|יטבול|תטבול).{0,100}(?:ביומ|בליל)|(?:ביומ|בליל).{0,100}(?:טביל|לטבול|טובל|יטבול|תטבול)',c) for c in clauses):
             return 'immersion timing absent; bathing time does not prove immersion time'
@@ -103,6 +111,8 @@ def exclusion_reason(question, source, web=False):
     quality = classify(source)
     if quality['domain'] == 'civil-law':
         return 'civil document cannot support halachic ruling'
+    if quality['source_type']=='reference-index':
+        return 'source is a contents/index entry; locate the complete source unit'
     if quality['source_type'] == 'mysticism':
         return 'mystical study is not an applicable ruling source'
     if web and quality['domain'] == 'unknown':

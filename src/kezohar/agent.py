@@ -81,6 +81,8 @@ class Agent:
         self.source_graph = source_graph
         self._cache_revision = None
         self._cache = {}
+        from .retrieval_cache import RetrievalCache
+        self.retrieval_cache=RetrievalCache()
 
     @property
     def base_url(self):
@@ -106,8 +108,8 @@ class Agent:
             return {"answer": "נא לשאול שאלה.", "sources": [], "verdict": "empty",
                     "mode": "refuse", "elapsed_s": 0.0}
         # Permission/index changes invalidate answers derived from older records.
-        revision = (getattr(self.search,"revision",None), self.answer_model.identity,catalog_revision())
-        if revision != self._cache_revision:
+        revision = (getattr(self.search,"revision",None), self.answer_model.identity,catalog_revision()) if cacheable else None
+        if cacheable and revision != self._cache_revision:
             self._cache.clear()
             self._cache_revision = revision
         # cache
@@ -170,11 +172,29 @@ class Agent:
             if not hasattr(generator,'sent_sources'):
                 from .request_budget import revalidate_sources
                 retrieved=revalidate_sources(retrieved,self.knowledge.source_by_id)
-            lr = generator.generate(q, retrieved, timeout=timeout)
-            if hasattr(generator,'sent_sources'):
-                retrieved=generator.sent_sources
+            from .blessing_context import reading, context_issue
+            from .request_budget import revalidate_sources
+            table=reading([{'source_id':s['source_id'],'quote':s['text']} for s in retrieved],retrieved)
+            scope=analyze(q)
+            covered,total=concept_coverage(retrieved[0]['text'],q)
+            direct=(len(retrieved)==1 and len(table)==1 and not table[0]['has_conditions']
+                    and scope['intent']=='food-blessing' and total>0 and covered==total
+                    and context_issue(q,[{'quote':retrieved[0]['text']}]) is None)
+            if direct:
+                # A finite table-column reading needs no language-model choice.
+                # Use the SAME full-source protocol and independent verifier.
+                budget=getattr(generator,'budget',None)
+                if budget:budget.check('direct source reading')
+                retrieved=revalidate_sources(retrieved,self.knowledge.source_by_id,budget)
+                import json
+                lr={'answer':json.dumps({'selected_sources':[retrieved[0]['source_id']]})}
+                mode='direct-source-reading'
+            else:
+                lr = generator.generate(q, retrieved, timeout=timeout)
+                if hasattr(generator,'sent_sources'):
+                    retrieved=generator.sent_sources
+                mode = "llm"
             answer = lr["answer"]
-            mode = "llm"
         except llm_client.LLMUnavailable as exc:
             from .request_budget import SourceChanged
             if isinstance(exc,SourceChanged):
@@ -187,7 +207,9 @@ class Agent:
             res = {"answer": evidence.INSUFFICIENT if evidence.shared_oil_waiting(q) else "מצב חיפוש (המודל אינו זמין): אלו המקורות הקרובים ביותר.",
                    "sources": retrieved, "verdict": "sources-only",
                    "mode": "sources-only", "elapsed_s": round(time.time() - t0, 3),
-                   "technical_error":{"code":"local_model_unavailable","type":type(exc).__name__}}
+                   "technical_error":{"code":"local_model_busy" if isinstance(exc,llm_client.LocalModelBusy) else "local_model_unavailable","type":type(exc).__name__}}
+            if isinstance(exc,llm_client.LocalModelBusy):
+                res['answer']='המודל מטפל בבקשה אחרת ולא היה זמן להמתין. אפשר לנסות שוב.'
             if stopped:
                 res.update(answer='מצב חיפוש: הבקשה הגיעה למגבלת הזמן, הקריאות או ההקשר; אין תשובה מאומתת.',
                            verdict='budget_exhausted')
@@ -199,6 +221,7 @@ class Agent:
         from .request_budget import BudgetExceeded
         budget=getattr(generator,'budget',None)
         current=[]
+        verification_started=time.perf_counter()
         try:
             for source in retrieved:
                 if budget:budget.check('post-generation source lookup')
@@ -211,6 +234,11 @@ class Agent:
         stale=any(s is None or fingerprint(s)!=fingerprint(old) for s,old in zip(current,retrieved))
         v = ({'verdict':'invalid_citation','support':'source changed or unavailable after generation'} if stale else
              self.source_verifier.verify(q, answer, current))
+        if budget and budget.remaining()<=0:
+            budget.reason='source verification exceeded request deadline'
+            return {'answer':'האימות חרג ממגבלת הזמן; אין תשובה מאומתת.',
+                    'sources':[],'verdict':'budget_exhausted','mode':'sources-only',
+                    'human_review':'required','halachic_verified':False}
         if stale:
             retrieved=[s for s in current if s is not None and rag_eligible(s)]
         if v['verdict'] in ('ok', 'no_source'):
@@ -232,14 +260,32 @@ class Agent:
                 source['evidence_support']=v.get('support','exact-extract-only')
         res = {"answer": answer, "sources": retrieved, "verdict": verdict,
                "verification": v, "mode": mode,
+               "timings":{"post_generation_and_verification_s":round(time.perf_counter()-verification_started,6)},
                "human_review": "required", "halachic_verified": False,
                "elapsed_s": round(time.time() - t0, 3)}
         if cacheable:self._cache[q] = (now, res)
         return dict(res)
 
-    def search_only(self, query, top_k=5, request_budget=None):
+    def search_only(self, query, top_k=5, request_budget=None, cache_namespace=None):
         if top_k<1:return []
         from .retrieval_budget import search_backend
+        if request_budget:request_budget.check('retrieval cache inventory')
+        try:
+            scoped=isinstance(cache_namespace,str) and bool(cache_namespace) and len(cache_namespace)<=256
+            revision=getattr(self.search,'revision',None) if scoped else None
+            cacheable=scoped and revision is not None and all(getattr(b,'revision',None) is not None
+                        for b in getattr(self.search,'backends',[]))
+        except Exception:
+            revision=None;cacheable=False
+        key=self.retrieval_cache.key(query,top_k,revision,catalog_revision(),cache_namespace) if cacheable else None
+        if key and self.retrieval_cache.ttl>0:
+            from .request_budget import BudgetExceeded
+            try:cached=self.retrieval_cache.get(key,self.knowledge.source_by_id,request_budget)
+            except BudgetExceeded:raise
+            except Exception:cached=None
+            if cached is not None:
+                hit=SearchResults(cached);hit.metrics={'cache_hit':True,'selected_count':len(hit)}
+                return hit
         results=search_backend(self.search,retrieval_query(query),max(top_k*10,50),request_budget)
         ordered=order_sources(results,query)
         # Pending locators must not be promoted by diversity over usable passages.
@@ -247,7 +293,11 @@ class Agent:
         pending=[s for s in ordered if not rag_eligible(s)]
         selected=diverse_sources(usable,top_k)
         selected=selected+diverse_sources(pending,top_k-len(selected)) if len(selected)<top_k else selected
-        return SearchResults(selected,getattr(results,'errors',[]))
+        out=SearchResults(selected,getattr(results,'errors',[]))
+        out.metrics={'cache_hit':False,'candidate_count':len(results),'selected_count':len(out)}
+        if key and selected and not out.errors and self.retrieval_cache.ttl>0:
+            self.retrieval_cache.put(key,selected)
+        return out
 
     def converse(self, question, circumstances=None, research=False, **kwargs):
         from .orchestration import HalachicOrchestrator
