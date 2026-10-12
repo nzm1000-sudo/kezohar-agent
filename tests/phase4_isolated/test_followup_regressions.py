@@ -400,7 +400,7 @@ def test_blessing_table_requires_stage_and_never_proves_last_blessing_conditions
     passed=v.verify('מה מברכים על אלפא? ברכה ראשונה',packet,[s])
     assert passed['verdict']=='ok'
     r=VerifiedAnswerComposer().compose({'answer':'old','verification':passed,'sources':[s]})
-    assert 'ברכה ראשונה לפי הטבלה' in r['answer'] and 'לא אומתו' in r['answer']
+    assert 'הברכה הראשונה על אלפא' in r['answer'] and 'לא אומתו' in r['answer']
     assert not r['structured_answer']['table_readings'][0]['after_blessing_case_verified']
 
 
@@ -588,7 +588,7 @@ def test_unspecified_blessing_scope_is_not_an_assumed_user_fact():
     r=a.converse('מה מברכים על אלפא?')
     assert not r.get('clarifications') and r['verification']['verdict']=='ok'
     assert 'blessing_stage' not in r['question_analysis']['circumstances']
-    assert 'ברכה ראשונה לפי הטבלה' in r['answer'] and 'לא אומתו' in r['answer']
+    assert 'הברכה הראשונה על אלפא' in r['answer'] and 'לא אומתו' in r['answer']
     assert not r['structured_answer']['table_readings'][0]['after_blessing_case_verified']
 
 @pytest.mark.parametrize('slots',[{}, {'blessing_stage':'after'}, {'blessing_stage':'both','food_amount':'at_least_kezayit','eating_time':'within_pras'}])
@@ -752,3 +752,47 @@ def test_ambiguous_immersion_action_asks_one_after_search_and_stops_on_unknown(m
     assert seen and len(r['clarifications'])==1 and not r['halachic_verified']
     unknown=a.converse('האם מותר לטבול ביום?',circumstances={'immersion_purpose':'unknown'})
     assert not unknown.get('clarifications')
+
+
+def test_clear_blessing_name_is_scoped_to_unconditional_first_column():
+    s=source(text='אלפא – העץ / נפשות.',reference='לוח ברכות בדיקה א:א')
+    a=agent([s],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    r=a.converse('מה מברכים על אלפא?')
+    assert 'הברכה הראשונה על אלפא היא ״בורא פרי העץ״' in r['answer']
+    assert 'תנאי החיוב לא אומתו' in r['answer']
+    assert r['structured_answer']['quotations'][0]['text']==s['text']
+    assert not r['halachic_verified']
+
+
+def test_sentence_layout_keeps_all_conditions_and_original_quote():
+    s=source(text='בדיקה סינתטית אלפא: רק אם דגל פעיל מותר אלפא. אם דגל כבוי אסור אלפא. גם תנאי ביתא נדרש.')
+    a=agent([s],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    r=a.converse('בדיקה סינתטית אלפא')
+    text=r['known_rule_context']['rules'][0]['text']
+    assert '\n\n' in text and ' '.join(text.split())==s['text']
+    assert r['structured_answer']['quotations'][0]['text']==s['text']
+
+
+def test_column_name_policy_change_invalidates_previous_display_proof(monkeypatch):
+    from kezohar import blessing_context
+    s=source(text='אלפא – העץ / נפשות.',reference='לוח ברכות בדיקה א:א')
+    v=ExtractiveSourceVerifier().verify('מה מברכים על אלפא? ברכה ראשונה',json.dumps({'selected_sources':['s1']}),[s])
+    monkeypatch.setitem(blessing_context.FIRST_NAMES,'העץ','כותרת שונה בבדיקה')
+    r=VerifiedAnswerComposer().compose({'verdict':'ok','verification':v,'sources':[s]})
+    assert r['verdict']=='invalid_citation' and not r['structured_answer'].get('table_readings')
+
+
+def test_conditional_column_cannot_be_shortened_to_a_blessing_name():
+    s=source(text='אלפא – העץ רק אם דגל פעיל / נפשות.',reference='לוח ברכות בדיקה א:א')
+    v=ExtractiveSourceVerifier().verify('מה מברכים על אלפא? ברכה ראשונה',json.dumps({'selected_sources':['s1']}),[s])
+    r=VerifiedAnswerComposer().compose({'verdict':'ok','verification':v,'sources':[s]})
+    assert s['text'] in r['answer'] and not r['structured_answer']['table_readings'][0]['first_blessing_name']
+
+
+def test_reference_notes_are_not_split_into_ordinary_rule_paragraphs():
+    from kezohar.source_rules import explain
+    note='[בדיקה א. בדיקה ב. בדיקה ג.]'
+    s=source(text='בדיקת סמל אלפא. אם דגל פעיל מציגים אלפא. '+note)
+    rendered=explain(s)
+    assert note in rendered and '\n\n' in rendered
+    assert 'אם דגל פעיל' in rendered

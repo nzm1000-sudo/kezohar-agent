@@ -3,6 +3,13 @@ import re
 from .hebrew import normalize
 
 
+FIRST_NAMES={
+    'העץ':'בורא פרי העץ','האדמה':'בורא פרי האדמה',
+    'שהכל':'שהכל נהיה בדברו','מזונות':'בורא מיני מזונות',
+    'המוציא':'המוציא לחם מן הארץ',
+}
+
+
 def table_row(text):
     match=re.fullmatch(r'([^\n/–—]+)\s*[–—]\s*([^\n/]+)\s*/\s*([^\n/]+)',text.strip().rstrip('.'))
     if not match:return None
@@ -39,7 +46,7 @@ def reading(evidence, sources):
             # completeness heuristic. Any extra column wording stays verbatim.
             has_conditions=has_conditions or row['first_column'] not in ('העץ','האדמה','שהכל','מזונות','המוציא')
             has_conditions=has_conditions or row['last_column'] not in ('נפשות','מעין שלוש','מעין שלש','על המחיה','ברכת המזון','על העץ')
-            result.append(dict(row,source_id=s['source_id'],reference=s['reference'],
+            result.append(dict(row,first_blessing_name=FIRST_NAMES.get(row['first_column']),source_id=s['source_id'],reference=s['reference'],
                                status='table-classification-only',has_conditions=has_conditions,
                                after_blessing_case_verified=False))
     return result

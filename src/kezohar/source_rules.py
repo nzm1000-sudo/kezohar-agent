@@ -12,17 +12,31 @@ from .source_snapshot import fingerprint
 STYLE = (
     ('עד אימתי','עד מתי'), ('יכול לברך','אפשר לברך'),
     ('כל זמן שאינו','כל עוד אינו'), ('כל זמן שאינה','כל עוד אינה'),
+    ('בדבור','בדיבור'), ('תפלה של יד','תפילין של יד'), ('תפלה של ראש','תפילין של ראש'), ('לתפלה של ראש','לתפילין של ראש'),
+    ('ולכתחלה','ולכתחילה'),
+    ('כנתעכל לגמרי דיינינן ליה','נחשב כאילו התעכל לגמרי'),
     ('מחמת','בגלל'), ('וכן נמי','וכך גם'), ('אע"פ','אף על פי'),
 )
 
 def revision():
-    return hashlib.sha256(json.dumps({'version':1,'edits':STYLE},ensure_ascii=False).encode()).hexdigest()
+    from .blessing_context import FIRST_NAMES
+    return hashlib.sha256(json.dumps({'version':2,'edits':STYLE,'table_names':FIRST_NAMES,
+        'format':'whole-unit-sentence-paragraphs-v3'},sort_keys=True,ensure_ascii=False).encode()).hexdigest()
 
 def explain(source):
     text=strip_niqqud(source.get('text','')).strip()
     for old,new in STYLE:
         text=re.sub(r'(?<!\w)'+re.escape(old)+r'(?!\w)',lambda _:new,text)
-    return text
+    # Layout only: every clause/condition remains in original order.
+    parts=re.split(r'(\[[^\[\]]*\])',text)
+    for i in range(0,len(parts),2):
+        part=parts[i]
+        part=re.sub(r'^עד מתי ([^?:.]{1,60}?)\s+עד(?=\s+ש)',r'עד מתי \1? עד',part)
+        part=re.sub(r'\s+(?=וכמה שיעורו\b)','\n\n',part)
+        part=re.sub(r'וכמה שיעורו\s+', 'וכמה שיעורו?\n',part)
+        part=re.sub(r'\s+(?=ומשעה\b)','\n\n',part)
+        parts[i]=re.sub(r'([.!?])\s+(?=[א-ת])',r'\1\n\n',part)
+    return ''.join(parts)
 
 def validate_answers(answers):
     if answers is None:return {}

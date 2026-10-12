@@ -115,8 +115,8 @@ class VerifiedAnswerComposer:
                     # row might qualify it. Keep the complete literal reading.
                     result['answer']=verification.get('rendered_answer',result.get('answer',''))
                 else:
-                    result['answer']='\n'.join('ברכה ראשונה לפי הטבלה עבור ״'+r['food']+'״: ״'+r['first_column']+'״ ('+r['reference']+').' for r in tables)
-                result['answer']+='\nהעמודה השנייה מסווגת ברכה אחרונה בלבד; אין כאן קביעה שחייבים בה לאחר כל אכילה. תנאי החיוב במקרה שלך לא אומתו.'
+                    result['answer']='\n'.join('הברכה הראשונה על '+r['food']+' היא ״'+r['first_blessing_name']+'״ ('+r['reference']+').' for r in tables)
+                result['answer']+='\nלגבי ברכה אחרונה: המקור הזה אינו מספיק כדי לקבוע אם חייבים בה במקרה שלך; תנאי החיוב לא אומתו.'
                 result['structured_answer']['short_answer']=result['answer']
         # Only validated complete evidence enters this server-authored language
         # layer. It approves no free model paraphrase or case ruling.
