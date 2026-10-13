@@ -1,0 +1,40 @@
+{
+  "scope": "private local evaluation traces only; not a replicated corpus or index",
+  "halachic_verified": false,
+  "human_review": "required",
+  "runs": {
+    "baseline": {
+      "records": 100,
+      "commits": [
+        "0c977e879831c78fc7f897ff65c3e3006587305a"
+      ],
+      "questions_sha256": "d35aa00aa1321a29430a302ffaa1f962a5763f64caa4f473bff800fc47d3a069",
+      "uncompressed_sha256": "87d0ff5bf510338c4189f493bf698d4a1ef69b06d56e88a306ed701e8f59bc72",
+      "archive_sha256": "8def766b7e428baafc51914efb080633963add9c3bf2041d2b0215c2b6e0e821",
+      "uncompressed_bytes": 6572984,
+      "archive_bytes": 887452
+    },
+    "improved": {
+      "records": 100,
+      "commits": [
+        "0ea2091185b86506d8407fcf3feffac658122656"
+      ],
+      "questions_sha256": "d35aa00aa1321a29430a302ffaa1f962a5763f64caa4f473bff800fc47d3a069",
+      "uncompressed_sha256": "ec9fd0c6965b69df5461c363e99b4bb43b34a86fb3d3347701dc667a90e69c02",
+      "archive_sha256": "7bfcb78e391eee37ddfc79ac64b3629c24a07962b77ec6d15f6ef9a087f9fe85",
+      "uncompressed_bytes": 6682009,
+      "archive_bytes": 891145
+    },
+    "refinement": {
+      "records": 100,
+      "commits": [
+        "0351f511f23d1a5a6e2ef1ad15dd572fba646265"
+      ],
+      "questions_sha256": "d35aa00aa1321a29430a302ffaa1f962a5763f64caa4f473bff800fc47d3a069",
+      "uncompressed_sha256": "b75ca04682de7f92febd226d0e4d4238952ea6a680667fe36477fc6ccb767139",
+      "archive_sha256": "3f8372c6d9911b009a4d456233bc52641c4e061ac93ed8a1dd2af8dc7d1ae501",
+      "uncompressed_bytes": 6688307,
+      "archive_bytes": 865489
+    }
+  }
+}

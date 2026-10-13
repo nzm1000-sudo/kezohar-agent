@@ -1181,3 +1181,14 @@ def test_meaning_screen_matches_between_json_and_sse(monkeypatch):
     stream=events(request('/ask',dict(body,stream=True)).text)[-1][1]
     assert stream['meaning_screen']==normal['meaning_screen']
     assert not stream['meaning_screen']['halachic_verified']
+
+
+def test_verified_candidate_after_first_fifty_is_not_lost_before_ranking():
+    noise=[source('unrelated-'+str(n),text='אזור בדיקה זר לחלוטין.') for n in range(51)]
+    target=source('target',text=TEXT)
+    class Candidates:
+        def search(self,query,top_k=5,request_budget=None):
+            if request_budget:request_budget.check('synthetic candidate search')
+            return (noise+[target])[:top_k]
+    a=agent();a.search=Candidates()
+    assert [s['source_id'] for s in a.search_only(Q)]==['target']
