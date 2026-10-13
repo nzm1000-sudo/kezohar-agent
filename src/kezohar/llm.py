@@ -83,7 +83,7 @@ def build_messages(question, sources):
         {"role": "user", "content": user},
     ]
 
-def ask(question, sources, base_url, model, timeout=60, temperature=0.2, max_tokens=700):
+def ask(question, sources, base_url, model, timeout=60, temperature=0.2, max_tokens=700,cancel_event=None):
     """One LLM call. Raises LLMUnavailable when server is down. Never logs base_url secrets."""
     if not base_url:
         raise LLMUnavailable("LLM not configured")
@@ -94,7 +94,7 @@ def ask(question, sources, base_url, model, timeout=60, temperature=0.2, max_tok
     from .model_gate import model_slot,ModelBusy
     queue_s=0
     try:
-        with model_slot(timeout) as slot:
+        with model_slot(timeout,cancel_event=cancel_event) as slot:
             queue_s=slot['queue_s']
             resp = _post(base_url, "/chat/completions", body, timeout=slot['remaining_s'])
     except ModelBusy:

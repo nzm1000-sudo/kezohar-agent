@@ -27,6 +27,8 @@ SLOTS.update({
 
 
 def analyze(question, circumstances=None):
+    from .understanding import understand
+    structure=understand(question)
     supplied = {} if circumstances is None else circumstances
     if not isinstance(supplied, dict) or any(k not in SLOTS or not isinstance(v,str) or v not in SLOTS[k][1] for k,v in supplied.items()):
         raise ValueError('circumstances must contain supported slot/value pairs')
@@ -45,6 +47,7 @@ def analyze(question, circumstances=None):
     from .discovery import interpret
     discovery=interpret(question)
     if discovery['shared_oil_candidate'] and discovery['waiting_requested']:intent='shared-oil'
+    if structure['colloquial_issue_candidates']:intent='shared-oil'
     if 'טלפונ' in q and 'שבת' in q:intent='phone-shabbat'
     if 'מיחמ' in q and any(t in q for t in ('להוסיפ','להכניס')):intent='water-urn'
     if any(t in q for t in ('לטבול','טבילה','טובל')) and any(t in q for t in ('ביומ','בלילה')):intent='immersion-time'
@@ -120,6 +123,7 @@ def analyze(question, circumstances=None):
                       'options':[{'value':v,'label':label} for v,label in SLOTS[k][1].items()]}
                      for k in list(dict.fromkeys(conflicts+missing))[:2]]
     return {'intent':intent or 'general-halacha', 'circumstances':facts,
+            'structure':structure,
             'fact_origins':origins,
             'missing_fields':missing, 'conflicting_fields':conflicts,
             'clarifications':clarification,

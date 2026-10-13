@@ -20,9 +20,13 @@ class HalachicOrchestrator:
         from .source_rules import validate_answers
         rule_answers=validate_answers(kwargs.pop('rule_answers',None))
         cache_namespace=kwargs.pop('cache_namespace',None)
+        study_mode=kwargs.pop('study_mode','normal')
+        if study_mode not in ('normal','deep'):raise ValueError('unknown study mode')
         budget = kwargs.pop('request_budget', None)
         if budget is None:
-            budget = RequestBudget(seconds=45.0 if research else 5.0)
+            budget = RequestBudget(seconds=90.0 if study_mode=='deep' else 45.0 if research else 5.0,
+                                   max_context_bytes=96000 if study_mode=='deep' else 48000)
+        if study_mode=='deep':kwargs['top_k']=max(kwargs.get('top_k',5),8)
         trace = ['question-understanding']
         analysis = analyze(question, circumstances)
         confirmation=conflict_confirmation(question,analysis)
@@ -124,7 +128,7 @@ class HalachicOrchestrator:
             'search_before_clarification':True,'conditional_source_reading':True,
             'conflict_confirmation':{'id':confirmation['condition_id'],'reported_answer':confirmation_value} if confirmation else None}
         if result.get('verification',{}).get('verdict')!='ok':
-            reasoning=dict(reasoning,supported_statement_units=[],distinction_candidates=[],difference_candidates=[])
+            reasoning=dict(reasoning,supported_statement_units=[],distinction_candidates=[],difference_candidates=[],rule_inventories=[])
         graph=getattr(self.agent,'source_graph',None)
         if graph is not None and not budget.reason and budget.remaining()>0 and (research or reasoning['difference_candidates']):
             admissible=self.agent.source_verifier.eligible_sources(effective,result.get('sources',[]))
@@ -138,6 +142,15 @@ class HalachicOrchestrator:
         result.update(question_analysis=analysis, original_question=question,
                       discovery_analysis=discovery['query_analysis'], reasoning=reasoning,
                       differences=reasoning['difference_candidates'])
+        from .research_dossier import build
+        result['research_dossier']=build(question,analysis,result,graph=graph)
+        if budget.remaining()<=0 or (budget.cancel_event is not None and budget.cancel_event.is_set()):
+            return self.composer.compose({'verdict':'budget_exhausted','sources':[],
+                'search_status':result.get('search_status',discovery['search_status']),
+                'answer':'העיון הופסק או הגיע למגבלת הזמן; לא מוצגת תשובה מאומתת.',
+                'verification':{'verdict':'budget_exhausted','support':'analysis deadline or cancellation'},
+                'research_dossier':{'status':'cancelled-or-expired','claims':[],'halachic_verified':False}})
+        result['research_dossier']['study_mode']=study_mode
         result['explanation'] = result['structured_answer']['explanation']
         result.setdefault('search_status',discovery['search_status'])
         result['timings']=dict(result.get('timings',{}),**generator.timings,

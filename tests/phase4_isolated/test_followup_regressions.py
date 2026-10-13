@@ -1192,3 +1192,88 @@ def test_verified_candidate_after_first_fifty_is_not_lost_before_ranking():
             return (noise+[target])[:top_k]
     a=agent();a.search=Candidates()
     assert [s['source_id'] for s in a.search_only(Q)]==['target']
+
+
+def test_structural_understanding_distinguishes_negation_action_and_modality():
+    from kezohar.understanding import understand
+    q='לא בירכתי. האם אני חייב לברך או שזה מנהג?'
+    u=understand(q)
+    first=u['clauses'][0]['actions'][0]
+    assert first['negated'] and q[first['start']:first['end']]=='בירכתי'
+    assert {m['kind'] for m in u['modalities']}=={'obligation','custom'}
+    assert not u['model_proposals_verified']
+    affirmative=understand('בירכתי לפני האוכל')['clauses'][0]['actions'][0]
+    assert not affirmative['negated']
+
+
+def test_colloquial_oil_is_an_issue_candidate_not_a_waiting_ruling():
+    from kezohar.question_understanding import analyze
+    u=analyze('אכלתי ציפס שטיגנו באותו שמן עם שניצלים. אני בשרי?')
+    assert u['intent']=='shared-oil'
+    assert u['structure']['colloquial_issue_candidates']
+    assert 'next_food' in u['missing_fields']
+
+
+def test_planned_search_falls_back_without_manufacturing_source_support():
+    class Routes:
+        def __init__(self):self.calls=0
+        def search(self,q,top_k=5,request_budget=None):
+            self.calls+=1
+            return [] if self.calls==1 else [source(text='בדיקה: דיבור בין תפילין של יד לתפילין של ראש; אסור לדבר רק בדגל פעיל.')]
+    backend=Routes();a=agent();a.search=backend
+    r=a.search_only('האם מותר לדבר בין תפילין של יד לתפילין של ראש?')
+    assert len(r)==1 and backend.calls==2
+    assert len(r.metrics['routes'])==2 and not r.status['partial']
+
+
+def test_rule_inventory_keeps_newline_conditions_and_invalidates_grant_change():
+    from kezohar.rule_inventory import inventory,current
+    s=source(text='כלל אלפא רק בדגל פעיל\nאבל אם כבוי אין להציג.\n')
+    item=inventory(s)
+    assert len(item['clauses'])==2 and all(c['condition_markers'] for c in item['clauses'])
+    assert current(item,s) and not item['conditions_complete']
+    s['metadata']['grant_revision']='new'
+    assert not current(item,s)
+
+
+def test_literal_reference_relationship_is_only_a_proposal_and_revokes_on_grant(tmp_path):
+    from kezohar.relationship_extraction import persist
+    from kezohar.source_graph import HalachicSourceGraph
+    b=source('b',reference='ספר בדיקה ב:ג')
+    a=source('a',text='כתב בשם ספר בדיקה ב:ג, רק בתנאי דגל פעיל.')
+    graph=HalachicSourceGraph(tmp_path/'g.sqlite3')
+    rows=persist(graph,[a,b]);assert rows and rows[0]['status']=='proposed'
+    assert not graph.chains([a,b])
+    graph.review(rows[0]['edge_id'],[a,b],'synthetic reviewer','synthetic relation review')
+    assert graph.chains([a,b]) and not graph.chains([a,b])[0]['usable_as_claim_support']
+    a['metadata']['grant_revision']='changed'
+    assert not graph.chains([a,b])
+
+
+def test_deep_dossier_never_restores_a_stale_source_or_approves_ruling():
+    a=agent();r=a.converse(Q,study_mode='deep',circumstances=complete())
+    assert r['research_dossier']['study_mode']=='deep'
+    assert r['research_dossier']['claims'] and not r['research_dossier']['halachic_verified']
+    from kezohar.research_dossier import build
+    r['sources'][0]['metadata']['rag_answers_allowed']=False
+    d=build(Q,r['question_analysis'],r)
+    assert d['status']=='no-verified-evidence' and not d['claims']
+
+
+def test_cancelled_queue_cannot_start_local_model_work(tmp_path):
+    import threading
+    from kezohar.model_gate import model_slot,ModelBusy
+    event=threading.Event();event.set()
+    with pytest.raises(ModelBusy):
+        with model_slot(1,path=tmp_path/'lock',cancel_event=event):pytest.fail('cancelled work began')
+    from kezohar.request_budget import RequestBudget,BudgetExceeded
+    with pytest.raises(BudgetExceeded):RequestBudget(cancel_event=event).check('retrieval')
+
+
+def test_deep_mode_is_validated_and_exposed_in_both_api_transports(monkeypatch):
+    a=agent();monkeypatch.setattr(api,'get_agent',lambda:a)
+    body={'question':Q,'circumstances':complete(),'study_mode':'deep'}
+    normal=request('/ask',body).json()
+    stream=events(request('/ask',dict(body,stream=True)).text)[-1][1]
+    assert normal['research_dossier']['study_mode']==stream['research_dossier']['study_mode']=='deep'
+    assert request('/ask',dict(body,study_mode='unknown')).status_code==400

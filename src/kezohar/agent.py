@@ -307,7 +307,22 @@ class Agent:
         # Candidate selection precedes eligibility/ranking. Fifty fused rows
         # dropped explicit authorised units behind neighbouring-subject hits.
         # Bounded expansion uses the SAME indexes and request deadline.
-        results=search_backend(self.search,retrieval_query(query),100,request_budget)
+        from .retrieval_plan import plan
+        from .hybrid import rrf_fuse
+        search_plan=plan(query)
+        runs=[];route_trace=[]
+        for route in search_plan['routes']:
+            if runs:
+                preliminary=order_sources(rrf_fuse(runs,top_k=200),query)
+                if any(rag_eligible(s) and s['concept_coverage']['complete'] for s in preliminary):break
+            if request_budget:request_budget.check('planned retrieval route')
+            found=search_backend(self.search,route['query'],100,request_budget)
+            runs.append(found)
+            route_trace.append({'kind':route['kind'],'candidates':len(found),'reason':route['reason']})
+            if getattr(found,'errors',[]):break  # a fallback cannot erase partial search or identity failure
+        results=rrf_fuse(runs,top_k=200)
+        errors=[e for run in runs for e in getattr(run,'errors',[])]+getattr(results,'errors',[])
+        results=SearchResults(results,errors)
         ordered=order_sources(results,query)
         # Pending locators must not be promoted by diversity over usable passages.
         usable=[s for s in ordered if rag_eligible(s)]
@@ -315,7 +330,8 @@ class Agent:
         selected=diverse_sources(usable,top_k)
         selected=selected+diverse_sources(pending,top_k-len(selected)) if len(selected)<top_k else selected
         out=SearchResults(selected,getattr(results,'errors',[]))
-        out.metrics={'cache_hit':False,'candidate_count':len(results),'selected_count':len(out)}
+        out.metrics={'cache_hit':False,'candidate_count':len(results),'selected_count':len(out),
+                     'routes':route_trace,'max_routes':search_plan['max_routes']}
         if key and selected and not out.errors and self.retrieval_cache.ttl>0:
             self.retrieval_cache.put(key,selected)
         return out

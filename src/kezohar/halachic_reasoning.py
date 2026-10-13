@@ -16,6 +16,8 @@ DISTINCTIONS = {
 
 class HalachicReasoningAgent:
     def analyze(self, question, question_analysis, sources):
+        from .rule_inventory import inventory
+        inventories=[i for s in sources if (i:=inventory(s)) is not None]
         supported = []
         distinctions = []
         for source in sources:
@@ -51,6 +53,7 @@ class HalachicReasoningAgent:
                          'missing_fields': question_analysis['missing_fields'],
                          'requested_ruling': question},
                 'supported_statement_units': supported, 'distinction_candidates': distinctions[:8],
+                'rule_inventories':inventories,
                 'difference_candidates': differences(question, sources),
                 'unresolved': ['טענות שאינן בקטלוג והשוואת מחלוקות בין מקורות דורשות בדיקה אנושית'],
                 'halachic_verified': False}

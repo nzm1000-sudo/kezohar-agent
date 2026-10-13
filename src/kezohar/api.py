@@ -79,6 +79,9 @@ def _validate_body(body, search=False):
     if type(top) is not int or top<1:raise ValueError('invalid top_k')
     opts={'top_k':min(top,100 if search else 8)}
     if not search:
+        mode=body.get('study_mode','normal')
+        if mode not in ('normal','deep'):raise ValueError('invalid study_mode')
+        opts['study_mode']=mode
         from .question_understanding import analyze
         analyze(q,body.get('circumstances'))
         opts['circumstances']=body.get('circumstances')
@@ -115,9 +118,9 @@ def _rate_ok(ip, limit=30, window=60):
     _hits[ip] = arr
     return True
 
-def _ask_result(question, top_k=5, lat=None, lon=None, location=None, research=False, circumstances=None, rule_answers=None):
+def _ask_result(question, top_k=5, lat=None, lon=None, location=None, research=False, circumstances=None, rule_answers=None,study_mode='normal'):
     result=get_agent().converse(question,circumstances=circumstances,rule_answers=rule_answers,research=research,
-                               top_k=top_k,lat=lat,lon=lon,location=location)
+                               top_k=top_k,lat=lat,lon=lon,location=location,study_mode=study_mode)
     return dict(result,sources=public_sources(result.get('sources',[])))
 
 def _search_result(q,top_k=5):
@@ -156,6 +159,7 @@ def _sse_events(result):
         'explanation':result.get('explanation'), 'differences':result.get('differences',[]),
         'verification_layers':result.get('verification_layers'),
         'meaning_screen':result.get('meaning_screen'),
+        'research_dossier':result.get('research_dossier'),
         'structured_answer':result.get('structured_answer'),
         'answer_status':result.get('answer_status'),
         'answer_policy':result.get('answer_policy'),
@@ -168,15 +172,16 @@ def _sse_events(result):
         'error':result.get('error'), 'technical_error':result.get('technical_error'),
         'human_review':result.get('human_review'),'halachic_verified':result.get('halachic_verified')}, ensure_ascii=False) + "\n\n"
 
-def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumstances=None, rule_answers=None):
+def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumstances=None, rule_answers=None,study_mode='normal'):
     """Yield source event before starting inference; retrieved passages are reused."""
     ag = get_agent()
+    if study_mode=='deep':top_k=max(top_k,8)
     from .request_budget import RequestBudget
-    budget=RequestBudget()
+    budget=RequestBudget(seconds=90 if study_mode=='deep' else 5,max_context_bytes=96000 if study_mode=='deep' else 48000)
     from .question_understanding import analyze, effective_question
     analysis=analyze(question,circumstances)
     if analysis['conflicting_fields'] and not fastpath.is_out_of_scope(question):
-        yield from _sse_events(ag.converse(question,circumstances=circumstances,rule_answers=rule_answers,request_budget=budget))
+        yield from _sse_events(ag.converse(question,circumstances=circumstances,rule_answers=rule_answers,request_budget=budget,study_mode=study_mode))
         return
     fast = fastpath.is_out_of_scope(question) or fastpath.handle(question,
         lat=lat or fastpath.DEFAULT_LAT, lon=lon or fastpath.DEFAULT_LON,
@@ -185,11 +190,11 @@ def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumst
     from .request_budget import BudgetExceeded
     try:sources = [] if fast else ag.search_only(effective,top_k=top_k,request_budget=budget)
     except BudgetExceeded:
-        yield from _sse_events(ag.converse(question,circumstances=circumstances,rule_answers=rule_answers,request_budget=budget))
+        yield from _sse_events(ag.converse(question,circumstances=circumstances,rule_answers=rule_answers,request_budget=budget,study_mode=study_mode))
         return
     yield 'event: sources\ndata: '+json.dumps({'sources':public_sources(sources),
         'search_status':getattr(sources,'status',{'partial':False,'errors':[]})},ensure_ascii=False)+'\n\n'
-    result=ag.converse(question,circumstances=circumstances,rule_answers=rule_answers,top_k=top_k,lat=lat,lon=lon,location=location,retrieved_sources=sources,request_budget=budget)
+    result=ag.converse(question,circumstances=circumstances,rule_answers=rule_answers,top_k=top_k,lat=lat,lon=lon,location=location,retrieved_sources=sources,request_budget=budget,study_mode=study_mode)
     events=iter(_sse_events(result))
     next(events)  # Source event was already delivered.
     yield from events

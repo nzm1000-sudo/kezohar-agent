@@ -25,7 +25,7 @@ def revalidate_sources(sources,resolver,request_budget=None):
 
 
 class RequestBudget:
-    def __init__(self, seconds=5.0, max_calls=1, max_context_bytes=48000):
+    def __init__(self, seconds=5.0, max_calls=1, max_context_bytes=48000,cancel_event=None):
         if seconds <= 0 or max_calls not in (0, 1) or max_context_bytes < 4096:
             raise ValueError('invalid request budget')
         self.started = time.monotonic()
@@ -36,11 +36,15 @@ class RequestBudget:
         self.context_bytes = 0
         self.dropped_source_ids = []
         self.reason = None
+        self.cancel_event=cancel_event
 
     def remaining(self):
         return max(0.0, self.seconds - (time.monotonic() - self.started))
 
     def check(self, stage):
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            self.reason='request cancelled before '+stage
+            raise BudgetExceeded(self.reason)
         if self.remaining()<=0:
             self.reason='request deadline exhausted before '+stage
             raise BudgetExceeded(self.reason)
@@ -104,11 +108,16 @@ class BudgetedAnswerModel:
         self.timings['context_and_source_revalidation_s']=round(time.perf_counter()-started,6)
         called=time.perf_counter()
         try:
-            result = self.model.generate(question, self.sent_sources, timeout=min(timeout, budget.remaining()))
+            import inspect
+            opts={'timeout':min(timeout,budget.remaining())}
+            if budget.cancel_event is not None and 'cancel_event' in inspect.signature(self.model.generate).parameters:
+                opts['cancel_event']=budget.cancel_event
+            result = self.model.generate(question, self.sent_sources, **opts)
         finally:
             self.timings['model_call_s']=round(time.perf_counter()-called,6)
         # A provider can return after its timeout; late output must not be used.
         if budget.remaining() <= 0:
             budget.reason = 'generation exceeded request deadline'
             raise BudgetExceeded(budget.reason)
+        budget.check('generation result')
         return result

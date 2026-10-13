@@ -10,9 +10,9 @@ class OpenAICompatibleAnswerModel:
     def identity(self):
         return self.settings
 
-    def generate(self, question, sources, timeout=4.5):
+    def generate(self, question, sources, timeout=4.5,cancel_event=None):
         return llm.ask(question, sources, self.settings.base_url,
-                       self.settings.model, timeout=timeout)
+                       self.settings.model, timeout=timeout,cancel_event=cancel_event)
 
     def health(self, timeout=8):
         return llm.check_health(self.settings.base_url, timeout=timeout)
@@ -59,8 +59,12 @@ class ConfiguredAnswerModel:
             self._adapter, self._settings = adapter, settings
         return self._adapter
 
-    def generate(self, question, sources, timeout=4.5):
-        return self._current().generate(question, sources, timeout=timeout)
+    def generate(self, question, sources, timeout=4.5,cancel_event=None):
+        adapter=self._current()
+        import inspect
+        opts={'timeout':timeout}
+        if cancel_event is not None and 'cancel_event' in inspect.signature(adapter.generate).parameters:opts['cancel_event']=cancel_event
+        return adapter.generate(question, sources, **opts)
 
     def health(self, timeout=8):
         return self._current().health(timeout=timeout)

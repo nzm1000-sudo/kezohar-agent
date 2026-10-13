@@ -11,17 +11,17 @@ from .models import utcnow_iso
 from .permissions import rag_eligible
 
 ROOT=Path(__file__).resolve().parents[2]
-RELATIONS={'interprets','cites','same-issue','distinguishes-cases','disagrees','follows','refers-to'}
+RELATIONS={'interprets','cites','same-issue','distinguishes-cases','disagrees','follows','refers-to','qualifies','adds-condition','custom','reported-view'}
 
 
 def fingerprint(source):
-    fields={k:source.get(k,'') for k in ('source_id','work_title','author','reference','version','text','source_url')}
-    return hashlib.sha256(json.dumps(fields,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+    from .source_snapshot import fingerprint as full_fingerprint
+    return full_fingerprint(source)
 
 
 def admissible(source):
-    return (rag_eligible(source) and source.get('source_id') and source.get('reference')
-            and source.get('metadata',{}).get('locator_status')!='ambiguous-file-fields')
+    from .source_snapshot import admissible as fully_admissible
+    return fully_admissible(source)
 
 
 class HalachicSourceGraph:
@@ -103,3 +103,21 @@ class HalachicSourceGraph:
                            'status':status,'evidence':evidence,'review':json.loads(review),
                            'usable_as_claim_support':False,'halachic_verified':False})
         return result
+
+    def chains(self,current_sources,max_nodes=6):
+        """Small acyclic chains of reviewed relationships, not logical entailment."""
+        if type(max_nodes) is not int or not 2<=max_nodes<=8:raise ValueError('bounded chain size required')
+        edges=[e for e in self.relationships(current_sources) if e['status']=='human-reviewed']
+        adjacent={}
+        for edge in edges:adjacent.setdefault(edge['subject'],[]).append(edge)
+        out=[]
+        def walk(node,nodes,path):
+            if len(nodes)>=max_nodes or len(out)>=20:return
+            for edge in adjacent.get(node,[]):
+                if edge['object'] in nodes:continue
+                chain=path+[edge]
+                out.append({'nodes':nodes+[edge['object']],'edges':chain,'status':'human-reviewed-relations-only',
+                            'usable_as_claim_support':False,'halachic_verified':False})
+                walk(edge['object'],nodes+[edge['object']],chain)
+        for start in adjacent:walk(start,[start],[])
+        return out[:20]
