@@ -1,0 +1,22 @@
+[
+  {
+    "file": "catalog-2026-10-14.jsonl.gz",
+    "sha256": "cd17f43300ed1091dc4940b1d5d39996ac4bf1f920370ad5dc6caf8e54ff3289",
+    "records": 5
+  },
+  {
+    "file": "catalog-recheck-2026-10-14.jsonl.gz",
+    "sha256": "779660f873be44691922b45961ae75f66113ef09731cddb19bcb92e92787580f",
+    "records": 2
+  },
+  {
+    "file": "catalog-spelling-2026-10-14.json.gz",
+    "sha256": "6a9d003d4e64cd7c189a9f6967677335aead57a190dd6cb859c43eeb54b31907",
+    "records": 1
+  },
+  {
+    "file": "catalog-secondary-2026-10-14.json.gz",
+    "sha256": "b92f4f04f1b865104aaa96ece026f401515d241d25b066da300b1e0eb8e413d3",
+    "records": 1
+  }
+]

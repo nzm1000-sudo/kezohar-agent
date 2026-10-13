@@ -50,15 +50,19 @@ class QuestionIntentRouter:
         kind=('halachic' if hal else 'fact' if relation or re.match(r'מי (?:היה|הייתה|היתה)',q) else
               'interpretation' if re.search(r'מדוע|למה|פירוש|פרשנות|מה ההבדל|הסבר',q) else 'research')
         explicit_deep=bool(re.search(r'עיון מעמיק|מחקר|חקור|לעומק',q))
-        knowledge=not hal and bool(relation or domains or entities or any(t in q for t in PUBLIC_TOPICS))
+        from .knowledge_catalog import catalog_matches
+        catalog=catalog_matches(q)
+        if catalog and not domains:domains.append('people-and-books')
+        knowledge=not hal and bool(relation or domains or entities or catalog or any(t in q for t in PUBLIC_TOPICS))
         from .fastpath import is_out_of_scope,is_fast_question
         if is_out_of_scope(question):knowledge=False
         if is_fast_question(question) and not relation and kind!='interpretation':knowledge=False
         return {'kind':kind,'domains':list(dict.fromkeys(domains)) or ['unclassified'],
             'engine':'jewish-knowledge' if knowledge else 'halachic',
             'relation':relation,'entity':entity,'public_entities':entities,
+            'public_catalog_matches':catalog,
             'complexity':'deep' if explicit_deep else 'simple' if kind=='fact' else 'explanation',
             'normalized_question':q,'decision_basis':'question grammar and topic cues; not an asserted fact',
-            'export_allowed':not bool(re.search(r'אבא שלי|אמא שלי|אבי שלי|משפחה שלי|קוראים לי|שמי |הטלפון שלי|מספר זהות',q)),
+            'export_allowed':not bool(re.search(r'אבא שלי|אמא שלי|אב שלי|אם שלי|אבי שלי|משפחה שלי|קוראים לי|שמי |הטלפון שלי|מספר זהות',question+' '+q)),
             'spelling_hints':corrections,
             'halachic_verified':False}

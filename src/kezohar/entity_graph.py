@@ -23,9 +23,9 @@ class TorahEntityGraph:
         meta=source.get('metadata',{})
         if meta.get('private') is True or meta.get('visibility')=='private' or meta.get('owner_id') or meta.get('user_id'):return []
         facts=[];text=strip_niqqud(source['text'].replace('־',' '));text=re.sub(r'\s+',' ',text);pin=fingerprint(source)
-        def add(subject,relation,obj,rule):
+        def add(subject,relation,obj,rule,structured=False):
             # Values must occur literally in a primary text/metadata record.
-            if relation!='child-count' and (subject not in text or obj not in text):return
+            if not structured and relation!='child-count' and (subject not in text or obj not in text):return
             facts.append({'subject':subject,'relation':relation,'object':obj,'source_id':source['source_id'],
                 'reference':source['reference'],'version':source['version'],'source_snapshot':pin,
                 'quote':source['text'],'method':rule,'support':'bounded-primary-relation',
@@ -41,9 +41,9 @@ class TorahEntityGraph:
             return facts
         if source.get('metadata',{}).get('knowledge_primary_kind')=='bibliographic-metadata':
             data=json.loads(source['text'])
-            if data.get('title') and isinstance(data.get('authors'),list):
+            if isinstance(data,dict) and isinstance(data.get('title'),str) and data['title'] and isinstance(data.get('authors'),list):
                 for name in data['authors']:
-                    if isinstance(name,str) and name:add(data['title'],'author',name,'official-index-author-field')
+                    if isinstance(name,str) and name:add(data['title'],'author',name,'official-index-author-field',structured=True)
             return facts
         if not biblical(source):return []
         # Marriage + birth in one verse, explicit same subject and pronoun.

@@ -149,7 +149,7 @@ class TorahFactAnswerEngine:
         subject,obj=edge['subject'],edge['object']
         labels={'father':'אביו של {} היה {}.','mother':'אמו של {} הייתה {}.',
                 'wife':'אשתו של {} הייתה {}.','child-count':'ל{} היו {} בנים.',
-                'author':'ברשומת ספריא מופיע {} עם מחבר: {}.'}
+                'author':'לפי רשומת ספריא, מחבר ״{}״ הוא {}.'}
         answer=labels.get(edge['relation'],'{} — {}.').format(subject,obj).rstrip('.')+' ('+source['reference']+').'
         if edge['relation']=='teacher':
             answer='לפי המקור, '+subject+' היה מתלמידי '+obj+'. ('+source['reference']+'). המקור אינו מוכיח שהיה לו רב אחד בלבד.'
@@ -195,8 +195,11 @@ class TorahFactAnswerEngine:
         # Only public registered subjects may be sent outside. A user-written
         # private/unresolved name is never exported by query generation.
         books=self.BOOK_ALIASES
-        if route['relation']=='author':
+        if route['relation']=='author' and route.get('export_allowed') is not False:
             title=next((v for k,v in books.items() if k in route['normalized_question']),None)
+            from .knowledge_catalog import catalog_matches
+            matches=catalog_matches(route['normalized_question']) if route.get('export_allowed') is not False else []
+            if len(matches)==1:title=matches[0]['title']
             if title:
                 self.used_web=True
                 try:
@@ -222,6 +225,22 @@ class TorahFactAnswerEngine:
                 except Exception as exc:self.errors.append({'stage':'encyclopedia','error':type(exc).__name__})
         # Source reading is useful for explanation/history, but does not create
         # an unchecked direct relationship fact or a personal halachic ruling.
+        if route['relation']=='author':
+            from .knowledge_catalog import catalog_matches
+            titles={hebrew.normalize(r[k]) for r in catalog_matches(route['normalized_question'])
+                    for k in ('heTitle','search_spelling_hint') if r.get(k)}
+            for candidate in self.current.values():
+                if candidate.get('metadata',{}).get('knowledge_primary_kind')!='secondary-encyclopedia':continue
+                if hebrew.normalize(candidate['work_title']) not in titles:continue
+                paragraphs=[p.strip() for p in candidate['text'].split('\n') if 20<=len(p.strip())<=750
+                            and re.search(r'ספרו של|מאת|שחיבר|מחבר|נכתב על ידי',p)]
+                if not paragraphs:continue
+                fresh=self.resolve(candidate['source_id'],budget,force=True)
+                if not fresh or fingerprint(fresh)!=fingerprint(candidate):continue
+                quote=paragraphs[0]
+                if not CrossSourceVerification.quotation(fresh,quote):continue
+                return self.result('הייחוס מופיע במקור אנציקלופדי משני:\n״'+quote+'״ ('+fresh['reference']+').',
+                    [fresh],route,budget,quotes=[{'source_id':fresh['source_id'],'reference':fresh['reference'],'quote':quote}])
         from .knowledge_evidence import issue,expected_kind
         candidates=[s for s in self.current.values() if not issue(question,route,s)];keywords=knowledge_queries(question,route)
         tokens=hebrew.tokens(' '.join(keywords))

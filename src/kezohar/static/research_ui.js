@@ -14,6 +14,11 @@ document.querySelector('footer').textContent='אימות תוכנה אינו א�
 function clearConversation(){turnHistory=[];lastResponse=null;facts={};ruleAnswers={};currentQuestion='';$('followup').checked=false;$('result').hidden=true;$('question').value='';$('answer').textContent='';$('sources').replaceChildren();analysisBody.replaceChildren();$('sourceText').textContent='';if($('sourceDialog').open)$('sourceDialog').close()}
 $('newCase').onclick=()=>{if(!busy)clearConversation()};
 $('samples').addEventListener('click',()=>{$('followup').checked=false;turnHistory=[]});
+for(const question of ['מי היה אבא של משה רבנו?','מי כתב את מסילת ישרים?','מהו ספר יצירה?']){
+ const button=document.createElement('button');button.textContent=question;
+ button.onclick=()=>{if(busy)return;$('question').value=question;facts={};ruleAnswers={};$('result').hidden=true};$('samples').prepend(button);
+}
+api('/demo/status').then(d=>{if(d.knowledge_catalog?.public_books){const info=document.createElement('p');info.className='muted';info.textContent=`קטלוג חיפוש: ${d.knowledge_catalog.public_books.toLocaleString('he-IL')} ספרים בספריא · לצד הספרייה המקומית · כל תשובה דורשת מקור מתאים`; $('status').after(info)}}).catch(()=>{});
 const previousRender=render;
 render=function(d){previousRender(d);lastResponse=d;analysisBody.replaceChildren();$('feedbackStatus').textContent='';
  if(d.verification?.verdict==='ok')$('verdict').textContent='ציטוט אומת בתוכנה · נדרשת בדיקה הלכתית';

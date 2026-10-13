@@ -95,9 +95,14 @@ class PublicApiTransport:
     host_locks={host:threading.Lock() for host in SITES}
     host_last={}
     host_cooldown={}
-    def __init__(self,timeout=8,max_requests=18):
+    def __init__(self,timeout=8,max_requests=18,catalog_metadata=False):
         self.timeout=timeout;self.max_requests=max_requests;self.calls=0;self.last=self.host_last
+        self.catalog_metadata=catalog_metadata
         self.counter_lock=threading.Lock()
+    def response_limit(self,url,payload=None):
+        # A larger, fixed bound for the documented title-only catalog endpoint.
+        # Text pages and every other endpoint retain the original bound.
+        return 8*1024*1024 if self.catalog_metadata and url=='https://www.sefaria.org/api/index' and payload is None else MAX_PAGE_BYTES
     def json(self,url,payload=None,request_budget=None):
         host=urllib.parse.urlsplit(canonical_url(url)).hostname
         if SITES[host]['access']!='official-api':raise ResearchError('access policy pending')
@@ -142,18 +147,20 @@ class PublicApiTransport:
             if response.getheader('Content-Type','').split(';')[0] not in ('application/json','application/problem+json'):
                 raise ResearchError('API did not return JSON')
             deadline=time.monotonic()+timeout;chunks=[];size=0
-            while size<=MAX_PAGE_BYTES:
+            limit=self.response_limit(url,payload)
+            while size<=limit:
                 if request_budget:request_budget.check('public API chunk')
                 left=deadline-time.monotonic()
                 if left<=0:raise ResearchError('API body deadline exceeded')
                 if conn.sock:conn.sock.settimeout(min(left,request_budget.remaining()) if request_budget else left)
-                chunk=response.read1(min(16384,MAX_PAGE_BYTES+1-size))
+                chunk=response.read1(min(16384,limit+1-size))
                 if not chunk:break
                 chunks.append(chunk);size+=len(chunk)
             raw=b''.join(chunks)
             if request_budget:request_budget.check('public API return')
-            if len(raw)>MAX_PAGE_BYTES:raise ResearchError('API response too large')
+            if len(raw)>limit:raise ResearchError('API response too large')
             data=json.loads(raw)
+            if self.catalog_metadata and url=='https://www.sefaria.org/api/index' and payload is None and isinstance(data,list):return data
             if not isinstance(data,dict) or data.get('error'):raise ResearchError('API error')
             return data
         finally:conn.close()

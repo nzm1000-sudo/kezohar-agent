@@ -85,8 +85,9 @@ def research_ui():
 def status():
     agent = demo_agent()
     ok, info = agent.answer_model.health(timeout=5)
+    from .knowledge_catalog import catalog_status
     return {'available': ok, 'model': agent.model,
-            'error': '' if ok else str(info), 'retrieval': agent.knowledge.status()}
+            'error': '' if ok else str(info), 'retrieval': agent.knowledge.status(),'knowledge_catalog':catalog_status()}
 
 @app.post('/demo/ask')
 async def ask(request: Request):

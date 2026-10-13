@@ -1703,3 +1703,88 @@ def test_no_source_model_status_can_show_scoped_definition_without_claiming_comp
     assert r['verdict']=='partial_knowledge' and not r['answer_complete'] and not r['fact_verified']
     assert s['text'] in r['answer'] and not r['halachic_verified']
     assert not r['search_status']['partial']  # honest no-source is not a technical failure
+
+
+def test_public_catalog_matches_new_books_without_trusting_route_or_answer_evidence(tmp_path,monkeypatch):
+    from kezohar import knowledge_catalog as kc
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.jewish_web import knowledge_queries
+    p=tmp_path/'catalog.json';monkeypatch.setattr(kc,'storage_path',lambda:p)
+    assert kc.save_catalog([{'category':'Synthetic','contents':[{'title':'Fixture Work','heTitle':'ספר אלפא'}]}],p)==1
+    q='מי חיבר את ספר אלפא?';r=QuestionIntentRouter().route(q)
+    assert r['public_catalog_matches'][0]['title']=='Fixture Work'
+    assert 'ספר אלפא מחבר' in knowledge_queries(q,r)
+    assert not kc.catalog_matches('ספר אלפאית')
+    r['normalized_question']='מידע פרטי שאינו רשום';r['public_catalog_matches']=[{'heTitle':'מידע פרטי'}]
+    assert not knowledge_queries('',r)  # Recompute from trusted catalog, not client route fields.
+    d=json.loads(p.read_text());d['books'][0]['heTitle']='שם ששונה';p.write_text(json.dumps(d))
+    assert not kc.catalog_matches(q)  # Corrupted metadata cannot enable external queries.
+
+
+def test_ambiguous_public_catalog_title_cannot_choose_book(tmp_path):
+    from kezohar.knowledge_catalog import save_catalog,catalog_matches
+    p=tmp_path/'catalog.json'
+    save_catalog([{'title':'A Work','heTitle':'ספר אלפא'},{'title':'B Work','heTitle':'ספר אלפא'}],p)
+    assert not catalog_matches('מי כתב את ספר אלפא?',p)
+
+
+def test_private_question_does_not_export_even_a_registered_book(tmp_path,monkeypatch):
+    from kezohar import knowledge_catalog as kc
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.jewish_web import knowledge_queries
+    p=tmp_path/'catalog.json';monkeypatch.setattr(kc,'storage_path',lambda:p)
+    kc.save_catalog([{'title':'Fixture Work','heTitle':'ספר אלפא'}],p)
+    q='אבא שלי כתב לי על ספר אלפא, מי חיבר אותו?'
+    r=QuestionIntentRouter().route(q)
+    assert not r['export_allowed'] and not knowledge_queries(q,r)
+
+
+def test_larger_catalog_response_bound_never_applies_to_text_or_search():
+    from kezohar.torah_web import PublicApiTransport,MAX_PAGE_BYTES
+    t=PublicApiTransport(catalog_metadata=True)
+    assert t.response_limit('https://www.sefaria.org/api/index')==8*1024*1024
+    assert t.response_limit('https://www.sefaria.org/api/texts/Fixture')==MAX_PAGE_BYTES
+    assert t.response_limit('https://www.sefaria.org/api/index',{})==MAX_PAGE_BYTES
+    assert PublicApiTransport().response_limit('https://www.sefaria.org/api/index')==MAX_PAGE_BYTES
+
+
+def test_metadata_author_acronym_is_checked_in_decoded_field_not_escaped_json():
+    from kezohar.entity_graph import TorahEntityGraph
+    s=source(text=json.dumps({'title':'ספר אלפא','authors':['מחבר "אלפא"']},ensure_ascii=False))
+    s['metadata']['knowledge_primary_kind']='bibliographic-metadata'
+    edges=TorahEntityGraph.extract(s)
+    assert len(edges)==1 and edges[0]['object']=='מחבר "אלפא"'
+    changed=copy.deepcopy(s);changed['text']=json.dumps({'title':'ספר אלפא','mention':'מחבר "אלפא"'},ensure_ascii=False)
+    assert not TorahEntityGraph.extract(changed)
+
+
+def test_public_book_spelling_aid_requires_unique_catalog_match(tmp_path):
+    from kezohar.knowledge_catalog import save_catalog,catalog_matches
+    p=tmp_path/'catalog.json';save_catalog([{'title':'Fixture A','heTitle':'ספר אלפא'}],p)
+    assert catalog_matches('מי כתב את ספר אליפא?',p)[0]['search_spelling_hint']=='ספר אליפא'
+    assert not catalog_matches('מי כתב את הספר הפרטי שלי?',p)
+    save_catalog([{'title':'Fixture A','heTitle':'ספר אלפא'},{'title':'Fixture B','heTitle':'ספר אליפב'}],p)
+    assert not catalog_matches('מי כתב את ספר אליפא?',p)
+
+
+def test_secondary_book_attribution_is_quoted_without_becoming_primary_fact(tmp_path,monkeypatch):
+    from kezohar import knowledge_catalog as kc
+    from kezohar.torah_facts import TorahFactAnswerEngine
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.jewish_web import JewishKnowledgeWebSearch
+    from kezohar.jewish_encyclopedia import JewishEncyclopediaEngine
+    from kezohar.request_budget import RequestBudget
+    p=tmp_path/'catalog.json';monkeypatch.setattr(kc,'storage_path',lambda:p)
+    kc.save_catalog([{'title':'Fixture Work','heTitle':'ספר אלפא'}],p)
+    monkeypatch.setattr(JewishKnowledgeWebSearch,'index',lambda *a,**k:None)
+    monkeypatch.setattr(JewishKnowledgeWebSearch,'search',lambda *a,**k:[])
+    monkeypatch.setattr(JewishEncyclopediaEngine,'search',lambda *a,**k:[])
+    s=source(text='ספר אלפא הוא ספרו של מחבר סינתטי, על סמלים סינתטיים בלבד.',work_title='ספר אלפא')
+    s['metadata']['knowledge_primary_kind']='secondary-encyclopedia'
+    a=agent([s]);q='מי כתב את ספר אלפא?'
+    r=TorahFactAnswerEngine(a,root=tmp_path/'facts').answer(q,QuestionIntentRouter().route(q),RequestBudget())
+    assert r['verdict']=='knowledge_reading' and not r['fact_verified'] and not r['answer_complete']
+    assert s['text'] in r['answer'] and not a.answer_model.calls
+    s['work_title']='ספר ביתא';a=agent([s])
+    r=TorahFactAnswerEngine(a,root=tmp_path/'other').answer(q,QuestionIntentRouter().route(q),RequestBudget())
+    assert not r['sources'] and r['verdict']=='knowledge_insufficient'

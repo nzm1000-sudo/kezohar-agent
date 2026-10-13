@@ -11,7 +11,8 @@ class JewishEncyclopediaEngine:
     def __init__(self,transport=None,licenses=None):self.transport=transport or PublicApiTransport();self.licenses=licenses
     def search(self,route,budget,limit=2):
         if route.get('export_allowed') is False:return []
-        q=route['normalized_question'];terms=[t for t in PUBLIC_ENTITIES+PUBLIC_TOPICS if t in q]
+        from .knowledge_catalog import catalog_matches
+        q=route['normalized_question'];terms=[t for t in PUBLIC_ENTITIES+PUBLIC_TOPICS if t in q]+[r['heTitle'] for r in catalog_matches(q)]
         if not terms:return []
         term=next(iter(sorted(terms,key=len,reverse=True)))
         term=ALIASES.get(term,term)

@@ -10,7 +10,8 @@ from .question_intent import PUBLIC_ENTITIES,PUBLIC_TOPICS
 def knowledge_queries(question,route):
     if route.get('export_allowed') is False:return []
     q=route['normalized_question'];names=[n for n in PUBLIC_ENTITIES if n in q]
-    topics=[t for t in PUBLIC_TOPICS if t in q]
+    from .knowledge_catalog import catalog_matches
+    topics=[t for t in PUBLIC_TOPICS if t in q]+[r['heTitle'] for r in catalog_matches(q)]
     if not names and not topics:return []
     terms=list(dict.fromkeys(names+topics))[:4]
     relation={'father':['ותלד','בני'],'mother':['ותהר','אם'],'wife':['אשתו','לאשה'],
