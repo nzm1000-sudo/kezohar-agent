@@ -70,7 +70,7 @@ def applicability_issue(question, text):
     # interruption compared with speech). That is not evidence for the asked
     # action. Require explicit speech language, independently of book priority.
     if (any(w in q for w in ('תפילינ','תפלינ')) and 'יד' in q and 'ראש' in q
-            and any(w in q for w in ('לדבר','דיבור','דבור','בשיחה'))):
+            and any(w in q for w in ('לדבר','דיבור','דבור','בשיחה','לשוחח','לפטפט'))):
         if not re.search(r'(?:להפסיק|יפסיק).{0,15}(?:בדיבור|בדבור|בשיחה|בדברימ)|(?:מותר|אסור|אינ|לא).{0,15}(?:לדבר|ישיח)', t):
             return 'explicit speech interruption absent; related action is not a substitute'
     if (any(w in q for w in ('מצאתי','מוצא','מציאה'))
