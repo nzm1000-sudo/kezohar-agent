@@ -79,8 +79,8 @@ class JewishKnowledgeWebSearch:
         url='https://www.sefaria.org/'+urllib.parse.quote(title.replace(' ','_'))
         permission={'status':'documented-public-api-metadata','evidence':'https://developers.sefaria.org/reference/get-index',
             'scope':{'metadata_only':True,'book_text':False},'attribution_required':True}
-        return Source(source_id=stable_id('book-metadata',url,text),work_title=data.get('heTitle',title),reference=data.get('heTitle',title)+' — רשומת ספריא',
+        return Source(source_id=stable_id('book-metadata',url,text),work_title=data.get('heTitle',title),author='; '.join(authors),reference=data.get('heTitle',title)+' — רשומת ספריא',
             text=text,normalized_text=hebrew.normalize(text),version='API metadata '+hashlib.sha256(text.encode()).hexdigest()[:12],
             license='public-api-metadata-only',source_url=url,source_project='jewish-knowledge-web',
             attribution='ספריא · '+url,metadata={'rag_answers_allowed':True,'knowledge_primary_kind':'bibliographic-metadata',
-                'locator_status':'official-api-index','permission':permission,'page_sha256':hashlib.sha256(text.encode()).hexdigest()}).to_dict()
+                'locator_status':'official-api-index','permission':permission,'site_name':'ספריא','page_sha256':hashlib.sha256(text.encode()).hexdigest()}).to_dict()
