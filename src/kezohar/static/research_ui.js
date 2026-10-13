@@ -1,7 +1,7 @@
 // Extends the existing local demonstration; history exists only in this tab.
 let turnHistory=[],lastResponse=null,activeRequest=null;
 const controls=document.createElement('div');controls.className='row';
-controls.innerHTML='<label>מצב מענה<select id="studyMode"><option value="normal">חיפוש מקומי</option><option value="hybrid">חיפוש משולב — גם באינטרנט</option><option value="deep">עיון מעמיק — מקומי ואינטרנט</option></select></label><label><input type="checkbox" id="followup"> המשך המקרה הקודם</label><button type="button" id="newCase">מקרה חדש · נקה שיחה זמנית</button><button type="button" id="cancelRequest" disabled>בטל בקשה</button>';
+controls.innerHTML='<label>מצב מענה<select id="studyMode"><option value="normal">מענה רגיל — מקור ציבורי לפי הצורך</option><option value="hybrid">חיפוש משולב — גם באינטרנט</option><option value="deep">עיון מעמיק — מקומי ואינטרנט</option></select></label><label><input type="checkbox" id="followup"> המשך המקרה הקודם</label><button type="button" id="newCase">מקרה חדש · נקה שיחה זמנית</button><button type="button" id="cancelRequest" disabled>בטל בקשה</button>';
 $('form').append(controls);
 const privacy=document.createElement('p');privacy.className='muted';privacy.textContent='בחיפוש משולב נשלחים לאתרים רק מונחי נושא מתוך מילון קבוע. השאלה והיסטוריית השיחה אינן נשלחות. אתרים שהרשאותיהם טרם נבדקו אינם נקראים אוטומטית.';$('form').append(privacy);
 const analysisBox=document.createElement('details');analysisBox.id='analysisBox';
@@ -18,7 +18,13 @@ const previousRender=render;
 render=function(d){previousRender(d);lastResponse=d;analysisBody.replaceChildren();$('feedbackStatus').textContent='';
  if(d.verification?.verdict==='ok')$('verdict').textContent='ציטוט אומת בתוכנה · נדרשת בדיקה הלכתית';
  if(d.verdict==='source_lookup')$('verdict').textContent='טקסט מקור לפי מראה מקום · אינו פסק';
- for(const box of $('sources').children){const text=box.textContent;const s=(d.sources||[]).find(s=>text.includes(s.reference));if(s?.source_project==='verified-web'){
+ if(d.question_intent?.engine==='jewish-knowledge'){
+  $('verdict').textContent=d.fact_verified?'עובדה נתמכת במקור ישיר':d.verdict==='knowledge_reading'?'קריאת מקור — ללא מסקנה חדשה':'לא נמצאה ראיה ישירה';
+  $('verification').textContent=d.fact_verified?'הקשר נבדק במקור ובמהדורה. זו תשובת ידע, לא פסיקה הלכתית.':'התאמת המשמעות דורשת בדיקה; אין להשלים עובדות מזיכרון המודל.';
+  const route=document.createElement('p');route.textContent='סוג השאלה: '+d.question_intent.kind+' · תחומים: '+d.question_intent.domains.join(', ')+' · אינטרנט: '+(d.internet_used?'כן':'לא');analysisBody.append(route);
+  for(const edge of d.verification?.facts||[]){const p=document.createElement('p');p.textContent=edge.subject+' — '+edge.relation+' — '+edge.object+' ('+edge.reference+')';analysisBody.append(p)}
+ }
+ for(const box of $('sources').children){const text=box.textContent;const s=(d.sources||[]).find(s=>text.includes(s.reference));if(s?.source_project==='verified-web'||s?.source_project==='jewish-knowledge-web'){
   const meta=document.createElement('p');meta.className='muted';meta.textContent=['מקור אינטרנטי',s.metadata?.site_name,s.author?'ייחוס מוצהר בדף: '+s.author:'המחבר לא זוהה',s.metadata?.published_at,s.metadata?.rag_answers_allowed?'טקסט מורשה; התאמתו למקרה דורשת אימות':'קטע לגילוי בלבד; אינו ראיה לפסק'].filter(Boolean).join(' · ');box.prepend(meta);
   const button=box.querySelector('button');if(button)button.remove();try{const u=new URL(s.source_url);if(u.protocol==='https:'){const a=document.createElement('a');a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';a.textContent='פתח את העמוד המקורי';box.append(a)}}catch(e){}
  }}

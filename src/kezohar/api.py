@@ -161,6 +161,9 @@ def _sse_events(result):
         'meaning_screen':result.get('meaning_screen'),
         'research_dossier':result.get('research_dossier'),
         'question_analysis':result.get('question_analysis'),
+        'question_intent':result.get('question_intent'),
+        'fact_verified':result.get('fact_verified'),
+        'internet_used':result.get('internet_used'),
         'structured_answer':result.get('structured_answer'),
         'answer_status':result.get('answer_status'),
         'answer_policy':result.get('answer_policy'),
@@ -176,6 +179,10 @@ def _sse_events(result):
 def _stream_local(question, top_k=5, lat=None, lon=None, location=None, circumstances=None, rule_answers=None,study_mode='normal'):
     """Yield source event before starting inference; retrieved passages are reused."""
     ag = get_agent()
+    from .question_intent import QuestionIntentRouter
+    if QuestionIntentRouter().route(question)['engine']=='jewish-knowledge':
+        yield from _sse_events(ag.converse(question,study_mode=study_mode))
+        return
     if study_mode=='deep':top_k=max(top_k,8)
     from .request_budget import RequestBudget
     budget=RequestBudget(seconds=90 if study_mode=='deep' else 5,max_context_bytes=96000 if study_mode=='deep' else 48000)

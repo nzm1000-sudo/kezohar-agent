@@ -18,6 +18,9 @@ from . import hebrew
 from .web_research import ResearchError, USER_AGENT, MAX_PAGE_BYTES, PageParser
 
 SITES = {
+    'he.wikipedia.org': {'name':'ויקיפדיה העברית','access':'official-api',
+        'policy_url':'https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use',
+        'tradition':'','reliability':'secondary-encyclopedia','authority':''},
     'he.wikisource.org': {'name':'ויקיטקסט','access':'official-api',
         'policy_url':'https://www.mediawiki.org/wiki/API:Etiquette',
         'tradition':'','reliability':'community-transcription','authority':''},

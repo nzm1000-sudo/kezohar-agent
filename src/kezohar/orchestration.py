@@ -15,6 +15,12 @@ class HalachicOrchestrator:
         self.composer = VerifiedAnswerComposer()
 
     def answer(self, question, circumstances=None, research=False, **kwargs):
+        from .question_intent import QuestionIntentRouter
+        route=QuestionIntentRouter().route(question)
+        if route['engine']=='jewish-knowledge':
+            from .torah_facts import JewishResearchOrchestrator
+            return JewishResearchOrchestrator(self.agent).answer(question,route,**kwargs)
+        kwargs.pop('conversation_history',None)
         import time
         started=time.perf_counter()
         from .source_rules import validate_answers

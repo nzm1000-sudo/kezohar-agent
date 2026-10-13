@@ -24,6 +24,7 @@ os.environ['TMPDIR'] = str(RUN)
 tempfile.tempdir = str(RUN)
 sys.path.insert(0, str(ROOT/'src'))
 os.environ['PHASE4_ISOLATED_RUN'] = str(RUN)
+os.environ['JEWISH_KNOWLEDGE_ROOT']=str(RUN/'jewish-knowledge')
 for key in ('STORE_PATH', 'APP_LIBRARY_STORE_PATH', 'WEB_STORE_PATH', 'APP_LIBRARY_DB_PATH',
             'USER_LIBRARY_DB_PATH', 'WEB_PERMISSIONS_PATH', 'CLAIM_CATALOG_PATH'):
     os.environ[key] = str(RUN/(key.lower()+'.json'))

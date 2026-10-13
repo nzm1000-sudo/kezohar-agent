@@ -1543,3 +1543,50 @@ def test_web_disk_store_cannot_revive_old_permission_or_text_as_local_evidence(t
     assert cached and not admissible(cached)
     assert cached['metadata']['web_cache_status']=='live-read-and-policy-revalidation-required'
     assert path.read_text()==json.dumps(s)+'\n'  # no data deletion or rewrite
+
+
+def test_intent_router_separates_facts_from_rulings_and_detects_multiple_domains():
+    from kezohar.question_intent import QuestionIntentRouter
+    route=QuestionIntentRouter().route
+    assert route('מי היה אבא של משה רבנו?')['relation']=='father'
+    assert route('מי היה אבא של משה רבנו?')['engine']=='jewish-knowledge'
+    assert route('מה מברכים על אורז?')['engine']=='halachic'
+    mixed=route('מה פירוש תיקו בגמרא והאם מותר לעשות כך בשבת?')
+    assert mixed['engine']=='halachic' and {'halacha','talmud'}<=set(mixed['domains'])
+    assert route('מהן עשר הספירות?')['engine']=='jewish-knowledge'
+
+
+def test_synthetic_primary_family_graph_handles_maqqaf_and_cannot_use_stale_source():
+    from kezohar.entity_graph import TorahEntityGraph
+    s=source(text='ויקח אלפא את־גמא לו לאשה ותלד לו את־בטא ואת־דלתא')
+    s['metadata']['knowledge_primary_kind']='biblical-text'
+    graph=TorahEntityGraph();edges=graph.ingest(s)
+    assert any(e['subject']=='בטא' and e['relation']=='father' and e['object']=='אלפא' for e in edges)
+    assert graph.find('בטא','mother',lambda _:s)[0]['object']=='גמא'
+    changed=copy.deepcopy(s);changed['version']='changed'
+    assert not graph.find('בטא','father',lambda _:changed)
+    changed=copy.deepcopy(s);changed['metadata']['rag_answers_allowed']=False
+    assert not graph.find('בטא','father',lambda _:changed)
+
+
+def test_fact_engine_answers_synthetic_relation_without_model_or_network(tmp_path):
+    from kezohar.torah_facts import TorahFactAnswerEngine
+    from kezohar.question_intent import QuestionIntentRouter
+    s=source(text='ויקח אלפא את גמא לו לאשה ותלד לו את בטא ואת דלתא')
+    s['metadata']['knowledge_primary_kind']='biblical-text'
+    a=agent([s]);engine=TorahFactAnswerEngine(a,root=tmp_path/'facts')
+    from kezohar.request_budget import RequestBudget
+    q='מי היה אב של בטא?';r=engine.answer(q,QuestionIntentRouter().route(q),RequestBudget())
+    assert 'אלפא' in r['answer'] and r['fact_verified'] and not r['halachic_verified']
+    assert not a.answer_model.calls and not r['internet_used']
+    assert r['sources']==[s]
+
+
+def test_bibliographic_fact_requires_explicit_author_field_not_a_mentioned_name():
+    from kezohar.entity_graph import TorahEntityGraph
+    s=source(text=json.dumps({'title':'ספר בדיקה','authors':['מחבר בדיקה']},ensure_ascii=False))
+    s['metadata']['knowledge_primary_kind']='bibliographic-metadata'
+    edges=TorahEntityGraph.extract(s)
+    assert len(edges)==1 and edges[0]['object']=='מחבר בדיקה'
+    s['text']=json.dumps({'title':'ספר בדיקה','mention':'שם אחר'},ensure_ascii=False)
+    assert not TorahEntityGraph.extract(s)

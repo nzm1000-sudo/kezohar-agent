@@ -94,7 +94,12 @@ async def ask(request: Request):
         body=api._decode_body(await request.body())
         question, opts = api._validate_body(body)
         from .conversation_updates import browser_turn
+        from .question_intent import QuestionIntentRouter
+        original=question
         question,facts,turn=browser_turn(question,body.get('history',[]),opts['circumstances'])
+        if QuestionIntentRouter().route(original)['engine']=='jewish-knowledge':
+            question=original;opts['conversation_history']=body.get('history',[])
+            facts=opts['circumstances'];turn={'followup':bool(body.get('history')),'persistent':False,'history_is_evidence':False}
         opts['circumstances']=facts
         token=body.get('request_token')
         import re

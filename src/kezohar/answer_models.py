@@ -16,6 +16,9 @@ class OpenAICompatibleAnswerModel:
 
     def health(self, timeout=8):
         return llm.check_health(self.settings.base_url, timeout=timeout)
+    def generate_knowledge(self,question,sources,timeout=4.5,cancel_event=None):
+        return llm.ask(question,sources,self.settings.base_url,self.settings.model,
+            timeout=timeout,cancel_event=cancel_event,task='knowledge')
 
 
 _PROVIDERS = {'openai-compatible': OpenAICompatibleAnswerModel}
@@ -68,3 +71,10 @@ class ConfiguredAnswerModel:
 
     def health(self, timeout=8):
         return self._current().health(timeout=timeout)
+    def generate_knowledge(self,question,sources,timeout=4.5,cancel_event=None):
+        adapter=self._current()
+        method=getattr(adapter,'generate_knowledge',adapter.generate)
+        import inspect
+        opts={'timeout':timeout}
+        if cancel_event is not None and 'cancel_event' in inspect.signature(method).parameters:opts['cancel_event']=cancel_event
+        return method(question,sources,**opts)
