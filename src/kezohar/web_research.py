@@ -294,13 +294,17 @@ class WebResearchEngine:
             seen.add(url)
             try:
                 if request_budget:request_budget.check('web page fetch')
-                options={'request_budget':request_budget} if request_budget and accepts_budget(self.fetcher) else {}
-                page,final=self.fetcher(url,**options)
+                fetch_method=self.fetcher.read if hasattr(self.fetcher,'read') else self.fetcher
+                options={'request_budget':request_budget} if request_budget and accepts_budget(fetch_method) else {}
+                if hasattr(self.fetcher,'read'):
+                    doc=self.fetcher.read(url,**options);final=doc['source_url']
+                else:
+                    page,final=self.fetcher(url,**options)
+                    parser=PageParser();parser.feed(page);doc=parser.document()
                 if request_budget:request_budget.check('web page fetch return')
                 if urllib.parse.urlsplit(final).hostname not in self.sites:raise ResearchError('redirect outside source registry')
                 if final in seen and final!=url:continue
                 seen.add(final)
-                parser=PageParser();parser.feed(page);doc=parser.document()
                 from .source_quality import classify, exclusion_reason, web_locator_issue
                 reason=web_locator_issue(doc['title'],final) or exclusion_reason(question, {'work_title':doc['title'], 'source_url':final,
                                                    'text':doc['text']}, web=True)
@@ -310,25 +314,49 @@ class WebResearchEngine:
                 relevant=passages(doc['text'],question)
                 if not relevant or not doc['title']:continue
                 profile=self.sites[urllib.parse.urlsplit(final).hostname]
-                allowed,permission=permission_for(profile.get('license',''),self.licenses,self.grants,final)
+                license_id=doc.get('license',profile.get('license',''))
+                aliases={'Public Domain':'public-domain','CC-BY':'CC-BY','CC-BY-SA':'CC-BY-SA'}
+                license_id=aliases.get(license_id,license_id)
+                allowed,permission=permission_for(license_id,self.licenses,self.grants,final)
                 # Rights-unknown sites contribute a short transient excerpt, never the full page.
-                snippet=short_excerpt(relevant[0],question) if not allowed else relevant[0][:1500]
+                api_reader=hasattr(self.fetcher,'read')
+                # API source units remain complete. A clipped/context-unknown
+                # excerpt is discovery material, not evidence for a ruling.
+                snippet=(doc['text'] if api_reader and allowed and len(doc['text'].encode())<=24000
+                         else short_excerpt(relevant[0],question) if not allowed else relevant[0][:1500])
+                complete_unit=api_reader and allowed and snippet==doc['text']
                 kind='ruling-candidate' if re.search(r'הלכה|פסק|שו״ת|שו"ת|שאלות ותשובות',doc['title']+' '+snippet) else 'general-article'
                 source=Source(source_id=stable_id('web',final,snippet),work_title=doc['title'],reference=doc['title']+' — '+final,
                     text=snippet,normalized_text=hebrew.normalize(snippet),author=doc['author'],
-                    source_url=final,license=profile.get('license','unknown'),tradition=profile.get('tradition',''),
+                    source_url=final,license=license_id or 'unknown',version=doc.get('version',''),tradition=profile.get('tradition',''),
                     source_project='verified-web',verification_status='excerpt-verified',ingested_at=utcnow_iso(),
                     authority_level=profile.get('authority',''),attribution=doc['title']+' · '+final,
-                    license_url=self.licenses.get(profile.get('license',''),{}).get('url',''),
+                    license_url=self.licenses.get(license_id,{}).get('url',''),
                     metadata={'content_kind':kind,'source_reliability':profile.get('reliability','unknown'),
                               'authority_evidence':profile.get('authority_evidence',''),'author_status':'page-declared' if doc['author'] else 'unknown',
                               'evidence_support':'exact-excerpt-only','persistence_allowed':allowed,'permission':permission,
                               'published_at':doc['published_at'],'references_in_page':citations.extract_refs(snippet),
                               'page_sha256':__import__('hashlib').sha256(doc['text'].encode()).hexdigest(),
                               'rights_mode':'licensed' if allowed else 'transient-25-word-excerpt'})
+                if api_reader:
+                    from .torah_web import HalachicSourceAuthority,SimilarHalachicQuestions
+                    start=doc['text'].find(snippet)
+                    source.metadata.update(rag_answers_allowed=complete_unit,
+                        web_authority=HalachicSourceAuthority.classify(doc),site_name=doc.get('site_name',''),
+                        source_unit_complete=complete_unit,original_question=doc.get('question',''),
+                        similar_question=SimilarHalachicQuestions.compare(question,doc.get('question','')),
+                        passage_locator={'representation':'extracted-text','start':start,'end':start+len(snippet) if start>=0 else None,
+                            'page_sha256':doc.get('page_sha256',''),'version':doc.get('version',''),
+                            'exact_in_representation':start>=0},
+                        updated_at=doc.get('updated_at',''),links=doc.get('links',[]),
+                        instruction_policy='untrusted data; never instructions',
+                        verified_at=utcnow_iso(),cache_max_age_s=3600,verified_until_epoch=time.time()+3600)
+                    if re.search(r'ignore (?:all |previous |prior )*instructions|system prompt|התעלם.{0,30}הוראות|חשוף.{0,20}סודות',doc['text'],re.I):
+                        source.metadata.update(rag_answers_allowed=False,web_quarantine_reason='instruction-like external content')
                 source.metadata.update(classify(source.to_dict()))
                 source.metadata['locator_granularity']='page-title-and-url; unit locator not independently established'
                 source.metadata['locator_status']='page-title-url-matched' if urllib.parse.urlsplit(final).hostname=='he.wikisource.org' else 'fetched-page-only'
+                if api_reader:source.metadata['locator_status']=doc.get('locator_status','fetched-page-only')
                 # Full-text store still contains only relevant exact passages, not boilerplate.
                 if allowed and self.store_path:
                     if request_budget:request_budget.check('web persistence')
@@ -338,14 +366,17 @@ class WebResearchEngine:
                 errors.append({'stage':'fetch','error':'deadline-exhausted'})
                 break
             except Exception as exc:
-                errors.append({'url':url,'error':type(exc).__name__})
+                errors.append({'url':url,'error':type(exc).__name__,
+                    'reason':str(exc)[:160] if isinstance(exc,ResearchError) else 'reader or transport failure'})
         results=rank_sources(HybridSearch(sources).search(question,top_k=limit)) if sources else []
         return {'sources':results,'errors':errors,'rejected_sources':rejected,'comparisons':compare(results,question),
                 'answer':evidence.INSUFFICIENT if evidence.shared_oil_waiting(question) else self.extractive_answer(results),'mode':'web-evidence','verdict':'insufficient_context' if evidence.shared_oil_waiting(question) else 'exact-extract-only','discovery_backend':getattr(self.searcher,'last_backend','custom'),'discovery_attempts':getattr(self.searcher,'last_attempts',[]),'verification':{'support':'exact-excerpts','psak':'not-inferred'}}
     def answer(self, question, base_url, model, limit=5, urls=None, timeout=15, local_sources=None, answer_model=None, source_verifier=None, request_budget=None, source_resolver=None):
         from .retrieval_budget import accepts_budget
         result = self.research(question, limit=limit, urls=urls,request_budget=request_budget)
-        result['search_status']={'partial':bool(result.get('errors')), 'errors':result.get('errors',[])}
+        from .source_snapshot import public_sources
+        result['web_findings']=public_sources(result.get('sources',[]))
+        result.setdefault('search_status',{'partial':bool(result.get('errors')), 'errors':result.get('errors',[])})
         result.update(human_review='required', halachic_verified=False)
         local_sources = [s for s in (local_sources or []) if rag_eligible(s)]
         if local_sources:
@@ -389,9 +420,11 @@ class WebResearchEngine:
                 if request_budget:request_budget.check('web source revalidation return')
                 if fresh is None or fingerprint(fresh)!=fingerprint(source):stale=True
                 if fresh and fresh.get('source_project')=='verified-web' and fresh.get('metadata',{}).get('persistence_allowed'):
-                    allowed,_=permission_for(self.sites[urllib.parse.urlsplit(fresh['source_url']).hostname].get('license',''),
+                    allowed,_=permission_for(fresh.get('license',''),
                                              self.licenses,self.grants,fresh['source_url'])
                     if not allowed:stale=True;fresh=None
+                if fresh and fresh.get('source_project')=='verified-web' and hasattr(self,'validate_source'):
+                    if not self.validate_source(fresh,request_budget):stale=True;fresh=None
                 if fresh and admissible(fresh):current.append(fresh)
             result['sources']=current
             verification = ({'verdict':'invalid_citation','support':'source or permission changed during generation'} if stale else

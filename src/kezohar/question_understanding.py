@@ -12,6 +12,7 @@ SLOTS = {
     'tradition': ('לפי איזו מסורת מבוקש המענה?', {'sephardi':'לפי פסיקת הספרדים', 'ashkenazi':'לפי פסיקת האשכנזים', 'both':'השוואת מסורות'})
 }
 SLOTS.update({
+    'prayer_occasion':('באיזה יום נשכחה ההזכרה?',{'rosh_chodesh':'ראש חודש','chol_hamoed':'חול המועד','festival':'יום טוב','unknown':'היום אינו ידוע'}),
     'blessing_stage': ('האם מבוקשת ברכה ראשונה לפני האכילה, או ברכה אחרונה לאחריה?', {'before':'ברכה ראשונה לפני האכילה', 'after':'ברכה אחרונה לאחר האכילה', 'both':'ברכה ראשונה וגם ברכה אחרונה', 'unknown':'לא ידוע איזה שלב מבוקש'}),
     'food_amount': ('מה הכמות שנאכלה ביחס לשיעור כזית?', {'below_kezayit':'נאכל פחות משיעור כזית', 'at_least_kezayit':'נאכל לפחות שיעור כזית', 'unknown':'כמות האכילה לא ידועה'}),
     'eating_time': ('מה משך האכילה ביחס לכדי אכילת פרס?', {'within_pras':'האכילה היתה בתוך כדי אכילת פרס', 'longer':'האכילה נמשכה יותר מכדי אכילת פרס', 'unknown':'משך האכילה לא ידוע'}),
@@ -32,11 +33,13 @@ def analyze(question, circumstances=None):
     supplied = {} if circumstances is None else circumstances
     if not isinstance(supplied, dict) or any(k not in SLOTS or not isinstance(v,str) or v not in SLOTS[k][1] for k,v in supplied.items()):
         raise ValueError('circumstances must contain supported slot/value pairs')
-    q = normalize(question)
+    # Historical/free follow-up text is preserved for the model, but active
+    # parsed facts come from the root question and explicit supplied updates.
+    q = normalize(question.split('\n')[0])
     intent = question_intent(question)
     if intent not in ('rice','birkat-mazon') and ('מברכ' in q or 'ברכה' in q) and 'על' in q.split():
         intent='food-blessing'
-    if 'יעלה' in q and any(t in q for t in ('ראש חודש', 'ראש חדש')):
+    if 'יעלה' in q and any(t in q for t in ('ויבא','ויבוא')):
         service = supplied.get('prayer_service')
         for word, value in (('שחרית','shachrit'),('מנחה','mincha'),('ערבית','arvit')):
             if word in q:
@@ -62,6 +65,9 @@ def analyze(question, circumstances=None):
         if 'ראשונה' in q: facts['blessing_stage']='before'
         if 'אחרונה' in q: facts['blessing_stage']='both' if 'ראשונה' in q else 'after'
     if intent in ('yaaleh-shachrit','yaaleh-general'):
+        if 'ראש חודש' in q or 'ראש חדש' in q:facts['prayer_occasion']='rosh_chodesh'
+        elif 'חול המועד' in q:facts['prayer_occasion']='chol_hamoed'
+        elif 'יומ טוב' in q:facts['prayer_occasion']='festival'
         for word, value in (('שחרית','shachrit'),('מנחה','mincha'),('ערבית','arvit')):
             if word in q: facts['prayer_service'] = value
         if 'עקרתי' in q or 'עקר רגל' in q or 'סיימתי' in q: facts['prayer_stage']='finished'
@@ -116,6 +122,8 @@ def analyze(question, circumstances=None):
                     'phone-shabbat':['phone_purpose'],'water-urn':['water_temperature']}
     if intent=='shared-oil' and (facts.get('oil_case')=='new_clean' or facts.get('next_food')=='other'):
         requirements['shared-oil']=['oil_case','next_food']
+    if intent in ('yaaleh-shachrit','yaaleh-general') and 'prayer_occasion' not in facts:
+        requirements[intent]=requirements[intent]+['prayer_occasion']
     if intent=='food-blessing' and facts.get('blessing_stage') in ('after','both'):
         requirements['food-blessing']+=['food_amount','eating_time']
     missing = [k for k in requirements.get(intent,[]) if k not in facts or facts[k]=='unknown']

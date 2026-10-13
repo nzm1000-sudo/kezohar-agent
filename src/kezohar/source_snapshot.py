@@ -20,6 +20,12 @@ def structurally_valid(source):
 
 
 def admissible(source):
+    if isinstance(source,dict) and source.get('source_project')=='verified-web':
+        meta=source.get('metadata',{})
+        if isinstance(meta,dict) and 'verified_until_epoch' in meta:
+            import time
+            expires=meta['verified_until_epoch']
+            if type(expires) not in (int,float) or not 0<expires-time.time()<=3600:return False
     return (structurally_valid(source) and rag_eligible(source) and bool(source.get('source_id'))
             and bool(source.get('reference')) and not source.get('identity_conflict')
             and source.get('metadata', {}).get('locator_status') != 'ambiguous-file-fields')
@@ -51,4 +57,12 @@ def public_sources(sources):
             # Search permissions never imply permission to expose full text.
             result.append({k:source.get(k,'') for k in ('source_id','work_title','reference')})
             result[-1].update(permission_status='blocked-or-review-required',text='')
+            if isinstance(source,dict) and source.get('source_project')=='verified-web':
+                from .torah_web import canonical_url
+                try:url=canonical_url(source.get('source_url',''))
+                except ValueError:url=''
+                except Exception:url=''
+                result[-1].update(source_project='verified-web',source_url=url,
+                    metadata={'site_name':source.get('metadata',{}).get('site_name',''),
+                              'rag_answers_allowed':False,'rights_mode':'scope-review-required'})
     return result

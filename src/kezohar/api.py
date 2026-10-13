@@ -160,6 +160,7 @@ def _sse_events(result):
         'verification_layers':result.get('verification_layers'),
         'meaning_screen':result.get('meaning_screen'),
         'research_dossier':result.get('research_dossier'),
+        'question_analysis':result.get('question_analysis'),
         'structured_answer':result.get('structured_answer'),
         'answer_status':result.get('answer_status'),
         'answer_policy':result.get('answer_policy'),

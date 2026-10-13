@@ -103,6 +103,10 @@ class ConversationStore:
             return agent.converse(question,**kwargs)
         if followup:
             facts=dict(state['user_facts'])
+            from .conversation_updates import explicit_updates,corrected_root
+            updates=explicit_updates(question,state['intent'])
+            facts.update(updates)
+            state['root_question']=corrected_root(state['root_question'],question,updates)
             # Preserve user wording independently of the pruned turn history.
             # It is never source evidence and cannot be silently replaced by slots.
             state.setdefault('free_conditions',[]).append(question)

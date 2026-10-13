@@ -25,6 +25,7 @@ def classify(source):
         ('יביע אומר', 'responsa', 'sephardi-posek'),
         ('יחוה דעת', 'responsa', 'sephardi-posek'),
         ('קיצור שולחן ערוך – ילקוט יוסף', 'psak-code', 'sephardi-posek'),
+        ('שולחן ערוך הרב', 'psak-code', 'ashkenazi-posek'),
         ('שולחן ערוך', 'psak-code', 'maran'),
         ('בית יוסף', 'halachic-commentary', 'maran'),
         ('בן איש חי', 'psak-code', 'sephardi-posek'),
@@ -66,6 +67,12 @@ def classify(source):
 def applicability_issue(question, text):
     """Necessary scenario facets, not proof of entailment or a reference answer."""
     q, t = normalize(question), normalize(text)
+    if 'בשרי' in q and 'שמנ' in q and ('שניצל' in q or 'ציפס' in q):
+        if not ('שמנ' in t and any(w in t for w in ('טיג','טוג','שומנ','שניצל')) and 'בשר' in t):
+            return 'shared-oil status requires explicit oil/meat scenario; general separation is not proof'
+        if (any(w in t for w in ('הגעלה','ליבונ','להכשיר','הכשר'))
+                and not re.search(r'(?:ציפס|מאכל|תבשיל|תפוחי אדמה|אוכל).{0,100}(?:שמנ|טיג|טוג)|(?:שמנ|טיג|טוג).{0,100}(?:ציפס|מאכל|תבשיל|תפוחי אדמה|אוכל)',t)):
+            return 'food status absent; kashering a pan does not establish the status of food fried later'
     # Retrieval aliases may match a neighbouring action (e.g. a physical
     # interruption compared with speech). That is not evidence for the asked
     # action. Require explicit speech language, independently of book priority.

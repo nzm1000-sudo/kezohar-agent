@@ -50,9 +50,11 @@ def order_sources(sources, question=""):
     """Maran/Sephardi first, then others — stable within groups."""
     sources = [s for s in sources if structurally_valid(s) and not exclusion_reason(question, s)]
     if question:
+        from .locator_search import parse,matches
+        locator=parse(question)
         terms = topic_tokens(question)
         if terms:
-            sources = [s for s in sources if topic_overlap(s.get('text',''),question)>0]
+            sources = [s for s in sources if topic_overlap(s.get('text',''),question)>0 or (locator and matches(s,locator))]
     for source in sources:
         source.update(classify(source))
         source['topical_overlap'] = topic_overlap(source.get('text',''),question) if question else 0
@@ -184,6 +186,19 @@ class Agent:
                     "human_review": "required", "halachic_verified": False,
                     "elapsed_s": round(time.time() - t0, 3)}
         retrieved = eligible
+        from .locator_search import reference_only,parse,matches
+        if reference_only(q):
+            hint=parse(q);located=[]
+            for old in retrieved:
+                current=self.knowledge.source_by_id(old['source_id'])
+                if current and fingerprint(current)==fingerprint(old) and matches(current,hint):located.append(current)
+            if not located:
+                return {'answer':'מראה המקום לא אומת מול המקור והרשאותיו העדכניות.',
+                        'sources':[],'verdict':'invalid_citation','mode':'reference-reader','halachic_verified':False,
+                        'verification':{'verdict':'invalid_citation','support':'locator snapshot no longer current'}}
+            return {'answer':'אותרו '+str(len(located))+' יחידות מקור למראה המקום שביקשת. פתח את המקור לקריאה; אין כאן פסיקה.',
+                    'sources':located,'verdict':'source_lookup','mode':'reference-reader','halachic_verified':False,
+                    'elapsed_s':round(time.time()-t0,3),'verification':{'verdict':'not-applied','support':'metadata locator lookup, not a ruling'}}
         # one LLM call
         try:
             generator=answer_model if answer_model is not None else self.answer_model
@@ -311,7 +326,12 @@ class Agent:
         from .hybrid import rrf_fuse
         search_plan=plan(query)
         runs=[];route_trace=[]
+        from .locator_search import parse,lookup,reference_only
+        if parse(query):
+            located=lookup(self.knowledge,query,request_budget)
+            runs.append(located);route_trace.append({'kind':'explicit-locator','candidates':len(located),'reason':'literal book/siman/seif metadata'})
         for route in search_plan['routes']:
+            if reference_only(query) and runs:break  # a locator lookup is not an invitation to substitute another passage
             if runs:
                 preliminary=order_sources(rrf_fuse(runs,top_k=200),query)
                 if any(rag_eligible(s) and s['concept_coverage']['complete'] for s in preliminary):break
@@ -345,7 +365,7 @@ class Agent:
         return store.turn(self,owner,conversation_id,question,circumstances,**kwargs)
 
     def research(self, question, top_k=5, answer_model=None, local_sources=None, request_budget=None):
-        from .web_research import WebResearchEngine
+        from .torah_web import HybridHalachicResearch
         if fastpath.is_out_of_scope(question):
             return self.ask(question)
         if self.research_engine is None:
@@ -353,8 +373,8 @@ class Agent:
             from pathlib import Path
             grants_path = os.environ.get('WEB_PERMISSIONS_PATH')
             grants = json.loads(Path(grants_path).read_text(encoding='utf-8')) if grants_path else {}
-            self.research_engine = WebResearchEngine(grants=grants,
-                store_path=os.environ.get('WEB_STORE_PATH','data/store/web/sources.jsonl'))
+            self.research_engine = HybridHalachicResearch(grants=grants,
+                store_path=os.environ.get('WEB_STORE_PATH','data/store/torah-web/sources.jsonl'))
         engine = self.research_engine
         result = engine.answer(question, self.base_url, self.model, limit=top_k,
                              local_sources=[s for s in (self.search_only(question,top_k=top_k) if local_sources is None else local_sources) if rag_eligible(s)],
@@ -363,7 +383,7 @@ class Agent:
                              source_resolver=self.knowledge.source_by_id)
         approved = [s for s in result.get('sources',[]) if s.get('source_project')=='verified-web'
                     and s.get('metadata',{}).get('persistence_allowed')]
-        if approved and engine.store_path and (request_budget is None or request_budget.remaining()>0):
+        if approved and engine.store_path and getattr(engine,'allow_local_reuse',True) and (request_budget is None or request_budget.remaining()>0):
             self.knowledge.upsert_verified(approved)
             self._cache.clear()
         return result

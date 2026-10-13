@@ -120,3 +120,20 @@ class SQLiteLibrarySearch:
         if not row:return None
         source=json.loads(row[0])
         return self.locator_overlay(source) if self.locator_overlay is not None else source
+
+    def lookup_locator(self,hint,request_budget=None):
+        from .locator_search import WORKS,matches
+        if not self.path.exists():return []
+        out=[]
+        with sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True) as db:
+            if request_budget:db.set_progress_handler(lambda:1 if request_budget.remaining()<=0 else 0,1000)
+            names=WORKS[hint['work']];marks=','.join('?' for _ in names)
+            rows=db.execute("SELECT id,json_extract(payload,'$.work_title'),json_extract(payload,'$.reference') FROM records WHERE json_extract(payload,'$.work_title') IN ("+marks+")",names)
+            for n,(sid,title,reference) in enumerate(rows):
+                if request_budget:request_budget.check('locator metadata scan')
+                if n>=30000:raise ValueError('locator scan cap exceeded')
+                if matches({'work_title':title,'reference':reference},hint):
+                    s=self.source_by_id(sid,request_budget)
+                    if s:out.append(s)
+                if len(out)>=20:break
+        return out

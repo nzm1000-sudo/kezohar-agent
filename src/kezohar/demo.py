@@ -6,13 +6,16 @@ import json
 import threading
 from pathlib import Path
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse,Response
 from . import api
 from .request_budget import RequestBudget
 from .source_snapshot import public_sources
 
 app = FastAPI(title='כזוהר הרקיע — הדגמה פרטית')
 _audit_lock=threading.Lock()
+_requests={}
+_requests_lock=threading.Lock()
+FEEDBACK_PATH=Path(__file__).resolve().parents[2]/'data/store/private-demo-feedback/issues.jsonl'
 
 class _AuditedModel:
     def __init__(self, delegate, path):
@@ -74,6 +77,10 @@ async def local_only(request: Request, call_next):
 def home():
     return (Path(__file__).parent / 'static' / 'demo.html').read_text(encoding='utf-8')
 
+@app.get('/demo/research-ui.js')
+def research_ui():
+    return Response((Path(__file__).parent/'static'/'research_ui.js').read_text(encoding='utf-8'),media_type='application/javascript')
+
 @app.get('/demo/status')
 def status():
     agent = demo_agent()
@@ -84,25 +91,77 @@ def status():
 @app.post('/demo/ask')
 async def ask(request: Request):
     try:
-        question, opts = api._validate_body(api._decode_body(await request.body()))
+        body=api._decode_body(await request.body())
+        question, opts = api._validate_body(body)
+        from .conversation_updates import browser_turn
+        question,facts,turn=browser_turn(question,body.get('history',[]),opts['circumstances'])
+        opts['circumstances']=facts
+        token=body.get('request_token')
+        import re
+        if token is not None and (not isinstance(token,str) or not re.fullmatch('[a-f0-9]{48}',token)):
+            raise ValueError('invalid request cancellation token')
     except ValueError as exc:
         return JSONResponse(api._error(str(exc)), status_code=400)
-    if opts.pop('research') or opts.pop('stream'):
-        return JSONResponse(api._error('ההדגמה משתמשת בספרייה המקומית בלבד.'), status_code=400)
-    # No saved conversation memory, persistent changes, web research or old cache.
+    if opts.pop('stream'):
+        return JSONResponse(api._error('ההדגמה מחזירה תשובה מלאה בלבד.'), status_code=400)
+    if opts['research'] and body.get('web_consent') is not True:
+        return JSONResponse(api._error('חיפוש אינטרנטי דורש בחירה מפורשת במצב משולב והסכמה לשליחת מונחי נושא בלבד.'),status_code=400)
+    # No persistent conversation memory. Web discovery sends closed vocabulary
+    # only; the full question/history never leaves for a search service.
     import asyncio
+    event=threading.Event()
+    import secrets
+    request_key=token or secrets.token_hex(24)
+    with _requests_lock:
+        if len(_requests)>=4:return JSONResponse(api._error('ההדגמה עמוסה; נסה שוב לאחר סיום בקשה.'),status_code=429)
+        if request_key in _requests:return JSONResponse(api._error('בקשה כבר פעילה.'),status_code=409)
+        _requests[request_key]=event
     def run():
         started = time.perf_counter()
         agent = demo_agent()
-        budget = RequestBudget(seconds=45)
+        deep=opts.get('study_mode')=='deep'
+        budget = RequestBudget(seconds=90 if deep else 45,max_context_bytes=96000 if deep else 48000,cancel_event=event)
         result = agent.converse(question, **opts, cache_namespace='private-loopback-demo', request_budget=budget, timeout=45, cache_ttl=0)
         result = dict(result, sources=public_sources(result.get('sources', [])),
                       demo_elapsed_s=round(time.perf_counter()-started, 3),
                       demo_model=agent.model, demo_model_calls=budget.calls)
+        result['temporary_conversation']=turn
         return result
-    return await asyncio.to_thread(run)
+    try:return await asyncio.to_thread(run)
+    except asyncio.CancelledError:
+        event.set();raise
+    finally:
+        with _requests_lock:
+            _requests.pop(request_key,None)
 
-# Expose only the existing guarded source reader, not web research or memory.
+@app.post('/demo/cancel')
+async def cancel(request:Request):
+    try:
+        body=api._decode_body(await request.body())
+        if not isinstance(body,dict) or set(body)!={'request_token'}:raise ValueError('cancellation token required')
+        token=body['request_token']
+        if not isinstance(token,str):raise ValueError('invalid token')
+    except ValueError as exc:return JSONResponse(api._error(str(exc)),status_code=400)
+    with _requests_lock:
+        event=_requests.get(token)
+        if event:event.set()
+    return {'cancelled':bool(event),'scope':'cooperative; no guarantee of stopping already submitted inference'}
+
+@app.post('/demo/feedback')
+async def feedback(request:Request):
+    from .review_feedback import record
+    try:
+        body=api._decode_body(await request.body())
+        if not isinstance(body,dict) or set(body)!={'issue','source_ids','answer_digest'}:raise ValueError('anonymous issue fields only')
+        if not isinstance(body['source_ids'],list):raise ValueError('source IDs required')
+        from .source_snapshot import admissible
+        for sid in body['source_ids']:
+            if not isinstance(sid,str) or not admissible(demo_agent().knowledge.source_by_id(sid) or {}):
+                raise ValueError('feedback must refer to a current admissible source ID')
+        return record(FEEDBACK_PATH,body['issue'],body['source_ids'],body['answer_digest'])
+    except ValueError as exc:return JSONResponse(api._error(str(exc)),status_code=400)
+
+# Local sources still use the guarded reader. Web cards link to the public page.
 @app.get('/api/sources/{source_id}')
 def source_record(source_id: str):
     demo_agent()
