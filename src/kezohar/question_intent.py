@@ -9,7 +9,8 @@ PUBLIC_TOPICS=('כוזרי','משנה תורה','תיקו','משנה','גמרא'
 class QuestionIntentRouter:
     def route(self,question):
         q=strip_niqqud(question.split('\n')[0]).replace('רבינו','רבנו').replace('אבא','אב').replace('אמא','אם')
-        q=q.replace('רמב"ם','הרמב״ם').replace('החיד"א','החיד״א').replace('חידא','החיד״א')
+        q=q.replace('רמב"ם','הרמב״ם').replace('החיד"א','החיד״א')
+        q=re.sub(r'\bה?חידא\b','החיד״א',q)
         hal=bool(re.search(r'מותר|אסור|חייב|צריך להמתין|מברכ|לברך|מה הדין|מה עושים|הלכה למעשה|שכחתי|יעלה ויבוא',q))
         domains=[]
         if hal:domains.append('halacha')
@@ -34,13 +35,30 @@ class QuestionIntentRouter:
             m=re.search(r'של\s+(.+?)(?:\?|$)',q)
             if m:entity=re.sub(r'\s+(?:רבנו|הנביא|אבינו)$','',m[1].strip())
         if relation=='child-count' and 'יעקב' in q:entity='יעקב'
+        corrections=[]
+        if entity and entity not in PUBLIC_ENTITIES and any(cue in q for cue in ('רבנו','הנביא','אבינו')):
+            def one_edit(a,b):
+                if abs(len(a)-len(b))>1:return False
+                if len(a)==len(b):return sum(x!=y for x,y in zip(a,b))==1
+                if len(a)>len(b):a,b=b,a
+                return any(b[:i]+b[i+1:]==a for i in range(len(b)))
+            candidates=[name for name in PUBLIC_ENTITIES if ' ' not in name and one_edit(entity,name)]
+            if len(candidates)==1:
+                corrections=[{'written':entity,'canonical':candidates[0],'basis':'unique one-edit public name with explicit biblical title; search aid only'}]
+                q=q.replace(entity,candidates[0]);entity=candidates[0]
+                entities=list(dict.fromkeys(entities+[entity]))
         kind=('halachic' if hal else 'fact' if relation or re.match(r'מי (?:היה|הייתה|היתה)',q) else
               'interpretation' if re.search(r'מדוע|למה|פירוש|פרשנות|מה ההבדל|הסבר',q) else 'research')
         explicit_deep=bool(re.search(r'עיון מעמיק|מחקר|חקור|לעומק',q))
         knowledge=not hal and bool(relation or domains or entities or any(t in q for t in PUBLIC_TOPICS))
+        from .fastpath import is_out_of_scope,is_fast_question
+        if is_out_of_scope(question):knowledge=False
+        if is_fast_question(question) and not relation and kind!='interpretation':knowledge=False
         return {'kind':kind,'domains':list(dict.fromkeys(domains)) or ['unclassified'],
             'engine':'jewish-knowledge' if knowledge else 'halachic',
             'relation':relation,'entity':entity,'public_entities':entities,
             'complexity':'deep' if explicit_deep else 'simple' if kind=='fact' else 'explanation',
             'normalized_question':q,'decision_basis':'question grammar and topic cues; not an asserted fact',
+            'export_allowed':not bool(re.search(r'אבא שלי|אמא שלי|אבי שלי|משפחה שלי|קוראים לי|שמי |הטלפון שלי|מספר זהות',q)),
+            'spelling_hints':corrections,
             'halachic_verified':False}

@@ -8,6 +8,7 @@ from .torah_web import PublicApiTransport,TorahWebReader,ResearchError,canonical
 from .question_intent import PUBLIC_ENTITIES,PUBLIC_TOPICS
 
 def knowledge_queries(question,route):
+    if route.get('export_allowed') is False:return []
     q=route['normalized_question'];names=[n for n in PUBLIC_ENTITIES if n in q]
     topics=[t for t in PUBLIC_TOPICS if t in q]
     if not names and not topics:return []
@@ -16,7 +17,9 @@ def knowledge_queries(question,route):
               'son':['בן','בני'],'teacher':['תלמיד','למד'],'author':['מחבר'],'child-count':['בני']}
     queries=[' '.join(terms+[term]) for term in relation.get(route['relation'],[''])]
     if route['relation']=='child-count' and route['entity']:
-        queries=['בני '+route['entity']]
+        queries=['בני '+route['entity']+' שנים','בני '+route['entity']]
+    if 'tanakh' in route['domains'] and 'לא נכנס' in q and names:
+        queries=[names[0]+' לא תביאו',queries[0]]
     if 'ברכה' in q:queries+=[' '.join(terms+['ברכה'])]
     return list(dict.fromkeys(queries))[:2]
 
@@ -49,7 +52,7 @@ class JewishKnowledgeWebSearch:
                 data=self.transport.json('https://www.sefaria.org/api/search-wrapper',
                     {'query':query,'type':'text','field':'naive_lemmatizer','slop':30,'size':min(30,limit*4),
                      'source_proj':['ref','heRef','title','categories'],
-                     **({'filters':['Tanakh'],'filter_fields':['path']} if 'tanakh' in route['domains'] and route['relation'] in ('father','mother','wife','child-count') else {})},budget)
+                     **({'filters':['Tanakh'],'filter_fields':['path']} if 'tanakh' in route['domains'] and (route['relation'] in ('father','mother','wife','child-count') or route['kind']=='interpretation') else {})},budget)
                 hits=data.get('hits',{}).get('hits',[])
                 # Primary biblical text first for biblical family facts.
                 hits=sorted(hits,key=lambda h:'Tanakh' not in h.get('_source',{}).get('categories',[]))

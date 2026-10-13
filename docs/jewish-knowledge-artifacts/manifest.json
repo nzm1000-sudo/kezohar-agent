@@ -1,0 +1,37 @@
+[
+  {
+    "file": "actual-20261013-195237.jsonl.gz",
+    "uncompressed_sha256": "072e03c710eb7749c40ab6fae7f1fdad1c182b0208b84a025d9f34848716c73d",
+    "records": 14
+  },
+  {
+    "file": "actual-20261013-200721.jsonl.gz",
+    "uncompressed_sha256": "900b1443cdd6d5eca4064b7ecf548c3fce700c98dd241894de089267161f1b62",
+    "records": 14
+  },
+  {
+    "file": "actual-20261013-201340.jsonl.gz",
+    "uncompressed_sha256": "09fb9734b1b7dc85bb282e4b0738c4ca919e2c99f539f1cbd3ddd57e5d571cd7",
+    "records": 14
+  },
+  {
+    "file": "actual-20261013-203034.jsonl.gz",
+    "uncompressed_sha256": "36311ac2d3bcd6a6edb202dae8eeeca34487559ca7f9aaafb15e2586152c98f2",
+    "records": 14
+  },
+  {
+    "file": "actual-20261013-203322.jsonl.gz",
+    "uncompressed_sha256": "95607613fdedb35bb5f0c3320eaa467dbc0ff6a62b90a1fbf58cb67af1b55673",
+    "records": 3
+  },
+  {
+    "file": "actual-20261013-203807.jsonl.gz",
+    "uncompressed_sha256": "7359190da5780f0e95b1b858e4d488a122a18d658ec378256a2adfb71a853da1",
+    "records": 1
+  },
+  {
+    "file": "actual-20261013-204139.jsonl.gz",
+    "uncompressed_sha256": "fcba04083768f3253c53307bdc86ceee995704febfdd28b918dd16a4d8ff4911",
+    "records": 3
+  }
+]

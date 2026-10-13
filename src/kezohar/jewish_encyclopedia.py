@@ -10,10 +10,13 @@ ALIASES={'החיד״א':'חיים יוסף דוד אזולאי','החידא':'ח
 class JewishEncyclopediaEngine:
     def __init__(self,transport=None,licenses=None):self.transport=transport or PublicApiTransport();self.licenses=licenses
     def search(self,route,budget,limit=2):
+        if route.get('export_allowed') is False:return []
         q=route['normalized_question'];terms=[t for t in PUBLIC_ENTITIES+PUBLIC_TOPICS if t in q]
         if not terms:return []
         term=next(iter(sorted(terms,key=len,reverse=True)))
         term=ALIASES.get(term,term)
+        if term=='תיקו' and 'talmud' in route['domains']:term+=' תלמוד'
+        elif 'משנה' in terms and 'גמרא' in terms:term='משנה תלמוד'
         data=self.transport.json('https://he.wikipedia.org/w/api.php?'+urllib.parse.urlencode({
             'action':'query','list':'search','srsearch':term,'srlimit':limit,'srnamespace':0,'format':'json','maxlag':5}),request_budget=budget)
         return [r['title'] for r in data.get('query',{}).get('search',[])][:limit]

@@ -20,6 +20,8 @@ class TorahEntityGraph:
     @staticmethod
     def extract(source):
         if not admissible(source) or not source.get('version'):return []
+        meta=source.get('metadata',{})
+        if meta.get('private') is True or meta.get('visibility')=='private' or meta.get('owner_id') or meta.get('user_id'):return []
         facts=[];text=strip_niqqud(source['text'].replace('־',' '));text=re.sub(r'\s+',' ',text);pin=fingerprint(source)
         def add(subject,relation,obj,rule):
             # Values must occur literally in a primary text/metadata record.
@@ -28,6 +30,15 @@ class TorahEntityGraph:
                 'reference':source['reference'],'version':source['version'],'source_snapshot':pin,
                 'quote':source['text'],'method':rule,'support':'bounded-primary-relation',
                 'halachic_verified':False,'human_review':'not-a-halachic-ruling'})
+        if source.get('metadata',{}).get('knowledge_primary_kind')=='secondary-encyclopedia':
+            from .question_intent import PUBLIC_ENTITIES
+            subject=source.get('metadata',{}).get('encyclopedia_title','')
+            for match in re.finditer(r'(?:מתלמידי|תלמידו של|תלמיד של)\s+([^,.\n]{1,70})',text):
+                for name in PUBLIC_ENTITIES:
+                    if name!=subject and match[1].startswith(name) and subject in text:
+                        add(subject,'teacher',name,'encyclopedia-explicit-student-attribution')
+                        facts[-1]['support']='reported-secondary-relationship'
+            return facts
         if source.get('metadata',{}).get('knowledge_primary_kind')=='bibliographic-metadata':
             data=json.loads(source['text'])
             if data.get('title') and isinstance(data.get('authors'),list):

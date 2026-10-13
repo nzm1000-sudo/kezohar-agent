@@ -1,0 +1,14 @@
+{
+  "questions": 14,
+  "outcomes": {
+    "fact_supported": 6,
+    "reported_fact": 1,
+    "knowledge_reading": 6,
+    "insufficient_context": 1
+  },
+  "human_reviewed": 0,
+  "halachic_verified": 0,
+  "mean_elapsed_s": 5.614,
+  "actual_records_preserved": 63,
+  "notes": "Latest per-question observations may come from different corrective runs; no invented gold answers."
+}

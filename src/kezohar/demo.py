@@ -161,7 +161,17 @@ async def feedback(request:Request):
         if not isinstance(body['source_ids'],list):raise ValueError('source IDs required')
         from .source_snapshot import admissible
         for sid in body['source_ids']:
-            if not isinstance(sid,str) or not admissible(demo_agent().knowledge.source_by_id(sid) or {}):
+            current=demo_agent().knowledge.source_by_id(sid) if isinstance(sid,str) else None
+            if not current and isinstance(sid,str):
+                # Saving an anonymous issue about a public cached identifier is
+                # not approval to expose its text or use it as evidence.
+                from .torah_facts import FactSourceStore
+                project=Path(__file__).resolve().parents[2]
+                root=Path(os.environ.get('JEWISH_KNOWLEDGE_ROOT') or project/'data/store/jewish-knowledge').resolve()
+                if root!=project and project not in root.parents:raise ValueError('invalid knowledge cache root')
+                path=root/'source-units.sqlite3'
+                if path.exists():current=FactSourceStore(path).get(sid)
+            if not isinstance(sid,str) or not admissible(current or {}):
                 raise ValueError('feedback must refer to a current admissible source ID')
         return record(FEEDBACK_PATH,body['issue'],body['source_ids'],body['answer_digest'])
     except ValueError as exc:return JSONResponse(api._error(str(exc)),status_code=400)

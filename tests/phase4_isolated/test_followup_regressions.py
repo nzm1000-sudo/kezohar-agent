@@ -1554,6 +1554,7 @@ def test_intent_router_separates_facts_from_rulings_and_detects_multiple_domains
     mixed=route('מה פירוש תיקו בגמרא והאם מותר לעשות כך בשבת?')
     assert mixed['engine']=='halachic' and {'halacha','talmud'}<=set(mixed['domains'])
     assert route('מהן עשר הספירות?')['engine']=='jewish-knowledge'
+    assert route('איזו פרשת השבוע?')['engine']=='halachic'  # Existing deterministic calendar route.
 
 
 def test_synthetic_primary_family_graph_handles_maqqaf_and_cannot_use_stale_source():
@@ -1577,7 +1578,7 @@ def test_fact_engine_answers_synthetic_relation_without_model_or_network(tmp_pat
     a=agent([s]);engine=TorahFactAnswerEngine(a,root=tmp_path/'facts')
     from kezohar.request_budget import RequestBudget
     q='מי היה אב של בטא?';r=engine.answer(q,QuestionIntentRouter().route(q),RequestBudget())
-    assert 'אלפא' in r['answer'] and r['fact_verified'] and not r['halachic_verified']
+    assert 'אלפא' in r['answer'] and r['fact_verified'] and r['answer_complete'] and not r['halachic_verified']
     assert not a.answer_model.calls and not r['internet_used']
     assert r['sources']==[s]
 
@@ -1590,3 +1591,115 @@ def test_bibliographic_fact_requires_explicit_author_field_not_a_mentioned_name(
     assert len(edges)==1 and edges[0]['object']=='מחבר בדיקה'
     s['text']=json.dumps({'title':'ספר בדיקה','mention':'שם אחר'},ensure_ascii=False)
     assert not TorahEntityGraph.extract(s)
+
+
+def test_knowledge_definition_requires_definition_not_merely_a_term_mention():
+    from kezohar.knowledge_evidence import issue
+    from kezohar.question_intent import QuestionIntentRouter
+    q='מה פירוש המילה תיקו בגמרא?';r=QuestionIntentRouter().route(q)
+    assert issue(q,r,source(text='בעי אלפא תיקו וכל תיקו לחומרא'))
+    assert issue(q,r,source(text='תיקו הוא תוצאה של משחק ספורט'))
+    assert not issue(q,r,source(text='תיקו הוא מונח בתלמוד המציין שאלה שלא הוכרעה'))
+
+
+def test_knowledge_biography_is_not_a_name_mention_in_an_unrelated_work():
+    from kezohar.knowledge_evidence import issue
+    from kezohar.question_intent import QuestionIntentRouter
+    q='מי היה החיד״א?';r=QuestionIntentRouter().route(q)
+    assert issue(q,r,source(text='וכתב החיד״א בדין סמל בדיקה',work_title='ספר אחר'))
+    assert not issue(q,r,source(text='חיים יוסף דוד אזולאי היה מחבר',work_title='חיים יוסף דוד אזולאי'))
+
+
+def test_secondary_student_attribution_is_never_primary_fact():
+    from kezohar.entity_graph import TorahEntityGraph
+    s=source(text='רבי מאיר היה תנא מתלמידי רבי עקיבא.',work_title='רבי מאיר')
+    s['metadata'].update(knowledge_primary_kind='secondary-encyclopedia',encyclopedia_title='רבי מאיר')
+    edges=TorahEntityGraph.extract(s)
+    assert len(edges)==1 and edges[0]['object']=='רבי עקיבא'
+    assert edges[0]['support']=='reported-secondary-relationship' and not edges[0]['halachic_verified']
+
+
+def test_factual_source_collision_quarantines_both_versions(tmp_path):
+    from kezohar.torah_facts import TorahFactAnswerEngine
+    from kezohar.request_budget import RequestBudget
+    s=source(text='ויקח אלפא את גמא לו לאשה ותלד לו את בטא')
+    s['metadata']['knowledge_primary_kind']='biblical-text'
+    a=agent([s]);engine=TorahFactAnswerEngine(a,root=tmp_path/'facts')
+    engine.remember(s);changed=copy.deepcopy(s);changed['text']+=' modified'
+    engine.remember(changed)
+    assert not engine.resolve('s1',RequestBudget()) and engine.errors
+
+
+def test_fact_response_matches_regular_and_sse_without_halacha_or_model(monkeypatch):
+    s=source(text='ויקח אלפא את גמא לו לאשה ותלד לו את בטא')
+    s['metadata']['knowledge_primary_kind']='biblical-text'
+    a=agent([s]);monkeypatch.setattr(api,'get_agent',lambda:a)
+    body={'question':'מי היה אב של בטא?'}
+    ordinary=request('/ask',body).json()
+    stream=events(request('/ask',dict(body,stream=True)).text)[-1][1]
+    assert ordinary['fact_verified'] and stream['fact_verified']
+    assert ordinary['answer']==stream['structured_answer']['short_answer']
+    assert not a.answer_model.calls and not ordinary['halachic_verified'] and not stream['halachic_verified']
+
+
+def test_public_entity_spelling_hint_requires_unambiguous_name_and_context():
+    from kezohar.question_intent import QuestionIntentRouter
+    r=QuestionIntentRouter().route('מי היה אבא של מושה רבנו?')
+    assert r['entity']=='משה' and r['spelling_hints']
+    unknown=QuestionIntentRouter().route('מי היה אבא של מושה?')
+    assert unknown['entity']=='מושה' and not unknown['spelling_hints']
+
+
+def test_private_source_never_enters_shared_fact_memory(tmp_path):
+    from kezohar.torah_facts import TorahFactAnswerEngine
+    s=source(text='ויקח אלפא את גמא לו לאשה ותלד לו את בטא')
+    s['metadata'].update(knowledge_primary_kind='biblical-text',owner_id='user-A',private=True)
+    engine=TorahFactAnswerEngine(agent([s]),root=tmp_path/'facts');engine.remember(s)
+    assert not engine.current and engine.errors[0]['stage']=='knowledge-privacy'
+    assert not engine.graph.find('בטא','father',lambda _:s)
+
+
+def test_author_question_without_person_entity_still_reaches_bibliographic_proof(monkeypatch,tmp_path):
+    from kezohar.torah_facts import TorahFactAnswerEngine
+    from kezohar.jewish_web import JewishKnowledgeWebSearch
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.request_budget import RequestBudget
+    s=source('book-fixture',text=json.dumps({'title':'ספר בדיקה','authors':['אלפא']},ensure_ascii=False))
+    s['metadata']['knowledge_primary_kind']='bibliographic-metadata'
+    monkeypatch.setattr(TorahFactAnswerEngine,'BOOK_ALIASES',{'ספר בדיקה':'Fixture Book'})
+    monkeypatch.setattr(JewishKnowledgeWebSearch,'index',lambda *a,**k:copy.deepcopy(s))
+    a=agent([]);q='מי כתב את ספר בדיקה?';route=QuestionIntentRouter().route(q)
+    assert route['entity'] is None and route['relation']=='author'
+    result=TorahFactAnswerEngine(a,root=tmp_path/'facts').answer(q,route,RequestBudget())
+    assert result['fact_verified'] and 'אלפא' in result['answer'] and not a.answer_model.calls
+
+
+def test_deep_causal_question_rejects_unrelated_ruling_even_with_land_overlap():
+    from kezohar.knowledge_evidence import issue,expected_kind
+    from kezohar.question_intent import QuestionIntentRouter
+    q='בצע מחקר מעמיק על פירושים לכך שמשה לא נכנס לארץ ישראל'
+    route=QuestionIntentRouter().route(q)
+    assert expected_kind(q,route)=='causal-explanation'
+    bad=source(text='הצבור קורא ויש אומרים שמברכים וכן נוהגים בכל מלכות ארץ ישראל ולא באנא')
+    assert issue(q,route,bad)
+
+
+def test_knowledge_small_definition_can_be_singular_for_plural_concept():
+    from kezohar.knowledge_evidence import issue
+    from kezohar.question_intent import QuestionIntentRouter
+    q='מהן עשר הספירות?'
+    assert not issue(q,QuestionIntentRouter().route(q),source(text='ספירה היא מושג יסודי בעולמה של הקבלה',work_title='ספירה (קבלה)'))
+
+
+def test_no_source_model_status_can_show_scoped_definition_without_claiming_complete_answer(tmp_path):
+    from kezohar.torah_facts import TorahFactAnswerEngine
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.request_budget import RequestBudget
+    s=source(text='אלפא הוא מושג סינתטי לבדיקה, ואין כאן רשימה מלאה.',work_title='מושג אלפא')
+    s['metadata']['knowledge_primary_kind']='secondary-encyclopedia'
+    a=agent([s]);a.answer_model=FixedAnswer(json.dumps({'status':'no_source'}))
+    q='מה פירוש המושג אלפא בקבלה?'
+    r=TorahFactAnswerEngine(a,root=tmp_path/'facts').answer(q,QuestionIntentRouter().route(q),RequestBudget())
+    assert r['verdict']=='partial_knowledge' and not r['answer_complete'] and not r['fact_verified']
+    assert s['text'] in r['answer'] and not r['halachic_verified']
+    assert not r['search_status']['partial']  # honest no-source is not a technical failure

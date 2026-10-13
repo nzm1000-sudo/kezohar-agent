@@ -55,18 +55,29 @@ class _KnowledgeModel:
         return method(question,sources,**opts)
 
 class TorahFactAnswerEngine:
+    BOOK_ALIASES={'כוזרי':'Kuzari','משנה תורה':'Mishneh Torah, Human Dispositions','הבהיר':'Sefer HaBahir'}
     def __init__(self,agent,root=None):
         self.agent=agent
         root=Path(root or os.environ.get('JEWISH_KNOWLEDGE_ROOT') or Path(__file__).resolve().parents[2]/'data/store/jewish-knowledge')
+        project=Path(__file__).resolve().parents[2]
+        if root.resolve()!=project and project not in root.resolve().parents:raise ValueError('knowledge storage must remain inside agent project')
         self.store=FactSourceStore(root/'source-units.sqlite3');self.graph=TorahEntityGraph(root/'entities.sqlite3')
-        self.current={};self.fresh=set();self.web=None;self.encyclopedia=None;self.used_web=False;self.errors=[]
+        self.current={};self.fresh=set();self.conflicted=set();self.web=None;self.encyclopedia=None;self.used_web=False;self.errors=[]
     def remember(self,s):
         if s is None or not admissible(s):return
+        meta=s.get('metadata',{})
+        if meta.get('private') is True or meta.get('visibility')=='private' or meta.get('owner_id') or meta.get('user_id'):
+            self.errors.append({'stage':'knowledge-privacy','error':'private-source-not-eligible-for-shared-graph'});return
+        sid=s['source_id']
+        if sid in self.conflicted:return
+        if sid in self.current and fingerprint(self.current[sid])!=fingerprint(s):
+            self.conflicted.add(sid);self.current.pop(sid,None);self.errors.append({'stage':'knowledge-identity','error':'conflicting-source-id','source_id':sid});return
         local=self.agent.knowledge.source_by_id(s['source_id'])
         if not local:s=self.store.remember(s) or s
         self.current[s['source_id']]=s;self.fresh.add(s['source_id']);self.graph.ingest(s)
     def resolve(self,sid,budget,force=False):
         budget.check('knowledge identity revalidation')
+        if sid in self.conflicted:return None
         local=self.agent.knowledge.source_by_id(sid,request_budget=budget)
         if local:return local if admissible(local) else None
         if not force and sid in self.fresh:return self.current[sid] if admissible(self.current[sid]) else None
@@ -75,39 +86,57 @@ class TorahFactAnswerEngine:
         try:
             self.used_web=True
             kind=old.get('metadata',{}).get('knowledge_primary_kind')
+            # Freshness reads share the request budget, but are not constrained
+            # by the discovery transport's deliberately smaller stage cap.
+            web=JewishKnowledgeWebSearch() if force else self.web
+            encyclopedia=JewishEncyclopediaEngine(web.transport) if force else self.encyclopedia
             if kind=='bibliographic-metadata':
-                fresh=self.web.index(old['metadata']['api_index_title'],budget)
+                fresh=web.index(old['metadata']['api_index_title'],budget)
                 if fresh:fresh['metadata']['api_index_title']=old['metadata']['api_index_title']
-            elif kind=='secondary-encyclopedia':fresh=self.encyclopedia.read(old['metadata']['encyclopedia_title'],budget)
-            else:fresh=self.web.read(old['source_url'],budget)
+            elif kind=='secondary-encyclopedia':fresh=encyclopedia.read(old['metadata']['encyclopedia_title'],budget)
+            else:fresh=web.read(old['source_url'],budget)
             if fresh is None or fresh['source_id']!=sid:return None
             fresh=self.store.remember(fresh) or fresh;self.current[sid]=fresh;self.fresh.add(sid)
             return fresh
         except (OSError,ValueError,LLMUnavailable) as exc:
             self.errors.append({'stage':'knowledge-source-refresh','error':type(exc).__name__});return None
         except Exception as exc:
-            self.errors.append({'stage':'knowledge-source-refresh','error':type(exc).__name__});return None
+            from .torah_web import ResearchError
+            self.errors.append({'stage':'knowledge-source-refresh','error':type(exc).__name__,
+                'reason':str(exc)[:150] if isinstance(exc,ResearchError) else 'refresh failed'});return None
     def facts(self,route,budget):
         if not route['relation'] or not route['entity']:return []
         return self.graph.find(route['entity'],route['relation'],lambda sid:self.resolve(sid,budget))
     def result(self,answer,sources,route,budget,kind='knowledge-reading',facts=None,quotes=None):
         facts=facts or [];quotes=quotes or []
-        return {'answer':answer,'sources':sources,'verdict':'fact_supported' if facts else 'knowledge_reading' if quotes else 'knowledge_insufficient',
+        primary_fact=bool(facts) and all(e['support']=='bounded-primary-relation' for e in facts)
+        errors=self.errors+(self.web.errors if self.web else [])
+        return {'answer':answer,'sources':sources,'verdict':'fact_supported' if primary_fact else 'reported_fact' if facts else 'knowledge_reading' if quotes else 'knowledge_insufficient',
             'mode':kind,'question_intent':route,'clarifications':[],
             'verification':{'verdict':'ok' if facts or quotes else 'insufficient_context',
-                'support':'bounded-primary-relationship' if facts else 'literal-reading-only' if quotes else 'no-direct-support',
+                'support':'bounded-primary-relationship' if primary_fact else 'reported-secondary-relationship' if facts else 'literal-reading-only' if quotes else 'no-direct-support',
                 'facts':facts,'evidence':quotes,'general_entailment_verified':False},
             'verification_layers':{'quotation_integrity':'exact' if facts or quotes else 'not-proved',
-                'claim_support':'typed-primary-fact' if facts else 'quoted-reading-only' if quotes else 'not-proved',
+                'claim_support':'typed-primary-fact' if primary_fact else 'reported-secondary-relationship' if facts else 'quoted-reading-only' if quotes else 'not-proved',
                 'human_review':'required','halachic_verified':False},
             'structured_answer':{'short_answer':answer,'sources':sources,'quotations':[
                 {'source_id':s['source_id'],'text':s['text'],'reference':s['reference']} for s in sources] if facts else [
                 {'source_id':e['source_id'],'text':e['quote'],'reference':e['reference']} for e in quotes]},
             'answer_status':{'message':'מידע תורני מבוסס מקור; אינו פסיקה הלכתית.'},
-            'fact_verified':bool(facts),'human_review':'required','halachic_verified':False,
-            'internet_used':self.used_web,'search_status':{'partial':bool(self.errors),'errors':self.errors},
+            'fact_verified':primary_fact,'answer_complete':primary_fact,
+            'human_review':'required','halachic_verified':False,
+            'internet_used':self.used_web,'search_status':{'partial':bool(errors),'errors':errors},
             'knowledge_discovery':{'sources':list(self.current.values())[:50],
                 'attempts':self.web.attempts if self.web else [],'method':'bounded relationship and subject routes'},
+            'knowledge_research_dossier':{'scope':route['complexity'],
+                'primary':[{'source_id':s['source_id'],'reference':s['reference']} for s in self.current.values()
+                    if s.get('metadata',{}).get('knowledge_primary_kind') in ('biblical-text','bibliographic-metadata')],
+                'interpretations':[{'source_id':s['source_id'],'reference':s['reference']} for s in self.current.values()
+                    if s.get('metadata',{}).get('knowledge_primary_kind')=='text'],
+                'secondary':[{'source_id':s['source_id'],'reference':s['reference']} for s in self.current.values()
+                    if s.get('metadata',{}).get('knowledge_primary_kind')=='secondary-encyclopedia'],
+                'comparison_status':'not-adjudicated; different wording is not disagreement',
+                'answer_sources':[s['source_id'] for s in sources]},
             'orchestration':{'stages':['question-intent-router','knowledge-retrieval','independent-fact-verification'],
                 'budget':budget.report(),'complexity':route['complexity']}}
     def render_facts(self,edges,route,budget):
@@ -121,7 +150,10 @@ class TorahFactAnswerEngine:
         labels={'father':'אביו של {} היה {}.','mother':'אמו של {} הייתה {}.',
                 'wife':'אשתו של {} הייתה {}.','child-count':'ל{} היו {} בנים.',
                 'author':'ברשומת ספריא מופיע {} עם מחבר: {}.'}
-        answer=labels.get(edge['relation'],'{} — {}.').format(subject,obj)+' ('+source['reference']+').'
+        answer=labels.get(edge['relation'],'{} — {}.').format(subject,obj).rstrip('.')+' ('+source['reference']+').'
+        if edge['relation']=='teacher':
+            answer='לפי המקור, '+subject+' היה מתלמידי '+obj+'. ('+source['reference']+'). המקור אינו מוכיח שהיה לו רב אחד בלבד.'
+        elif edge['support']=='reported-secondary-relationship':answer='לפי '+source['reference']+': '+answer
         result=self.result(answer,[source],route,budget,'direct-torah-fact',[edge])
         result['knowledge_context']={'focus_entity':obj,'previous_subject':subject,'previous_relation':edge['relation'],
             'source_id':edge['source_id'],'source_snapshot':edge['source_snapshot']}
@@ -153,6 +185,8 @@ class TorahFactAnswerEngine:
             if len({e['object'] for e in previous_edges})==1:
                 route=dict(route,entity=previous_edges[0]['object'],domains=previous['domains'])
                 route['normalized_question']='מי הייתה אשתו של '+route['entity']+'?' if route['relation']=='wife' else question
+        if route['relation'] and route['relation']!='author' and route['entity'] is None:
+            return self.result('לא ברור לאיזה אדם מתייחסת השאלה. על מי שאלת?',[],route,budget)
         answer=self.render_facts(self.facts(route,budget),route,budget)
         if answer:return answer
         self.local_search(route,budget)
@@ -160,7 +194,7 @@ class TorahFactAnswerEngine:
         if answer:return answer
         # Only public registered subjects may be sent outside. A user-written
         # private/unresolved name is never exported by query generation.
-        books={'כוזרי':'Kuzari','משנה תורה':'Mishneh Torah, Human Dispositions','הבהיר':'Sefer HaBahir'}
+        books=self.BOOK_ALIASES
         if route['relation']=='author':
             title=next((v for k,v in books.items() if k in route['normalized_question']),None)
             if title:
@@ -183,29 +217,75 @@ class TorahFactAnswerEngine:
             if route['relation'] not in ('father','mother','wife','child-count'):
                 try:
                     for title in self.encyclopedia.search(route,budget):self.remember(self.encyclopedia.read(title,budget))
+                    answer=self.render_facts(self.facts(route,budget),route,budget)
+                    if answer:return answer
                 except Exception as exc:self.errors.append({'stage':'encyclopedia','error':type(exc).__name__})
         # Source reading is useful for explanation/history, but does not create
         # an unchecked direct relationship fact or a personal halachic ruling.
-        candidates=list(self.current.values());keywords=knowledge_queries(question,route)
+        from .knowledge_evidence import issue,expected_kind
+        candidates=[s for s in self.current.values() if not issue(question,route,s)];keywords=knowledge_queries(question,route)
         tokens=hebrew.tokens(' '.join(keywords))
-        candidates=sorted(candidates,key=lambda s:-sum(t in hebrew.normalize(s['text']) for t in tokens))[:6]
+        candidates=sorted(candidates,key=lambda s:(
+            'tanakh' in route['domains'] and s.get('metadata',{}).get('knowledge_primary_kind')!='biblical-text',
+            expected_kind(question,route) in ('biography','definition') and s.get('metadata',{}).get('knowledge_primary_kind')!='secondary-encyclopedia',
+            -sum(t in hebrew.normalize(s['text']) for t in tokens)))[:6]
         if candidates and not route['relation']:
             model=BudgetedAnswerModel(_KnowledgeModel(self.agent.answer_model),budget)
             try:
                 generated=model.generate(question,candidates,timeout=min(30,budget.remaining()))
-                packet=json.loads(generated['answer']);ids=packet.get('selected_sources') if set(packet)=={'selected_sources'} else None
+                packet=json.loads(generated['answer'])
+                if packet=={'status':'no_source'}:
+                    # A basic definition may still be useful, while explicitly
+                    # NOT answering every part (e.g. a requested complete list).
+                    if expected_kind(question,route)=='definition':
+                        for candidate in candidates:
+                            if candidate.get('metadata',{}).get('knowledge_primary_kind')!='secondary-encyclopedia':continue
+                            paragraphs=[p.strip() for p in candidate['text'].split('\n') if 20<=len(p.strip())<=750
+                                and not issue(question,route,dict(candidate,text=p.strip()))]
+                            if not paragraphs:continue
+                            fresh=self.resolve(candidate['source_id'],budget,force=True)
+                            if not fresh or fingerprint(fresh)!=fingerprint(candidate):continue
+                            text=paragraphs[0]
+                            if not CrossSourceVerification.quotation(fresh,text):continue
+                            result=self.result('מצאתי הגדרה בסיסית למושג, אך לא אומתה תשובה מלאה לכל חלקי השאלה:\n״'+text+'״ ('+fresh['reference']+').',
+                                [fresh],route,budget,kind='partial-knowledge-reading',quotes=[{'source_id':fresh['source_id'],'quote':text,'reference':fresh['reference']}])
+                            result.update(verdict='partial_knowledge',answer_complete=False)
+                            return result
+                    return self.result('המקורות שנמצאו אינם מספיקים לתשובה המבוקשת. לא נוצרה מסקנה מזיכרון המודל.',[],route,budget)
+                ids=packet.get('selected_sources') if isinstance(packet,dict) and set(packet)=={'selected_sources'} else None
                 if not isinstance(ids,list) or not 1<=len(ids)<=2 or len(set(ids))!=len(ids):raise ValueError('invalid knowledge source selection')
                 quotes=[];sources=[]
                 for sid in ids:
                     sent=next((s for s in candidates if s['source_id']==sid),None);fresh=self.resolve(sid,budget,force=True)
                     if not sent or not fresh or fingerprint(sent)!=fingerprint(fresh):raise ValueError('knowledge source changed')
-                    paragraphs=[p.strip() for p in sent['text'].split('\n') if p.strip() and len(p.strip())<=1500]
+                    max_chars=1500 if route['complexity']=='deep' else 750
+                    paragraphs=[p.strip() for p in sent['text'].split('\n') if p.strip() and len(p.strip())<=max_chars
+                        and not issue(question,route,dict(sent,text=p.strip()))]
                     if not paragraphs:continue
                     p=max(paragraphs,key=lambda p:sum(t in hebrew.normalize(p) for t in tokens))
                     if not CrossSourceVerification.quotation(fresh,p):raise ValueError('quote mismatch')
                     sources.append(fresh);quotes.append({'source_id':sid,'reference':fresh['reference'],'quote':p})
                 if quotes:
-                    answer='\n'.join('לפי '+e['reference']+':\n״'+e['quote']+'״' for e in quotes)
+                    if route['complexity']=='deep':
+                        chosen={s['source_id'] for s in sources}
+                        for extra in self.current.values():
+                            if len(quotes)>=3:break
+                            if extra['source_id'] in chosen or extra.get('metadata',{}).get('knowledge_primary_kind') in ('biblical-text','bibliographic-metadata'):continue
+                            if issue(question,route,extra):continue
+                            passages=[p.strip() for p in extra['text'].split('\n') if 30<=len(p.strip())<=1500
+                                and sum(t in hebrew.normalize(p) for t in tokens)>=min(2,len(tokens))]
+                            names=route.get('public_entities',[])
+                            if names:passages=[p for p in passages if all(hebrew.normalize(name) in hebrew.normalize(p) for name in names)]
+                            if not passages:continue
+                            if 'לא נכנס' in route['normalized_question']:
+                                passages=[p for p in passages if re.search(r'(?<![א-ת])(?:לא נכנס|לא בא|לא יבוא|לא תביאו)(?![א-ת])',hebrew.normalize(p))]
+                            if not passages:continue
+                            fresh=self.resolve(extra['source_id'],budget,force=True)
+                            if not fresh or fingerprint(fresh)!=fingerprint(extra) or not CrossSourceVerification.quotation(fresh,passages[0]):continue
+                            sources.append(fresh);quotes.append({'source_id':fresh['source_id'],'reference':fresh['reference'],
+                                'quote':passages[0],'reading_kind':'interpretation; not a new historical fact'})
+                            chosen.add(fresh['source_id'])
+                    answer='\n'.join('״'+e['quote']+'״ ('+e['reference']+').' for e in quotes)
                     return self.result(answer,sources,route,budget,quotes=quotes)
             except (ValueError,TypeError,LLMUnavailable) as exc:self.errors.append({'stage':'knowledge-generation','error':type(exc).__name__})
         return self.result('לא נמצא מקור ישיר שמוכיח את הפרט המבוקש. נעשה חיפוש ממוקד נוסף; אין להשלים את העובדה מזיכרון המודל.',[],route,budget)
@@ -216,6 +296,7 @@ class JewishResearchOrchestrator:
     def __init__(self,agent):self.agent=agent
     def answer(self,question,route,request_budget=None,study_mode='normal',conversation_history=None,**kwargs):
         budget=request_budget or RequestBudget(seconds=90 if study_mode=='deep' else 45,max_context_bytes=96000 if study_mode=='deep' else 48000)
+        if study_mode=='deep':route=dict(route,complexity='deep')
         try:
             return TorahFactAnswerEngine(self.agent).answer(question,route,budget,conversation_history)
         except BudgetExceeded:

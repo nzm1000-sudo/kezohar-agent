@@ -16,10 +16,13 @@ QUESTIONS=['מי היה אביו של משה רבנו?','מי הייתה אמו 
     'מי היה אבא של משה רבינו?','ומי הייתה אשתו?']
 
 def main():
+    import argparse
+    parser=argparse.ArgumentParser();parser.add_argument('--indices',type=int,nargs='+');args=parser.parse_args()
     a=get_agent();a.source_graph=None;a.answer_model=KnowledgeRecorder(a.answer_model)
     root=Path('data/store/jewish-knowledge-demo');root.mkdir(exist_ok=True);os.chmod(root,0o700)
     path=root/('actual-'+time.strftime('%Y%m%d-%H%M%S')+'.jsonl')
     for index,q in enumerate(QUESTIONS):
+        if args.indices is not None and index not in args.indices:continue
         a.answer_model.calls=[];start=time.perf_counter();mode='deep' if index==11 else 'normal'
         history=[QUESTIONS[12]] if index==13 else []
         result=a.converse(q,study_mode=mode,conversation_history=history,

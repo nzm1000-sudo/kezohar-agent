@@ -39,6 +39,11 @@ SITES = {
         'policy_url':'https://www.yeshiva.org.il/users/takanon','reason':'reading terms do not establish automated indexing permission'},
     'www.kipa.co.il': {'name':'כיפה','access':'reference-only',
         'policy_url':'https://www.kipa.co.il/','reason':'automated reuse scope needs review'},
+    'www.daat.ac.il': {'name':'דעת','access':'reference-only',
+        'policy_url':'https://www.daat.ac.il/','reason':'public texts identified; item-specific rights and automated access need review'},
+    'www.nli.org.il': {'name':'הספרייה הלאומית','access':'reference-only',
+        'policy_url':'https://www.nli.org.il/he/research-and-teach/open-library/search-api',
+        'reason':'official search API requires registration/key; no guest credential, trial or unspecified reuse assumed'},
 }
 
 # These are search hints, not statements of law or equivalent circumstances.
