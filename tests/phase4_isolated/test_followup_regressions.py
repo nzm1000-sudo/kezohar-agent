@@ -1325,6 +1325,7 @@ def test_torah_web_queries_never_send_free_user_data_or_history():
     assert queries and 'מאכל פרווה בשמן בשרי המתנה' in queries
     assert not any(x in ' '.join(queries) for x in ('פלוני','050','private','פרטים','אכלתי'))
     assert not public_queries('שלח למישהו את כתובתי 123')
+    assert 'עובדיה יוסף' not in ' '.join(public_queries('שמי עובדיה יוסף מה מברכים על אורז?'))
 
 
 def test_article_reader_ignores_comments_and_does_not_infer_author_from_mentions():
@@ -1425,3 +1426,120 @@ def test_web_revalidation_rejects_version_content_license_and_permission_changes
         prior=doc[key];doc[key]=value;assert not engine.validate_source(s);doc[key]=prior
     licenses[license_id]['revision']='new-permission'
     assert not engine.validate_source(s)
+
+
+def test_web_request_budget_shared_across_transports_and_cancellation():
+    import threading
+    from kezohar.request_budget import RequestBudget,BudgetExceeded
+    b=RequestBudget();assert all(b.consume_web_request() for _ in range(18))
+    assert not b.consume_web_request() and b.web_requests==18
+    flag=threading.Event();flag.set()
+    with pytest.raises(BudgetExceeded):RequestBudget(cancel_event=flag).consume_web_request()
+
+
+def test_official_reader_refuses_wrong_reference_and_unidentified_version():
+    from kezohar.torah_web import TorahWebReader,ResearchError
+    class Transport:
+        def __init__(self,data):self.data=data
+        def json(self,*a,**k):return self.data
+    data={'ref':'Other 1','heRef':'אחר א','versions':[{'language':'he','text':'מקור סינתטי','versionTitle':'v1','license':'Public Domain'}]}
+    with pytest.raises(ResearchError,match='identity'):TorahWebReader(Transport(data)).read('https://www.sefaria.org/Fixture_1')
+    data.update(ref='Fixture 1');data['versions']*=2
+    with pytest.raises(ResearchError,match='uniquely'):TorahWebReader(Transport(data)).read('https://www.sefaria.org/Fixture_1')
+    wiki={'parse':{'title':'Different','revid':1,'text':{'*':'<p>fixture</p>'}}}
+    with pytest.raises(ResearchError,match='confirmed'):TorahWebReader(Transport(wiki)).read('https://he.wikisource.org/wiki/Fixture')
+
+
+def test_blessing_action_is_preserved_in_privacy_safe_web_query():
+    from kezohar.torah_web import public_queries
+    assert public_queries('מה מברכים על אורז?')==['אורז ברכה']
+    assert public_queries('קראתי על אורז')==['אורז']
+
+
+def test_public_locator_query_preserves_only_explicit_bounded_book_numbering():
+    from kezohar.torah_web import public_queries
+    q='פתח שולחן ערוך אורח חיים סימן כה סעיף ט עבור פלוני טלפון 123'
+    assert public_queries(q)==['שולחן ערוך אורח חיים סימן 25 סעיף 9']
+    assert '123' not in public_queries(q)[0]
+
+
+def test_article_fallback_without_main_still_removes_comments_and_ads():
+    from kezohar.torah_web import ArticleParser
+    p=ArticleParser();p.feed('<title>Fixture</title><div>actual paragraph</div><div class="comments">bad comment</div><aside>advert</aside>')
+    d=p.document();assert 'actual paragraph' in d['text'] and 'bad comment' not in d['text'] and 'advert' not in d['text']
+
+
+def test_live_web_permission_loader_failure_does_not_reuse_old_grant(monkeypatch):
+    from kezohar.torah_web import HybridHalachicResearch,TorahWebReader
+    calls=[]
+    def broken():raise ValueError('synthetic policy update malformed')
+    engine=HybridHalachicResearch(permission_loader=broken,licenses={},grants={'old':{'verified':True}})
+    monkeypatch.setattr(TorahWebReader,'read',lambda *a,**kw:calls.append(a) or {})
+    assert not engine.validate_source(source()) and not calls
+    result=engine.research('מקור אלפא')
+    assert not result['sources'] and result['errors'][0]['stage']=='permissions'
+
+
+@pytest.mark.parametrize('selected',['s1','s2'])
+def test_bad_web_candidate_cannot_poison_good_source_or_be_cited(monkeypatch,selected):
+    from kezohar.web_research import WebResearchEngine
+    good=source();bad=source('s2',source_project='verified-web',source_url='https://www.sefaria.org/Fixture')
+    engine=WebResearchEngine(licenses={});reads=[]
+    monkeypatch.setattr(engine,'research',lambda *a,**kw:{'sources':[good,bad],'errors':[],'comparisons':[]})
+    monkeypatch.setattr(engine,'validate_source',lambda s,budget=None:reads.append(s['source_id']) or False,raising=False)
+    model=FixedAnswer(json.dumps({'selected_sources':[selected]}))
+    result=engine.answer(Q,'','',answer_model=model,source_verifier=ExtractiveSourceVerifier())
+    assert result['verification']['verdict']==('ok' if selected=='s1' else 'invalid_citation')
+    assert reads==([] if selected=='s1' else ['s2'])
+    assert result['sources']==[good] and not result['halachic_verified']
+    if selected=='s2':assert result['search_status']['partial']
+
+
+def test_site_rate_limit_stops_further_calls_and_redirect_is_not_followed(monkeypatch):
+    import socket
+    from kezohar import torah_web as tw
+    monkeypatch.setattr(socket,'getaddrinfo',lambda *a,**k:[(None,None,None,None,('93.184.216.34',443))])
+    monkeypatch.setattr(tw.PublicApiTransport,'host_cooldown',{})
+    monkeypatch.setattr(tw.PublicApiTransport,'host_last',{})
+    calls=[]
+    class Response:
+        status=429
+        def getheader(self,key,default=''):return '120' if key=='Retry-After' else default
+    class Conn:
+        def request(self,*a):calls.append(a)
+        def getresponse(self):return Response()
+        def close(self):pass
+    monkeypatch.setattr(tw,'_PinnedHTTPS',lambda *a:Conn())
+    transport=tw.PublicApiTransport()
+    with pytest.raises(tw.ResearchError,match='rate limited'):transport.json('https://www.sefaria.org/api/fixture')
+    with pytest.raises(tw.ResearchError,match='cooldown'):transport.json('https://www.sefaria.org/api/fixture')
+    assert len(calls)==1
+    tw.PublicApiTransport.host_cooldown.clear();tw.PublicApiTransport.host_last.clear();Response.status=302
+    with pytest.raises(tw.ResearchError,match='302'):transport.json('https://www.sefaria.org/api/fixture')
+    assert len(calls)==2  # no second request to any redirect target
+
+
+def test_public_api_search_runs_two_sites_in_parallel_under_shared_request_cap():
+    import threading
+    from kezohar.torah_web import TorahWebSearch
+    barrier=threading.Barrier(2)
+    class Transport:
+        def json(self,*a,**kw):barrier.wait(timeout=1);return {}
+    assert not TorahWebSearch(Transport()).search('אורז')
+    from kezohar.request_budget import RequestBudget
+    budget=RequestBudget()
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results=list(pool.map(lambda _:budget.consume_web_request(),range(30)))
+    assert sum(results)==budget.web_requests==18
+
+
+def test_web_disk_store_cannot_revive_old_permission_or_text_as_local_evidence(tmp_path):
+    from kezohar.knowledge import KnowledgeBase
+    from kezohar.source_snapshot import admissible
+    s=source(source_project='verified-web',source_url='https://www.sefaria.org/Fixture')
+    path=tmp_path/'saved-web.jsonl';path.write_text(json.dumps(s)+'\n')
+    kb=KnowledgeBase(store_path=path)
+    cached=kb.source_by_id(s['source_id'])
+    assert cached and not admissible(cached)
+    assert cached['metadata']['web_cache_status']=='live-read-and-policy-revalidation-required'
+    assert path.read_text()==json.dumps(s)+'\n'  # no data deletion or rewrite

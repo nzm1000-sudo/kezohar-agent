@@ -412,23 +412,37 @@ class WebResearchEngine:
             if hasattr(generator,'sent_sources'):
                 result['sources']=generator.sent_sources
             from .source_snapshot import fingerprint, admissible
-            current=[];stale=False
+            current=[];changed=[]
+            try:packet=json.loads(generated)
+            except (ValueError,TypeError):packet=None
+            selection=(packet.get('selected_sources') if isinstance(packet,dict) and set(packet)=={'selected_sources'} else None)
+            selected=(set(selection) if isinstance(selection,list) and 1<=len(selection)<=2
+                and all(isinstance(sid,str) and sid for sid in selection) and len(set(selection))==len(selection) else None)
             for source in result['sources']:
+                # Unselected external pages remain discovery records. They do
+                # not consume the freshness reads needed by actual citations.
+                if source.get('source_project')=='verified-web' and selected is not None and source['source_id'] not in selected:
+                    continue
                 if request_budget:request_budget.check('web source revalidation')
                 opts={'request_budget':request_budget} if request_budget and source_resolver and accepts_budget(source_resolver) else {}
                 fresh=source_resolver(source['source_id'],**opts) if source_resolver and source['source_id'] in local_ids else source
                 if request_budget:request_budget.check('web source revalidation return')
-                if fresh is None or fingerprint(fresh)!=fingerprint(source):stale=True
+                if fresh is None or fingerprint(fresh)!=fingerprint(source):
+                    changed.append(source['source_id']);fresh=None
                 if fresh and fresh.get('source_project')=='verified-web' and fresh.get('metadata',{}).get('persistence_allowed'):
                     allowed,_=permission_for(fresh.get('license',''),
                                              self.licenses,self.grants,fresh['source_url'])
-                    if not allowed:stale=True;fresh=None
+                    if not allowed:changed.append(source['source_id']);fresh=None
                 if fresh and fresh.get('source_project')=='verified-web' and hasattr(self,'validate_source'):
-                    if not self.validate_source(fresh,request_budget):stale=True;fresh=None
+                    if not self.validate_source(fresh,request_budget):changed.append(source['source_id']);fresh=None
                 if fresh and admissible(fresh):current.append(fresh)
             result['sources']=current
-            verification = ({'verdict':'invalid_citation','support':'source or permission changed during generation'} if stale else
-                            verifier.verify(question, generated, current))
+            if changed:
+                result['search_status']['partial']=True
+                result['search_status']['errors'].append({'stage':'source-revalidation','error':'source-or-policy-changed','source_ids':changed})
+            # Missing selected IDs fail the ordinary verifier. A changed source
+            # is never silently replaced by a newer text under the same ID.
+            verification = verifier.verify(question, generated, current)
             result['verification'] = verification
             if verification['verdict']=='ok':
                 result.update(answer=verification.get('rendered_answer',generated), mode='web-llm-verified', verdict=verification.get('support','exact-extract-only'))
@@ -451,4 +465,5 @@ class WebResearchEngine:
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('question');parser.add_argument('--url',action='append');parser.add_argument('--store')
-    args=parser.parse_args();print(json.dumps(WebResearchEngine(store_path=args.store).research(args.question,urls=args.url),ensure_ascii=False,indent=2))
+    from .torah_web import HybridHalachicResearch
+    args=parser.parse_args();print(json.dumps(HybridHalachicResearch(store_path=args.store).research(args.question,urls=args.url),ensure_ascii=False,indent=2))

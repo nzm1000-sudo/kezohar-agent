@@ -372,8 +372,13 @@ class Agent:
             import os, json
             from pathlib import Path
             grants_path = os.environ.get('WEB_PERMISSIONS_PATH')
-            grants = json.loads(Path(grants_path).read_text(encoding='utf-8')) if grants_path else {}
-            self.research_engine = HybridHalachicResearch(grants=grants,
+            def permission_loader():
+                from .ingest import load_licenses
+                grants=json.loads(Path(grants_path).read_text(encoding='utf-8')) if grants_path else {}
+                if not isinstance(grants,dict):raise ValueError('invalid web permission registry')
+                return load_licenses(),grants
+            self.research_engine = HybridHalachicResearch(grants={},licenses={},
+                permission_loader=permission_loader,
                 store_path=os.environ.get('WEB_STORE_PATH','data/store/torah-web/sources.jsonl'))
         engine = self.research_engine
         result = engine.answer(question, self.base_url, self.model, limit=top_k,

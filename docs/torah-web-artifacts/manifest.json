@@ -1,0 +1,27 @@
+[
+  {
+    "file": "actual-20261013-094627.jsonl.gz",
+    "sha256": "271e9e7ff13f07fb1b58e5e623f483f73c57e2927acfc1c40dffd3dda7da71f0",
+    "records": 3
+  },
+  {
+    "file": "actual-20261013-094818.jsonl.gz",
+    "sha256": "6a21adad6f89995563108640350157de3628f57bf0f3a0210e445c07a71e925c",
+    "records": 3
+  },
+  {
+    "file": "actual-20261013-095632.jsonl.gz",
+    "sha256": "412a3f884243a3d23a1026aafb2c093808093396dc1f6c96760868f21ba3ed72",
+    "records": 3
+  },
+  {
+    "file": "actual-20261013-100028.jsonl.gz",
+    "sha256": "0caccbd117b5bf10ae1f61bda91a0ce3c4491b2f9f105813803c08e8260502dc",
+    "records": 3
+  },
+  {
+    "file": "actual-20261013-100757.jsonl.gz",
+    "sha256": "b568e8108e16abb77e6dda0340bf488f12b9910ecb23c2c7b894722c775807a3",
+    "records": 3
+  }
+]

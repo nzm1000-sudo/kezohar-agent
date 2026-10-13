@@ -16,6 +16,12 @@ class KnowledgeBase:
             for path in paths:
                 if path:
                     for source in load_store(path):
+                        if source.source_project=='verified-web':
+                            # A disk record proves a past read, not current web
+                            # content or permissions. Reuse URL metadata through
+                            # live research; never revive a cached ruling here.
+                            source.metadata=dict(source.metadata if isinstance(source.metadata,dict) else {},rag_answers_allowed=False,
+                                web_cache_status='live-read-and-policy-revalidation-required')
                         loaded.append(source)
             sources = loaded  # retain conflicting IDs for fail-closed resolution
         self.search = HybridSearch(sources)

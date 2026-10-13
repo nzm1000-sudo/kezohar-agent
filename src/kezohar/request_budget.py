@@ -37,6 +37,9 @@ class RequestBudget:
         self.dropped_source_ids = []
         self.reason = None
         self.cancel_event=cancel_event
+        self.web_requests=0
+        import threading
+        self._web_lock=threading.Lock()
 
     def remaining(self):
         return max(0.0, self.seconds - (time.monotonic() - self.started))
@@ -56,7 +59,15 @@ class RequestBudget:
                 'max_context_bytes': self.max_context_bytes,
                 'dropped_source_ids': list(self.dropped_source_ids), 'stop_reason': self.reason,
                 'context_measure': 'UTF-8 prompt bytes, not tokenizer tokens',
-                'deadline_kind': 'cooperative; in-flight I/O is not forcibly cancelled'}
+                'deadline_kind': 'cooperative; in-flight I/O is not forcibly cancelled',
+                'web_requests':self.web_requests,'max_web_requests':18}
+
+    def consume_web_request(self):
+        self.check('public web request')
+        with self._web_lock:
+            if self.web_requests>=18:return False
+            self.web_requests+=1
+            return True
 
     def fit(self, question, sources):
         chosen = []

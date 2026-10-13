@@ -10,6 +10,7 @@ import json
 import re
 import socket
 import ssl
+import threading
 import time
 import urllib.parse
 from html.parser import HTMLParser
@@ -47,7 +48,13 @@ VOCABULARY = ('ברכת המזון','תפילין','אורז','פקאן','מרק
 def public_queries(question):
     """Closed vocabulary only: no names, numbers, free facts, URLs or history."""
     core=hebrew.normalize(question.split('\n')[0])
+    from .locator_search import parse
+    locator=parse(question.split('\n')[0])
+    if locator and 1<=locator['siman']<=1000 and 1<=locator['seif']<=200:
+        return ['{} {} סימן {} סעיף {}'.format(locator['work'],locator['division'] or '',locator['siman'],locator['seif'])]
     selected=[term for term in VOCABULARY if hebrew.normalize(term) in core]
+    if any(marker in core for marker in ('שמי','קוראימ לי','מספר זהות','הטלפונ שלי','כתובת שלי')):
+        selected=[term for term in selected if term not in ('עובדיה יוסף','יצחק יוסף','אופיר מלכה')]
     if not selected:return []
     if any(term in core for term in ('מברכ','ברכה','ברכת')):selected.append('ברכה')
     if any(term in core for term in ('להמתינ','מחכימ','המתנה')):selected.append('המתנה')
@@ -77,10 +84,24 @@ class _PinnedHTTPS(http.client.HTTPSConnection):
 
 class PublicApiTransport:
     """No proxies/cookies/redirects/JS; DNS rebinding cannot change target IP."""
+    host_locks={host:threading.Lock() for host in SITES}
+    host_last={}
+    host_cooldown={}
     def __init__(self,timeout=8,max_requests=18):
-        self.timeout=timeout;self.max_requests=max_requests;self.calls=0;self.last={}
+        self.timeout=timeout;self.max_requests=max_requests;self.calls=0;self.last=self.host_last
+        self.counter_lock=threading.Lock()
     def json(self,url,payload=None,request_budget=None):
+        host=urllib.parse.urlsplit(canonical_url(url)).hostname
+        if SITES[host]['access']!='official-api':raise ResearchError('access policy pending')
+        lock=self.host_locks[host]
+        if request_budget:request_budget.check('public API queue')
+        if not lock.acquire(timeout=min(self.timeout,request_budget.remaining()) if request_budget else self.timeout):
+            raise ResearchError('site request queue timed out')
+        try:return self._json(url,payload,request_budget)
+        finally:lock.release()
+    def _json(self,url,payload=None,request_budget=None):
         url=canonical_url(url);p=urllib.parse.urlsplit(url)
+        if self.host_cooldown.get(p.hostname,0)>time.monotonic():raise ResearchError('site rate limit cooldown active')
         if SITES[p.hostname]['access']!='official-api':raise ResearchError('access policy pending')
         if self.calls>=self.max_requests:raise ResearchError('web request limit reached')
         if request_budget:request_budget.check('public API DNS')
@@ -92,7 +113,11 @@ class PublicApiTransport:
         if request_budget and delay>=request_budget.remaining():raise ResearchError('rate limit exceeds budget')
         if delay:time.sleep(delay)
         if request_budget:request_budget.check('public API request')
-        self.calls+=1;self.last[p.hostname]=time.monotonic()
+        with self.counter_lock:
+            if self.calls>=self.max_requests:raise ResearchError('web request limit reached')
+            if request_budget and not request_budget.consume_web_request():raise ResearchError('shared web request limit reached')
+            self.calls+=1
+        self.last[p.hostname]=time.monotonic()
         timeout=min(self.timeout,request_budget.remaining()) if request_budget else self.timeout
         conn=_PinnedHTTPS(p.hostname,ips[0],timeout)
         try:
@@ -100,6 +125,11 @@ class PublicApiTransport:
             conn.request('POST' if body is not None else 'GET',p.path+('?' + p.query if p.query else ''),body,
                 {'User-Agent':USER_AGENT,'Accept':'application/json','Content-Type':'application/json; charset=utf-8'})
             response=conn.getresponse()
+            if response.status==429:
+                retry=response.getheader('Retry-After','60')
+                delay=int(retry) if retry.isascii() and retry.isdigit() else 60
+                self.host_cooldown[p.hostname]=time.monotonic()+max(60,min(delay,3600))
+                raise ResearchError('site rate limited; no further requests during cooldown')
             if response.status!=200:raise ResearchError('public API HTTP '+str(response.status))
             if response.getheader('Content-Type','').split(';')[0] not in ('application/json','application/problem+json'):
                 raise ResearchError('API did not return JSON')
@@ -123,28 +153,33 @@ class PublicApiTransport:
 class TorahWebSearch:
     def __init__(self,transport=None,cached_urls=None):
         self.transport=transport or PublicApiTransport();self.last_attempts=[];self.last_backend='official-site-apis';self.cached_urls=cached_urls or []
+    def _one(self,query,host,limit,request_budget):
+        if request_budget:request_budget.check('Torah web discovery')
+        try:
+            if host=='www.sefaria.org':
+                data=self.transport.json('https://www.sefaria.org/api/search-wrapper',
+                    {'query':query,'type':'text','field':'naive_lemmatizer','slop':10,
+                     'size':min(limit,8),'source_proj':['ref','heRef','title']},request_budget)
+                found=['https://www.sefaria.org/'+urllib.parse.quote(h['_source']['ref'].replace(' ','_'))
+                       for h in data.get('hits',{}).get('hits',[]) if h.get('_source',{}).get('ref')]
+            else:
+                data=self.transport.json('https://he.wikisource.org/w/api.php?'+urllib.parse.urlencode({
+                    'action':'query','list':'search','srsearch':query,'srlimit':min(limit,8),
+                    'srnamespace':0,'format':'json','maxlag':5}),request_budget=request_budget)
+                found=['https://he.wikisource.org/wiki/'+urllib.parse.quote(h['title'].replace(' ','_'))
+                       for h in data.get('query',{}).get('search',[])]
+            return found,{'backend':host,'query':query,'status':'results','count':len(found)}
+        except (OSError,ValueError,ResearchError) as exc:
+            return [],{'backend':host,'query':query,'status':'unavailable','error':str(exc)[:120]}
     def search(self,question,limit=5,request_budget=None):
+        from concurrent.futures import ThreadPoolExecutor
         queries=public_queries(question);urls=list(self.cached_urls[:2]);self.last_attempts=[];batches=[]
         for query in queries[:3]:
-            for host in ('www.sefaria.org','he.wikisource.org'):
-                if request_budget:request_budget.check('Torah web discovery')
-                try:
-                    if host=='www.sefaria.org':
-                        data=self.transport.json('https://www.sefaria.org/api/search-wrapper',
-                            {'query':query,'type':'text','field':'naive_lemmatizer','slop':10,
-                             'size':min(limit,8),'source_proj':['ref','heRef','title']},request_budget)
-                        found=['https://www.sefaria.org/'+urllib.parse.quote(h['_source']['ref'].replace(' ','_'))
-                               for h in data.get('hits',{}).get('hits',[]) if h.get('_source',{}).get('ref')]
-                    else:
-                        data=self.transport.json('https://he.wikisource.org/w/api.php?'+urllib.parse.urlencode({
-                            'action':'query','list':'search','srsearch':query,'srlimit':min(limit,8),
-                            'srnamespace':0,'format':'json','maxlag':5}),request_budget=request_budget)
-                        found=['https://he.wikisource.org/wiki/'+urllib.parse.quote(h['title'].replace(' ','_'))
-                               for h in data.get('query',{}).get('search',[])]
-                    batches.append(found)
-                    self.last_attempts.append({'backend':host,'query':query,'status':'results','count':len(found)})
-                except (OSError,ValueError,ResearchError) as exc:
-                    self.last_attempts.append({'backend':host,'query':query,'status':'unavailable','error':str(exc)[:120]})
+            if request_budget:request_budget.check('parallel site discovery')
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                jobs=[pool.submit(self._one,query,host,limit,request_budget) for host in ('www.sefaria.org','he.wikisource.org')]
+                for job in jobs:
+                    found,attempt=job.result();batches.append(found);self.last_attempts.append(attempt)
         # Interleave official providers so a large first batch cannot hide the
         # other site's results. Neither discovery rank nor tradition proves law.
         for position in range(8):
@@ -177,7 +212,8 @@ class ArticleParser(PageParser):
     def handle_data(self,data):
         if self.in_ld:self.ld.append(data)
         if self.stack and self.stack[-1]['body'] and not self.stack[-1]['blocked'] and data.strip():self.blocks.append(data.strip())
-        super().handle_data(data)
+        if self.title_depth or self.in_h1 or not self.stack or not self.stack[-1]['blocked']:
+            super().handle_data(data)
     def document(self):
         doc=super().document()
         if self.blocks:doc['text']='\n'.join(self.blocks)
@@ -212,6 +248,8 @@ class TorahWebReader:
                 'action':'parse','page':title,'prop':'text|revid|displaytitle','format':'json','maxlag':5}),request_budget=request_budget)
             parsed=data.get('parse',{});parser=ArticleParser();parser.feed(parsed.get('text',{}).get('*',''))
             doc=parser.document();doc['title']=parsed.get('title',title)
+            if parsed.get('title','').replace('_',' ')!=title or type(parsed.get('revid')) is not int:
+                raise ResearchError('wiki title or revision not confirmed')
             doc.update(version='Wikisource revision '+str(parsed.get('revid','unknown')),license='',
                 license_status='page-specific-reuse-scope-not-established',locator_status='page-title-url-matched',
                 reference=doc['title'],site_name='ויקיטקסט')
@@ -220,6 +258,8 @@ class TorahWebReader:
             if not ref or ref.startswith(('api/','sheets/')):raise ResearchError('not a text reference')
             data=self.transport.json('https://www.sefaria.org/api/v3/texts/'+urllib.parse.quote(ref,safe='')+
                 '?version=hebrew&fill_in_missing_segments=0',request_budget=request_budget)
+            if not data.get('ref') or not data.get('heRef') or re.sub(r'\s+',' ',data['ref']).casefold()!=re.sub(r'\s+',' ',ref).casefold():
+                raise ResearchError('API reference identity mismatch')
             versions=[v for v in data.get('versions',[]) if v.get('language') in ('he','hebrew')]
             if len(versions)!=1:raise ResearchError('Hebrew version not uniquely identified')
             v=versions[0];text=v.get('text');pieces=[]
@@ -232,6 +272,7 @@ class TorahWebReader:
                 reference=data.get('heRef') or data.get('ref') or ref,
                 author='',author_status='unknown',version=v.get('versionTitle',''),
                 license=v.get('license',''),locator_status='official-api-reference',site_name='ספריא')
+            doc['version_source']=v.get('versionSource','')
         if not doc.get('text') or not doc.get('title'):raise ResearchError('no readable source text')
         doc['source_url']=url
         doc['page_sha256']=hashlib.sha256(doc['text'].encode()).hexdigest()
@@ -267,11 +308,17 @@ from .web_research import WebResearchEngine
 
 class HybridHalachicResearch(WebResearchEngine):
     """Existing RAG/verifier with per-request official API discovery and reader."""
-    def __init__(self,**kwargs):
+    def __init__(self,permission_loader=None,**kwargs):
         super().__init__(sites=SITES,**kwargs)
         self.allow_local_reuse=False  # Cached URLs always require a new authorized read.
+        self.permission_loader=permission_loader
     def research(self,question,limit=5,urls=None,request_budget=None):
-        transport=PublicApiTransport()
+        if self.permission_loader:
+            try:self.licenses,self.grants=self.permission_loader()
+            except (OSError,ValueError,TypeError):
+                return {'sources':[],'errors':[{'stage':'permissions','error':'current-policy-unavailable'}],
+                    'answer':'ההרשאות העדכניות אינן זמינות; מקור אינטרנטי לא ישמש ראיה.','comparisons':[],'mode':'web-sources-only'}
+        transport=PublicApiTransport(max_requests=16)  # Reserve two fresh reads for answer verification.
         index=None
         if self.store_path:
             from .web_metadata import WebMetadataIndex
@@ -293,18 +340,24 @@ class HybridHalachicResearch(WebResearchEngine):
             x.get('status')=='unavailable' for x in result.get('discovery_attempts',[])),
             'errors':result.get('errors',[])+[x for x in result.get('discovery_attempts',[]) if x.get('status')=='unavailable']}
         return result
+    def answer(self,*args,**kwargs):
+        result=super().answer(*args,**kwargs)
+        budget=kwargs.get('request_budget')
+        if budget and 'web_policy' in result:result['web_policy']['requests']=budget.web_requests
+        return result
     def validate_source(self,source,request_budget=None):
         """No cached/source HTML statement can approve its own permissions."""
         from .permissions import permission_for
         try:
+            licenses,grants=self.permission_loader() if self.permission_loader else (self.licenses,self.grants)
             doc=TorahWebReader().read(source['source_url'],request_budget)
             license_id={'Public Domain':'public-domain'}.get(doc.get('license'),doc.get('license',''))
-            allowed,permission=permission_for(license_id,self.licenses,self.grants,source['source_url'])
+            allowed,permission=permission_for(license_id,licenses,grants,source['source_url'])
             return (allowed and doc.get('page_sha256')==source.get('metadata',{}).get('page_sha256')
                 and doc.get('version')==source.get('version') and license_id==source.get('license')
                 and permission==source.get('metadata',{}).get('permission')
                 and source.get('metadata',{}).get('source_unit_complete') is True)
-        except (OSError,ValueError,ResearchError):return False
+        except (OSError,ValueError,TypeError,ResearchError):return False
 
 class HalachicOpinionComparison:
     @staticmethod
