@@ -19,8 +19,8 @@ STYLE = (
 )
 
 def revision():
-    from .blessing_context import FIRST_NAMES
-    return hashlib.sha256(json.dumps({'version':2,'edits':STYLE,'table_names':FIRST_NAMES,
+    from .blessing_context import FIRST_NAMES,LAST_NAMES
+    return hashlib.sha256(json.dumps({'version':3,'edits':STYLE,'table_names':FIRST_NAMES,'last_column_names':LAST_NAMES,
         'format':'whole-unit-sentence-paragraphs-v3'},sort_keys=True,ensure_ascii=False).encode()).hexdigest()
 
 def explain(source):

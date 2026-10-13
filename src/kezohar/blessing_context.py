@@ -8,6 +8,7 @@ FIRST_NAMES={
     'שהכל':'שהכל נהיה בדברו','מזונות':'בורא מיני מזונות',
     'המוציא':'המוציא לחם מן הארץ',
 }
+LAST_NAMES=('נפשות','מעין שלוש','מעין שלש','על המחיה','ברכת המזון','על העץ','על העץ ועל פרי העץ')
 
 
 def table_row(text):
@@ -18,10 +19,13 @@ def table_row(text):
 
 def food_subject(question):
     """Only a syntactically explicit food query; no inferred food or stage."""
-    q=normalize(question.split('\n')[0]).strip().rstrip('?')
+    # Scope/facts after a question mark are not part of the food's name.
+    # Preserve them elsewhere for applicability and the after-blessing guard.
+    q=normalize(re.split(r'[?\n]',question,maxsplit=1)[0]).strip()
     match=re.fullmatch(r'(?:מה|איזו)\s+(?:מברכימ|הברכה|ברכה)\s+על\s+(.+)',q)
     if not match:return None
-    words=match.group(1).split()
+    from .ranking import canonical_query_token
+    words=[canonical_query_token(w) for w in match.group(1).split()]
     if words and words[0] in ('אגוז','אגוזי','פרי'):words=words[1:]
     return ' '.join(words) or None
 
@@ -62,7 +66,7 @@ def reading(evidence, sources):
             # Projection is a bounded column-label reading, not a semantic
             # completeness heuristic. Any extra column wording stays verbatim.
             has_conditions=has_conditions or row['first_column'] not in ('העץ','האדמה','שהכל','מזונות','המוציא')
-            has_conditions=has_conditions or row['last_column'] not in ('נפשות','מעין שלוש','מעין שלש','על המחיה','ברכת המזון','על העץ')
+            has_conditions=has_conditions or row['last_column'] not in LAST_NAMES
             result.append(dict(row,first_blessing_name=FIRST_NAMES.get(row['first_column']),source_id=s['source_id'],reference=s['reference'],
                                status='table-classification-only',has_conditions=has_conditions,
                                after_blessing_case_verified=False))

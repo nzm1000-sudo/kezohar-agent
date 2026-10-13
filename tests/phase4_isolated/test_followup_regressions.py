@@ -1125,3 +1125,59 @@ def test_explicit_purity_purpose_is_not_asked_again_or_assumed_from_gender():
     assert explicit['circumstances']['immersion_purpose']=='woman_purity'
     ambiguous=analyze('האם אישה יכולה לטבול ביום?')
     assert 'immersion_purpose' not in ambiguous['circumstances']
+
+
+def test_more_specific_food_row_cannot_answer_unspecified_food():
+    from kezohar.agent import order_sources
+    specific=source(text='מים מתוקים – שהכל / נפשות.',reference='לוח ברכות בדיקה א:א',work_title='עונג שבת')
+    assert not order_sources([specific],'מה מברכים על מים?')
+    assert ExtractiveSourceVerifier().verify('מה מברכים על מים?',quote(specific),[specific])['verdict']!='ok'
+
+
+def test_drinking_water_query_rejects_washing_and_ingredient_use():
+    from kezohar.agent import order_sources
+    washing=source('wash',text='מים אחרונים, ואחרי נטילה מברך, וכל מים כשרים לנטילה.')
+    ingredient=source('ingredient',text='החומץ שעירבו במים שראוי לשתות מברך שהכל.')
+    drink=source('drink',text='השותה מים לצמאו מברך שהכל; רק אם דגל אלפא פעיל.')
+    assert [s['source_id'] for s in order_sources([washing,ingredient,drink],'מה מברכים על מים?')]==['drink']
+
+
+def test_meal_blessing_posture_cannot_be_answered_from_other_blessing():
+    from kezohar.agent import order_sources
+    other=source('priestly',text='ברכה סינתטית אחרת: בעמידה ולא בישיבה.')
+    target=source('meal',text='ברכת המזון סינתטית: רק בדגל פעיל ובישיבה.')
+    assert [s['source_id'] for s in order_sources([other,target],'האם מברכים ברכת המזון בישיבה?')]==['meal']
+
+
+def test_last_column_policy_is_bound_to_display_proof(monkeypatch):
+    from kezohar import blessing_context
+    s=source(text='אלפא – העץ / על העץ ועל פרי העץ.',reference='לוח ברכות בדיקה א:א')
+    v=ExtractiveSourceVerifier().verify('מה מברכים על אלפא? ברכה ראשונה',json.dumps({'selected_sources':['s1']}),[s])
+    assert v['verdict']=='ok'
+    monkeypatch.setattr(blessing_context,'LAST_NAMES',('נפשות',))
+    r=VerifiedAnswerComposer().compose({'verdict':'ok','verification':v,'sources':[s]})
+    assert r['verdict']=='invalid_citation' and not r['structured_answer']['quotations']
+
+
+def test_short_explicit_food_answer_still_has_all_safety_layers():
+    s=source(text='אלפא – העץ / נפשות.',reference='לוח ברכות בדיקה א:א',work_title='עונג שבת')
+    r=agent([s]).converse('מה מברכים על אלפא?')
+    assert r['mode']=='direct-source-reading' and r['verification']['verdict']=='ok'
+    assert any(i['method']=='closed-first-column-label-expansion' for i in r['meaning_screen']['items'] if 'method' in i)
+    assert not r['halachic_verified'] and r['structured_answer']['quotations'][0]['text']==s['text']
+
+
+def test_missing_time_or_speech_facet_is_not_proved_by_related_action():
+    from kezohar.source_quality import applicability_issue
+    assert applicability_issue('מתי מדליקים נרות חנוכה?','בדיקה: הדלקת נר חנוכה במקומו ולא העברה לאחריה.')
+    assert applicability_issue('האם מותר לדבר באמצע קריאת שמע?','בדיקה: קריאת שמע והפסק באמצע לצורך פינוי מקום.')
+    assert not applicability_issue('מתי מדליקים נרות חנוכה?','בדיקה סינתטית: בזמן שקיעה, ורק בדגל פעיל מדליקים נר חנוכה.')
+
+
+def test_meaning_screen_matches_between_json_and_sse(monkeypatch):
+    a=agent();monkeypatch.setattr(api,'get_agent',lambda:a)
+    body={'question':Q,'circumstances':complete()}
+    normal=request('/ask',body).json()
+    stream=events(request('/ask',dict(body,stream=True)).text)[-1][1]
+    assert stream['meaning_screen']==normal['meaning_screen']
+    assert not stream['meaning_screen']['halachic_verified']

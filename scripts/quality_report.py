@@ -32,6 +32,8 @@ def metrics(rows):
             'median_s':round(statistics.median(times),3) if times else None,
             'p95_s':times[max(0,int(len(times)*.95)-1)] if times else None,
             'max_s':max(times) if times else None,'verdicts':dict(verdicts),
+            'local_model_requests':sum(len(r.get('generation',[])) for r in rows),
+            'direct_source_readings':sum((r.get('result') or {}).get('mode')=='direct-source-reading' for r in rows),
             'flags':dict(collections.Counter(f for r in rows for f in flags(r))),
             'human_halachic_approvals':0,'all_results_require_human_review':True}
 
@@ -49,6 +51,7 @@ def main():
            'כל התשובות להלן נוצרו בפועל במערכת המקומית. אין תשובות ייחוס הלכתיות ואין אישור הלכתי אנושי. ציטוט תקין אינו מוכיח את התאמת המסקנה למקרה.',
            'הרצה מקורית ושיפורים נשמרים בנפרד. פלטים גולמיים, הקשר שנשלח למודל, מקורות וטקסטי מקור מלאים נמצאים בקובצי JSONL. בדוח מוצגת התוצאה המאוחרת לכל שאלה; המקורית נשמרת ללא שינוי.',
            'סיווגי אורך, חסימה והבהרה הם מדדי תוכנה. נחיצות הבהרה, מקור מתאים שנחסם, השמטת תנאי ותמיכה במסקנה דורשים ביקורת אנושית; לא נקבע שהם תקינים על סמך חפיפת מילים.','',
+           'Qwen המקומי בוחר מזהי מקור או ניסוח תחום לקטלוג. רוב הסברי המקור נבנים בשרת מתוך יחידה מלאה; סיווגי טבלה חד־משמעיים אינם מפעילים מודל. מספר פניות למודל ומצב direct-source-reading מדווחים בנפרד. אין הסקה חופשית שמוצגת כאילו אומתה.','',
            '```json',json.dumps(summary,ensure_ascii=False,indent=2),'```','']
     cards=[]
     for row in rows:

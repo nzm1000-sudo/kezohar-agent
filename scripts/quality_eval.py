@@ -39,6 +39,7 @@ def main():
                 # Continue remaining questions; do not manufacture an agent answer.
                 result=None; error={'type':type(exc).__name__, 'detail':str(exc)}
             row=dict(identity,id=n,question=q,elapsed_s=round(time.perf_counter()-start,3),
+                     answer_model=a.model,
                      generation=copy.deepcopy(a.answer_model.calls),verification=copy.deepcopy(a.source_verifier.checks),
                      result=result,error=error,human_halachic_review='required',gold_halachic_answer=None)
             f.write(json.dumps(row,ensure_ascii=False)+'\n'); f.flush(); os.fsync(f.fileno())

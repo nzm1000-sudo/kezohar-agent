@@ -77,12 +77,15 @@ def order_sources(sources, question=""):
         # Query-specific opening coverage improves retrieval precision, without
         # shortening the source or establishing semantic support.
         source['opening_subject_match']=bool(subject and concept_coverage(source['text'][:160],question)[0]==concept_coverage(source['text'][:160],question)[1])
+        opened,total=concept_coverage(source['text'][:320],question)
+        source['opening_topic_coverage']=opened/total if total else 0
     return sorted(sources, key=lambda s: (
         not rag_eligible(s),
         not s['concept_coverage']['complete'],
         -s['concept_coverage']['matched'],
         not s['explicit_food_table'],
         not s['opening_subject_match'],
+        -s['opening_topic_coverage'],
         s['_selection_key']))
 
 
@@ -301,7 +304,10 @@ class Agent:
             if cached is not None:
                 hit=SearchResults(cached);hit.metrics={'cache_hit':True,'selected_count':len(hit)}
                 return hit
-        results=search_backend(self.search,retrieval_query(query),max(top_k*10,50),request_budget)
+        # Candidate selection precedes eligibility/ranking. Fifty fused rows
+        # dropped explicit authorised units behind neighbouring-subject hits.
+        # Bounded expansion uses the SAME indexes and request deadline.
+        results=search_backend(self.search,retrieval_query(query),100,request_budget)
         ordered=order_sources(results,query)
         # Pending locators must not be promoted by diversity over usable passages.
         usable=[s for s in ordered if rag_eligible(s)]

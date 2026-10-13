@@ -80,14 +80,23 @@ def applicability_issue(question, text):
                 (('מסופק','מסופקימ','ספק'),('ספק','מסופק')),
                 (('בישיבה','בעמידה'),('ישיבה','יושב','בישיבה','בעמידה','עומד'))]
         for asked,required in facets:
-            if any(w in q for w in asked) and not any(w in t for w in required):
-                return 'requested meal-blessing facet absent; timing rule is not a substitute'
+            if any(w in q for w in asked):
+                if not any(w in t for w in ('ברכת המזונ','ברכת מזונ','ברהמ','ברכתמז')):
+                    return 'meal-blessing subject absent; another blessing is not a substitute'
+                if not any(w in t for w in required):
+                    return 'requested meal-blessing facet absent; timing rule is not a substitute'
     if 'שבת' in q and any(w in q for w in ('להתקלח','מקלחת')):
         if not any(w in t for w in ('כל גופו','כל הגופ','רוב גופו','מקלחת','להתקלח')):
             return 'whole-body bathing absent; washing face/hands/feet is not a shower ruling'
     if 'שבת' in q and any(w in q for w in ('תרופה','תרופות','גלולה')):
         if not any(w in t for w in ('תרופה','תרופות','גלולה','גלולות','כדורימ','כדורי','רפואות')):
             return 'medication subject absent; food eaten for health is not a medication ruling'
+    if 'חנוכה' in q and any(w in q for w in ('מדליק','להדליק','הדלק')):
+        if q.startswith('מתי ') and not re.search(r'(?:צאת|שקיע|שעה|שעות|עלות|זמנ הדלק|הדלקה.{0,20}זמנ)',t):
+            return 'lighting time absent; lighting place or blessing order is not a time rule'
+    if 'קריאת שמע' in q and any(w in q for w in ('לדבר','לשוחח','דיבור')):
+        if not re.search(r'(?:לדבר|דיבור|דבור|ישיח|לשאול|שואל|להשיב|משיב)',t):
+            return 'speech during Shema absent; physical necessity or silent interruption is not a speech ruling'
     if (any(w in q for w in ('מצאתי','מוצא','מציאה'))
             and any(w in q for w in ('כספ','מעות','מטבע')) and 'שבת' not in q):
         ownership=('אבדה','אבידה','יאוש','ייאוש','סימנ','להכריז','הרי אלו שלו','הרי אלוה שלו','זכה','זוכה')
@@ -132,6 +141,15 @@ def applicability_issue(question, text):
 def exclusion_reason(question, source, web=False):
     from .ranking import intent_issue
     from .semantic_claims import units_for
+    from .blessing_context import food_subject, table_row
+    subject=food_subject(question)
+    row=table_row(source.get('text',''))
+    if subject and row and normalize(row['food'])!=subject:
+        return 'food table names a different or more specific food than the explicit query'
+    if subject==normalize('מים') and not row:
+        text=normalize(source.get('text',''))
+        if not re.search(r'(?:השותה|שותה|שתית|שתיית|ששותה)\s+(?:את\s+ה)?מימ\b|(?:על\s+(?:ה)?מימ|ברכת\s+(?:ה)?מימ).{0,45}(?:מברכ|שהכל)',text):
+            return 'drinking-water blessing absent; ritual washing or water as an ingredient is not a substitute'
     quality = classify(source)
     if quality['domain'] == 'civil-law':
         return 'civil document cannot support halachic ruling'

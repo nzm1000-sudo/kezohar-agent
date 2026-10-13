@@ -25,9 +25,15 @@ FAMILIES = [
     ('תרופה','תרופות','לרפואה','רפואה','גלולה','גלולות'),
     ('עיתון','עתון','עיתונים','עתונים'),
     ('מסופקים','מסופק','ספק','ספקות'),
+    ('לברך','מברך','מברכים','יברך','ברכה','ברכת','ברכתו','לברכה','מברכין'),
+    ('בישיבה','ישיבה','יושב','מיושב','יושבים','לשבת'),
+    ('בעמידה','עמידה','עומד','מעומד','עומדים','לעמוד'),
+    ('עוגה','עוגות','פת הבאה בכיסנין','פת הבאה בכסנין'),
+    ('נר','נרות'),
 ]
 
 FAMILY_TERMS=tuple(frozenset(hebrew.normalize(w) for w in family) for family in FAMILIES)
+TIME_TERMS=frozenset(hebrew.normalize(w) for w in ('זמן','שעה','שעות','צאת','שקיעה','עלות','קודם','לאחר','לפני','אחר','אימתי'))
 
 def word_variants(token):
     result={token}
@@ -46,6 +52,8 @@ def concept_groups(question):
         family=next((f for f in FAMILIES if variants & {hebrew.normalize(w) for w in f}),None)
         group={hebrew.normalize(w) for w in family} if family else variants
         if not any(group & existing for existing in groups):groups.append(group)
+    if hebrew.normalize(question.split('\n')[0]).startswith(('מתי ','עד מתי ')):
+        groups.append(set(TIME_TERMS))
     return groups
 
 def concept_coverage(text, question):
