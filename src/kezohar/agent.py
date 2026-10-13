@@ -22,6 +22,11 @@ def diverse_sources(ordered, limit):
     Distinct excerpts/editions stay separate records, including on the second pass.
     """
     if limit<1:return []
+    tables=[s for s in ordered if s.get('explicit_food_table') and rag_eligible(s)]
+    if tables:
+        # A syntactically general first-blessing query has an exact food row.
+        # Do not crowd its prompt with laws about toppings, mixtures or order.
+        return tables[:limit]
     # Diversity must not promote a tangential work over a complete case match.
     complete=[s for s in ordered if s.get('concept_coverage',{}).get('complete')]
     if complete and len(complete)<len(ordered):
@@ -64,10 +69,20 @@ def order_sources(sources, question=""):
     preferred=analyze(question)['circumstances']['tradition'] if question else 'sephardi'
     for source in sources:
         source['_selection_key']=selection_key(source,question,preferred)
+    from .blessing_context import matching_first_table, food_subject
+    subject=food_subject(question)
+    for source in sources:
+        source['explicit_food_table']=bool(matching_first_table(question,source)
+            and source['authority_profile']['tradition']==preferred)
+        # Query-specific opening coverage improves retrieval precision, without
+        # shortening the source or establishing semantic support.
+        source['opening_subject_match']=bool(subject and concept_coverage(source['text'][:160],question)[0]==concept_coverage(source['text'][:160],question)[1])
     return sorted(sources, key=lambda s: (
         not rag_eligible(s),
         not s['concept_coverage']['complete'],
         -s['concept_coverage']['matched'],
+        not s['explicit_food_table'],
+        not s['opening_subject_match'],
         s['_selection_key']))
 
 

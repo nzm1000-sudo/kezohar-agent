@@ -69,21 +69,37 @@ def applicability_issue(question, text):
     # Retrieval aliases may match a neighbouring action (e.g. a physical
     # interruption compared with speech). That is not evidence for the asked
     # action. Require explicit speech language, independently of book priority.
-    if (any(w in q for w in ('תפילינ','תפלינ')) and 'יד' in q and 'ראש' in q
+    if (any(w in q for w in ('תפילינ','תפלינ')) and 'בינ' in q
             and any(w in q for w in ('לדבר','דיבור','דבור','בשיחה','לשוחח','לפטפט'))):
         if not re.search(r'(?:להפסיק|יפסיק).{0,15}(?:בדיבור|בדבור|בשיחה|בדברימ)|(?:מותר|אסור|אינ|לא).{0,15}(?:לדבר|ישיח)', t):
             return 'explicit speech interruption absent; related action is not a substitute'
+    # A general topic does not establish the particular requested facet. These
+    # are necessary textual checks only, never an inference of the ruling.
+    if 'ברכת המזונ' in q:
+        facets=[(('נשימ','אישה','אשה'),('נשימ','אישה','אשה')),
+                (('מסופק','מסופקימ','ספק'),('ספק','מסופק')),
+                (('בישיבה','בעמידה'),('ישיבה','יושב','בישיבה','בעמידה','עומד'))]
+        for asked,required in facets:
+            if any(w in q for w in asked) and not any(w in t for w in required):
+                return 'requested meal-blessing facet absent; timing rule is not a substitute'
+    if 'שבת' in q and any(w in q for w in ('להתקלח','מקלחת')):
+        if not any(w in t for w in ('כל גופו','כל הגופ','רוב גופו','מקלחת','להתקלח')):
+            return 'whole-body bathing absent; washing face/hands/feet is not a shower ruling'
+    if 'שבת' in q and any(w in q for w in ('תרופה','תרופות','גלולה')):
+        if not any(w in t for w in ('תרופה','תרופות','גלולה','גלולות','כדורימ','כדורי','רפואות')):
+            return 'medication subject absent; food eaten for health is not a medication ruling'
     if (any(w in q for w in ('מצאתי','מוצא','מציאה'))
             and any(w in q for w in ('כספ','מעות','מטבע')) and 'שבת' not in q):
         ownership=('אבדה','אבידה','יאוש','ייאוש','סימנ','להכריז','הרי אלו שלו','הרי אלוה שלו','זכה','זוכה')
         if not any(w in t for w in ownership):
             return 'lost-money ownership absent; movement of money is not permission to acquire it'
     if (any(w in q for w in ('לטבול','טבילה','טובל')) and ('ביומ' in q or 'בלילה' in q)):
-        if not any(w in q for w in ('טבילת אישה','טבילת אשה','נדה','נידה','טבילת כלימ','כלי','טבילת גבר','כמנהג')):
+        explicit_purity='לטהרה' in q and any(w in q for w in ('אישה','אשה'))
+        if not explicit_purity and not any(w in q for w in ('טבילת אישה','טבילת אשה','נדה','נידה','טבילת כלימ','כלי','טבילת גבר','כמנהג')):
             return 'immersion purpose unspecified; distinct types cannot be assumed'
         if 'טבילת כלימ' in q and not any(w in t for w in ('כלי','כלימ')):
             return 'vessel immersion not established by personal ritual immersion'
-        if any(w in q for w in ('טבילת אישה','טבילת אשה','נדה','נידה')) and not any(w in t for w in ('נדה','נידה','אשה','אישה','נשימ')):
+        if (explicit_purity or any(w in q for w in ('טבילת אישה','טבילת אשה','נדה','נידה'))) and not any(w in t for w in ('נדה','נידה','אשה','אישה','נשימ')):
             return 'personal purity subject not established by vessel or custom immersion'
         clauses=[normalize(c) for c in re.split(r'[.!?;:\n]',text)]
         if not any(re.search(r'(?:טביל|לטבול|טובל|יטבול|תטבול).{0,100}(?:ביומ|בליל)|(?:ביומ|בליל).{0,100}(?:טביל|לטבול|טובל|יטבול|תטבול)',c) for c in clauses):
@@ -93,6 +109,14 @@ def applicability_issue(question, text):
         if not (re.search(r'(?:דג(?:ימ)?\s+(?:עמ\s+(?:ה)?חלב|בחלב)|חלב\s+עמ\s+דג|דג.{0,40}(?:תערובת|תערב|לבשל.{0,12}בחלב))', t)
                 or re.search(r'(?:לאכול|לאכל|אכיל|לבשל|סכנה).{0,60}(?:דג(?:ימ)? וחלב|חלב ודג)', t)):
             return 'fish/milk combination not established'
+    if 'דג' in q and 'בשר' in q and 'חלב' not in q:
+        if not re.search(r'(?:דג(?:ימ)?\s+(?:עמ\s+(?:ה)?בשר|ובשר|בבשר)|בשר\s+(?:עמ\s+דג|ודג)|דג.{0,60}(?:לאכל|לאכול|סכנה|תערובת).{0,60}בשר)',t):
+            return 'fish/meat combination absent; meat/milk rule is not a substitute'
+    if any(w in q for w in ('להטביל','טבילת כלימ')):
+        if not any(w in t for w in ('טביל','להטביל','מטביל','לטבול','יטבול')):
+            return 'immersion action absent; kashering is a different operation'
+        if 'פלסטיק' in q and not any(w in t for w in ('פלסטיק','פלסטיכ','פלאסטיק','פלאסטיכ')):
+            return 'requested vessel material absent; other materials cannot establish its rule'
     if 'שהחיינו' in q and any(w in q for w in ('לפני', 'קודמ', 'סדר')):
         if not ('שהחיינו' in t and any(w in t for w in ('קודמ', 'לפני', 'תחילה', 'אחר ככ'))):
             return 'order of blessings absent'

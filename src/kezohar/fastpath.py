@@ -28,9 +28,13 @@ def is_fast_question(q):
     # Mentioning a calendar event does not make a ruling question a date query.
     if re.search(r'(יעלה\s+ויב[וא]+|שכחתי|שכח|האם חוזר|הלל.*ברכה)', q):
         return False
-    if FAST_RE.search(q):
+    # A ritual mentioning a time/event still requires source retrieval.
+    if re.search(r'(?:מניח|להניח|תפילין|מותר|אסור|חייב|לברך|מברכ|לדבר|מדליק|להדליק|אוכלים|לבשל)',q):
+        return False
+    if FAST_RE.search(q) and ('ראש חודש' not in q or re.search(r'(?:היום|מתי|תאריך|חל)',q)):
         return True
-    if any(w in q for w in HOLIDAY_WORDS) and WHEN_RE.search(q):
+    if (any(w in q for w in HOLIDAY_WORDS) and WHEN_RE.search(q)
+            and re.search(r'(?:מתי|באיזה תאריך)\s+(?:(?:חל|יחול|מתקיים)\s+)?(?:צום|חג|ראש השנה|יום כיפור|חנוכה|פורים|פסח|סוכות|שבועות)',q)):
         return True
     # normalized fallback: catches ה' prefix inflections like העברי/התאריך
     try:

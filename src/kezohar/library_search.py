@@ -81,6 +81,19 @@ class SQLiteLibrarySearch:
                 WHERE library_fts MATCH ? ORDER BY relevance LIMIT ?'''
             limit=max(1,min(top_k,100))
             rows=db.execute(sql,(focused,limit)).fetchall() if focused else []
+            # Very short dual-column food units lack a blessing verb. Retrieve
+            # them separately by the explicitly supplied food name, using the
+            # existing FTS table; never create another corpus or invent a row.
+            subject=getattr(query,'food_subject',None)
+            if subject:
+                food_expression=' AND '.join('"'+w.replace('"','""')+'"' for w in tokens(subject))
+                short=db.execute('''SELECT records.payload,bm25(library_fts) FROM library_fts
+                    JOIN records ON records.rowid=library_fts.rowid WHERE library_fts MATCH ?
+                    AND length(json_extract(records.payload,'$.text')) <= 600
+                    AND instr(json_extract(records.payload,'$.text'),'/') > 0
+                    ORDER BY bm25(library_fts) LIMIT 10''',(food_expression,)).fetchall()
+                seen={json.loads(payload)['source_id'] for payload,_ in short}
+                rows=(short+[(payload,score) for payload,score in rows if json.loads(payload)['source_id'] not in seen])[:limit]
             if request_budget:request_budget.check('SQLite focused retrieval return')
             if len(rows)<limit:
                 broad=db.execute(sql,(expression,limit)).fetchall()

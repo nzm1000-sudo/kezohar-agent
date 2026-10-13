@@ -16,10 +16,27 @@ def table_row(text):
     return dict(zip(('food','first_column','last_column'),(v.strip() for v in match.groups())))
 
 
+def food_subject(question):
+    """Only a syntactically explicit food query; no inferred food or stage."""
+    q=normalize(question.split('\n')[0]).strip().rstrip('?')
+    match=re.fullmatch(r'(?:מה|איזו)\s+(?:מברכימ|הברכה|ברכה)\s+על\s+(.+)',q)
+    if not match:return None
+    words=match.group(1).split()
+    if words and words[0] in ('אגוז','אגוזי','פרי'):words=words[1:]
+    return ' '.join(words) or None
+
+
+def matching_first_table(question, source):
+    subject=food_subject(question)
+    row=table_row(source.get('text',''))
+    return bool(subject and row and normalize(row['food'])==subject
+                and 'לוח ברכות' in source.get('reference',''))
+
+
 def context_issue(question, evidence):
     q=normalize(question)
     if not ('מברכ' in q or 'ברכה' in q):return None
-    if 'אחרונה' in q:
+    if 'אחרונה' in q or 'בורא נפשות' in q or 'על המחיה' in q:
         texts=[normalize(e.get('quote','')) for e in evidence]
         if not any('כזית' in t and ('אכילת פרס' in t or 'אכילה פרס' in t) for t in texts):
             return 'after-blessing quotation lacks explicit quantity and eating-time context'

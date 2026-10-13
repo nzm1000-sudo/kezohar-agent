@@ -51,7 +51,9 @@ def analyze(question, circumstances=None):
     facts = {}
     if intent=='immersion-time':
         if any(w in q for w in ('כלימ','כלי')):facts['immersion_purpose']='vessels'
-        elif any(w in q for w in ('נדה','נידה','טבילת אישה','טבילת אשה')):facts['immersion_purpose']='woman_purity'
+        elif (any(w in q for w in ('נדה','נידה','טבילת אישה','טבילת אשה'))
+              or ('לטהרה' in q and any(w in q for w in ('אישה','אשה')))):
+            facts['immersion_purpose']='woman_purity'
         elif 'טבילת גבר' in q:facts['immersion_purpose']='custom'
     if intent=='food-blessing':
         if 'ראשונה' in q: facts['blessing_stage']='before'

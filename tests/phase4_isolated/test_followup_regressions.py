@@ -1030,3 +1030,98 @@ def test_spelling_expansion_does_not_turn_aramaic_issuing_into_a_nut():
     fruit=source('fruit',text='פקאן – העץ / נפשות.',reference='לוח ברכות בדיקה א:א')
     noise=source('noise',text='מפקן בפרק אחר, בדיקה סינתטית שאינה עוסקת באוכל.')
     assert [s['source_id'] for s in order_sources([noise,fruit],'מה מברכים על פקן?')]==['fruit']
+
+
+def test_meaning_screen_preserves_all_conditional_branches():
+    from kezohar.meaning_screen import assess
+    from kezohar.source_rules import explain
+    s=source(text=UNIT)
+    literal=assess(Q,s['text'],s,snapshot=fingerprint(s))
+    assert literal['kind']=='exact-quotation' and literal['conditional_source']
+    styled=assess(Q,explain(s),s,snapshot=fingerprint(s))
+    assert styled['all_source_conditions_preserved']
+    omitted=assess(Q,'מציגים אלפא.',s,snapshot=fingerprint(s))
+    assert omitted['kind']=='unsupported-conclusion' and omitted['status']=='review-required'
+    assert not omitted['case_application_verified'] and not omitted['halachic_verified']
+
+
+@pytest.mark.parametrize('field,value',[('text','כלל אחר'),('version','edition-changed'),('reference','other locator'),('metadata',{'rag_answers_allowed':False})])
+def test_meaning_screen_cannot_reuse_stale_approval(field,value):
+    from kezohar.meaning_screen import assess
+    s=source(text=UNIT);pin=fingerprint(s);s[field]=value
+    assert assess(Q,UNIT,s,snapshot=pin)['status']=='blocked'
+
+
+def test_meaning_screen_cannot_authorize_shared_words_or_new_conditions():
+    from kezohar.meaning_screen import assess
+    s=source(text=UNIT)
+    for text in ('בדיקת סמל אלפא: מציגים אלפא גם כאשר הדגל כבוי.', UNIT+' מותר תמיד גם בלי דגל.'):
+        v=assess(Q,text,s,snapshot=fingerprint(s))
+        assert v['kind']=='unsupported-conclusion' and not v['general_entailment_verified']
+
+
+@pytest.mark.parametrize('question',[
+    'האם מניחים תפילין בראש חודש?', 'האם מותר לדבר באמצע קריאת שמע?',
+    'מתי מדליקים נרות חנוכה?', 'מתי מברכים על הטלית?'])
+def test_ruling_questions_cannot_be_routed_to_calendar(question):
+    from kezohar.fastpath import handle
+    assert handle(question) is None
+
+
+@pytest.mark.parametrize('question,text',[
+    ('האם מותר לדבר בין התפילין?','מעשה נחשב כמו דיבור, כגון נתינת מטבע.'),
+    ('האם נשים חייבות בברכת המזון?','עד שיתעכל המזון שבמעיו כל זמן שאינו רעב.'),
+    ('מה עושים כשמסופקים אם בירכו ברכת המזון?','כל זמן שאינו רעב יכול לברך.'),
+    ('האם מברכים ברכת המזון בישיבה?','כל זמן שאינו רעב יכול לברך.'),
+    ('האם מותר להתקלח בשבת?','מותר לרחוץ פניו ידיו ורגליו במים חמים.'),
+    ('האם מותר לקחת תרופה בשבת?','אוכל פירות משלשלים לצורך רפואה.'),
+    ('האם מותר לאכול דגים עם בשר?','בשר בחלב אסור ודגים עם חלב נידונו כאן.'),
+    ('האם צריך להטביל כלי פלסטיק?','הכשרת כלי עץ ואבן בהגעלה.')])
+def test_neighbouring_subject_cannot_support_requested_action_or_facet(question,text):
+    from kezohar.source_quality import applicability_issue
+    assert applicability_issue(question,text)
+
+
+def test_explicit_blessing_table_beats_incidental_mixture_candidate():
+    from kezohar.agent import order_sources,diverse_sources
+    direct=source('direct',text='בננה – האדמה / נפשות.',reference='לוח ברכות בדיקה א:א',work_title='עונג שבת')
+    mixed=source('mixed',text='בדיקה: בננה בתוך מאכל אחר, ברכה אחרת רק אם הדגל פעיל.',work_title='שולחן ערוך')
+    ordered=order_sources([mixed,direct],'מה מברכים על בננה?')
+    assert [s['source_id'] for s in diverse_sources(ordered,5)]==['direct']
+    assert ExtractiveSourceVerifier().verify('מה מברכים על בננה?',json.dumps({'selected_sources':['direct']}),[direct])['verdict']=='insufficient_context'
+    # Only the existing orchestrator's explicit first-column scope permits a
+    # classification; this ranking improvement cannot authorize last blessing.
+
+
+def test_after_blessing_named_directly_still_requires_quantity_and_time():
+    s=source(text='בדיקה: על מאכל אלפא מברך בורא נפשות לאחריו.')
+    r=ExtractiveSourceVerifier().verify('מתי מברכים בורא נפשות?',json.dumps({'selected_sources':['s1']}),[s])
+    assert r['verdict']=='insufficient_context'
+
+
+def test_meaning_screen_audited_conditional_claim_is_not_a_personal_ruling(tmp_path):
+    from test_contracts import install_catalog
+    from kezohar.meaning_screen import assess
+    s=source();install_catalog(tmp_path,s)
+    catalog=json.loads((tmp_path/'catalog.json').read_text())['rules'][0]
+    r=assess(Q,catalog['variants'][0],s,snapshot=fingerprint(s),evidence_id=catalog['evidence_id'])
+    assert r['kind']=='conditional-conclusion'
+    assert r['required_conditions']==catalog['conditions']
+    assert not r['case_application_verified'] and not r['halachic_verified']
+
+
+def test_short_reviewed_unit_is_not_reported_as_whole_source(tmp_path,monkeypatch):
+    from kezohar.meaning_screen import assess
+    s=source(text=FULL);path,_=reviewed(tmp_path,s)
+    monkeypatch.setenv('CLAIM_CATALOG_PATH',str(path))
+    r=assess(Q,UNIT,s,snapshot=fingerprint(s))
+    assert r['kind']=='exact-quotation' and r['unit_context_reviewed']
+    assert not r['all_source_conditions_preserved']
+
+
+def test_explicit_purity_purpose_is_not_asked_again_or_assumed_from_gender():
+    from kezohar.question_understanding import analyze
+    explicit=analyze('האם אישה יכולה לטבול לטהרה ביום?')
+    assert explicit['circumstances']['immersion_purpose']=='woman_purity'
+    ambiguous=analyze('האם אישה יכולה לטבול ביום?')
+    assert 'immersion_purpose' not in ambiguous['circumstances']

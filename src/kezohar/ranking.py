@@ -21,6 +21,10 @@ FAMILIES = [
     ('תפילין','תפלין','תפלה','תפילה'),
     ('לחמם','חימום','חמום','בישול','בשול','חזרה','להחזיר','מבשל'),
     ('מרק','תבשיל'),
+    ('להתקלח','מקלחת','רחיצה','לרחוץ','רחיצת'),
+    ('תרופה','תרופות','לרפואה','רפואה','גלולה','גלולות'),
+    ('עיתון','עתון','עיתונים','עתונים'),
+    ('מסופקים','מסופק','ספק','ספקות'),
 ]
 
 FAMILY_TERMS=tuple(frozenset(hebrew.normalize(w) for w in family) for family in FAMILIES)
@@ -69,6 +73,10 @@ def topic_tokens(question):
 def retrieval_query(question):
     terms = topic_tokens(question)
     groups=concept_groups(question)
+    from .blessing_context import food_subject
+    if food_subject(question):
+        # Action vocabulary narrows candidate search; it proves no blessing.
+        groups=groups+[set(hebrew.normalize(w) for w in ('מברך','מברכים','יברך','ברכתו','ברכה','ברכות'))]
     terms.extend(word for group in groups for word in sorted(group))
     from .question_understanding import analyze
     intent=analyze(question)['intent']
@@ -78,7 +86,8 @@ def retrieval_query(question):
                 'tea':['תה','שקית','כלי','שני'],
                 'phone-shabbat':['טלפון','מוקצה','טלטול'],
                 'water-urn':['מיחם','להוסיף','מים']}
-    terms.extend(expansions.get(intent,[]))
+    if intent!='birkat-mazon' or any(w in hebrew.normalize(question.split('\n')[0]) for w in ('שכח','נזכר','עד מתי','אחרי זמנ','לאחר זמנ','עיכול')):
+        terms.extend(expansions.get(intent,[]))
     from .discovery import interpret
     for expansion in interpret(question)['expansions']:
         terms.extend(hebrew.tokens(expansion))
@@ -95,7 +104,9 @@ def retrieval_query(question):
             expanded.append(term[1:])
         if len(term)>=3:
             expanded.extend(prefix+term for prefix in ('ה','ו','ב','ל','מ','וה'))
-    return RetrievalQuery(' '.join(dict.fromkeys(expanded)),groups)
+    query=RetrievalQuery(' '.join(dict.fromkeys(expanded)),groups)
+    query.food_subject=food_subject(question)
+    return query
 
 
 def intent_issue(question, source):
@@ -111,7 +122,8 @@ def intent_issue(question, source):
     if q=='meat-wait' and not ('בשר' in t and any(w in t for w in ('גבינה','חלב'))
             and any(w in t for w in ('שש שעות','להמתינ','המתנה'))):
         return 'explicit waiting after meat absent'
-    if q=='birkat-mazon' and not any(w in t for w in ('יתעכל','נתעכל','רעב')):
+    timing=any(w in hebrew.normalize(question.split('\n')[0]) for w in ('שכח','נזכר','עד מתי','אחרי זמנ','לאחר זמנ','עיכול'))
+    if q=='birkat-mazon' and timing and not any(w in t for w in ('יתעכל','נתעכל','רעב')):
         return 'meal blessing time requires digestion/hunger context'
     if q=='travel':
         subject=('תפילת הדרכ' in t or 'תפלת הדרכ' in t or 'Orach Chayim.110.' in ref

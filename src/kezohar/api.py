@@ -155,6 +155,7 @@ def _sse_events(result):
     yield "event: done\n" + "data: " + json.dumps({"verdict": result.get("verdict"), "mode": result.get("mode"), "elapsed_s": result.get("elapsed_s"),
         'explanation':result.get('explanation'), 'differences':result.get('differences',[]),
         'verification_layers':result.get('verification_layers'),
+        'meaning_screen':result.get('meaning_screen'),
         'structured_answer':result.get('structured_answer'),
         'answer_status':result.get('answer_status'),
         'answer_policy':result.get('answer_policy'),

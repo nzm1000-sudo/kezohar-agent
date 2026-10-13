@@ -7,7 +7,7 @@ QUESTIONS = Path(__file__).with_name('quality_questions.txt')
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('run', choices=['baseline', 'improved'])
+    p.add_argument('run', choices=['baseline', 'improved', 'refinement'])
     p.add_argument('--ids', nargs='*', type=int)
     args = p.parse_args()
     questions = QUESTIONS.read_text().splitlines()
@@ -15,9 +15,15 @@ def main():
     root = Path('data/store/quality-100-2026-10-13')
     root.mkdir(parents=True, exist_ok=True); os.chmod(root, 0o700)
     path = root / (args.run+'.jsonl')
-    completed = {json.loads(line)['id'] for line in path.read_text().splitlines()} if path.exists() else set()
     identity = {'commit': subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
                 'questions_sha256': hashlib.sha256(QUESTIONS.read_bytes()).hexdigest()}
+    previous=[json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+    completed={r['id'] for r in previous}
+    if len(completed)!=len(previous):p.error('duplicate recorded IDs; preserve file and investigate')
+    if any(r['questions_sha256']!=identity['questions_sha256'] or r['question']!=questions[r['id']-1] for r in previous):
+        p.error('question fixture changed; do not mix evaluation inputs')
+    if previous and len(completed)<100 and any(r['commit']!=identity['commit'] for r in previous):
+        p.error('code changed during a resumable run; use a separate refinement run')
     a = get_agent(); a.source_graph = None
     a.answer_model = Recorder(a.answer_model); a.source_verifier = VerifierTrace(a.source_verifier)
     with path.open('a') as f:

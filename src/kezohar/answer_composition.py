@@ -105,11 +105,26 @@ class VerifiedAnswerComposer:
             'caveat': 'אימות תוכנה אינו אישור הלכתי. נדרשת ביקורת הלכתית אנושית.',
         }
         result['verification_layers'] = layers
+        from .meaning_screen import screen
+        result['meaning_screen']=screen(verification,result.get('sources',[]),question or '')
+        # The screen is an additional veto. It cannot turn an unsuccessful
+        # existing verification into a successful one.
+        if verification.get('verdict')=='ok' and result['meaning_screen']['status']=='blocked':
+            return self.compose(dict(result,verdict='review_required',verification=dict(
+                verification,verdict='review_required',support='additional bounded meaning screen failed')),
+                reasoning=reasoning,question=question,rule_answers=rule_answers,conditional_first=conditional_first)
         if verification.get('verdict')=='ok':
             from .blessing_context import reading
             tables=reading(verification.get('evidence',[]),result.get('sources',[]))
             if tables:
                 result['structured_answer']['table_readings']=tables
+                for table in tables:
+                    if not table['has_conditions']:
+                        result['meaning_screen']['items'].append({
+                            'kind':'supported-paraphrase','status':'bounded-equivalence',
+                            'source_id':table['source_id'],'method':'closed-first-column-label-expansion',
+                            'after_blessing_case_verified':False,'case_application_verified':False,
+                            'general_entailment_verified':False,'human_review':'required','halachic_verified':False})
                 if any(r['has_conditions'] for r in tables):
                     # Do not project a column when a condition elsewhere in the
                     # row might qualify it. Keep the complete literal reading.
@@ -142,6 +157,11 @@ class VerifiedAnswerComposer:
                     rule_context['presentation']='conditional-rules-first'
                     result['answer']+='\nזהו כלל לפי תנאיו במקור; אין כאן קביעה שכל התנאים מתקיימים במקרה שלך.'
                 result['structured_answer']['short_answer']=result['answer']
+                from .meaning_screen import assess
+                index={s['source_id']:s for s in result.get('sources',[])}
+                for rule in rule_context['rules']:
+                    result['meaning_screen']['items'].append(assess(question,rule['text'],index[rule['source_id']],
+                        snapshot=verification['source_snapshots'][rule['source_id']]))
         status=describe(result)
         result['answer_status']=status
         if result.get('verdict') in ('no_source','unsupported','invalid_citation','irrelevant','review_required','format_error'):
