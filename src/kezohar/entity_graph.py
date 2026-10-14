@@ -29,7 +29,7 @@ class TorahEntityGraph:
             facts.append({'subject':subject,'relation':relation,'object':obj,'source_id':source['source_id'],
                 'reference':source['reference'],'version':source['version'],'source_snapshot':pin,
                 'quote':source['text'],'method':rule,'support':'bounded-primary-relation',
-                'identity_scope':{'father':father or (obj if relation=='father' else None)},
+                'identity_scope':{'qualified_parent':father or (obj if relation in ('father','parent') else None)},
                 'halachic_verified':False,'human_review':'not-a-halachic-ruling'})
         if source.get('metadata',{}).get('knowledge_primary_kind')=='secondary-encyclopedia':
             from .question_intent import PUBLIC_ENTITIES
@@ -50,9 +50,10 @@ class TorahEntityGraph:
         # Explicit plural genealogy: never inferred from co-occurring names.
         for m in re.finditer(r'(?:ושם\s+)?(?:שני\s+)?בני\s+([א-ת]+)\s+([א-ת]+)\s+ו([א-ת]+)(?:\s+(כהנים|כוהנים))?',text):
             parent,c1,c2,role=m.groups()
+            complete_pair=bool(re.search(r'שני\s+בני',m[0])) and not re.match(r'\s+ו[א-ת]',text[m.end():])
             for child in (c1,c2):
-                add(child,'father',parent,'explicit-plural-genealogy',father=parent)
-                add(parent,'children',child,'explicit-plural-genealogy-inverse')
+                add(child,'parent',parent,'explicit-plural-genealogy',father=parent)
+                if complete_pair:add(parent,'children',child,'explicit-plural-genealogy-inverse')
                 if role:add(child,'role',role,'role-in-explicit-genealogy',father=parent)
             if role and 'ושם' in m[0]:
                 place=re.search(r'(?:^|\s)ב([א-ת]+)\s+$',text[:m.start()])
@@ -94,7 +95,7 @@ class TorahEntityGraph:
         for edge in rows:
             if name(edge['subject'])!=subject or edge['relation']!=relation:continue
             source=resolver(edge['source_id'])
-            if qualifier and name(edge.get('identity_scope',{}).get('father') or '')!=qualifier:continue
+            if qualifier and name(edge.get('identity_scope',{}).get('qualified_parent') or '')!=qualifier:continue
             if source and admissible(source) and fingerprint(source)==edge['source_snapshot'] and source.get('version')==edge['version'] and edge in self.extract(source):
                 result.append(edge)
         return result

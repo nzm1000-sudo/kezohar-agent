@@ -2034,7 +2034,8 @@ def test_generic_plural_genealogy_identifies_each_child_and_scopes_same_name():
     other=source('other',text='גמא בן דלתא');other['metadata']['knowledge_primary_kind']='biblical-text'
     graph=TorahEntityGraph();graph.ingest(s);graph.ingest(other)
     resolve=lambda sid:s if sid=='s1' else other
-    assert {e['object'] for e in graph.find('גמא','father',resolve)}=={'אלפא','דלתא'}
+    assert {e['object'] for e in graph.find('גמא','parent',resolve)}=={'אלפא'}
+    assert {e['object'] for e in graph.find('גמא','father',resolve)}=={'דלתא'}
     assert graph.find('גמא בן אלפא','role',resolve)[0]['object']=='כהנים'
     assert not graph.find('גמא בן דלתא','role',resolve)
     assert {e['object'] for e in graph.find('אלפא','children',resolve)}=={'בטא','גמא'}
@@ -2241,3 +2242,49 @@ def test_omitting_unrequested_kind_cannot_hide_duplicate_claim_ids_or_missing_ev
         answer_packet({'claims':[one,dict(one,kind='inference')]},False)
     with pytest.raises(ClaimRejected,match='no-requested-claim-kind'):
         answer_packet({'claims':[dict(one,kind='inference')]},False)
+
+
+def test_sons_graph_cannot_answer_daughters_or_infer_gender_from_birth_names(tmp_path):
+    from kezohar.torah_facts import TorahFactAnswerEngine
+    from kezohar.identity_answers import resolve_identity
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.request_budget import RequestBudget
+    s=source(text='ושם שני בני אלפא בטא וגמא כהנים');s['metadata']['knowledge_primary_kind']='biblical-text'
+    engine=TorahFactAnswerEngine(agent([s]),root=tmp_path/'families');engine.remember(s)
+    route=QuestionIntentRouter().route
+    assert resolve_identity(engine,route('מי היו בניו של אלפא?'),RequestBudget())['fact_verified']
+    assert resolve_identity(engine,route('מי היו בנותיו של אלפא?'),RequestBudget()) is None
+    born=source('birth',text='ויקח דלתא את אטא לו לאשה ותלד לו את זטא')
+    born['metadata']['knowledge_primary_kind']='biblical-text'
+    engine=TorahFactAnswerEngine(agent([born]),root=tmp_path/'birth');engine.remember(born)
+    assert resolve_identity(engine,route('מי היו בניו של דלתא?'),RequestBudget()) is None
+
+
+def test_person_identity_from_birth_does_not_turn_unknown_child_gender_into_son(tmp_path):
+    from kezohar.torah_facts import TorahFactAnswerEngine
+    from kezohar.identity_answers import resolve_identity
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.request_budget import RequestBudget
+    s=source(text='ויקח אלפא את גמא לו לאשה ותלד לו את בטא')
+    s['metadata']['knowledge_primary_kind']='biblical-text'
+    engine=TorahFactAnswerEngine(agent([s]),root=tmp_path/'identity');engine.remember(s)
+    r=resolve_identity(engine,QuestionIntentRouter().route('מי הייתה בטא?'),RequestBudget())
+    assert r['fact_verified'] and 'בנו' not in r['answer'] and 'בן אלפא' not in r['answer']
+    assert 'הורות' in r['answer'] and 'אלפא' in r['answer']
+
+
+def test_plural_genealogy_is_parenthood_not_proof_of_father_role():
+    from kezohar.entity_graph import TorahEntityGraph
+    s=source(text='בני אלפא בטא וגמא');s['metadata']['knowledge_primary_kind']='biblical-text'
+    graph=TorahEntityGraph();graph.ingest(s)
+    assert graph.find('בטא','parent',lambda sid:s)[0]['object']=='אלפא'
+    assert not graph.find('בטא','father',lambda sid:s)
+    assert graph.find('בטא בן אלפא','parent',lambda sid:s)
+
+
+def test_pair_parser_does_not_present_prefix_of_long_family_list_as_complete_children():
+    from kezohar.entity_graph import TorahEntityGraph
+    s=source(text='בני אלפא בטא וגמא ודלתא');s['metadata']['knowledge_primary_kind']='biblical-text'
+    graph=TorahEntityGraph();graph.ingest(s)
+    assert graph.find('בטא','parent',lambda sid:s)
+    assert not graph.find('אלפא','children',lambda sid:s)

@@ -5,14 +5,21 @@ def resolve_identity(engine,route,budget):
     request=route.get('identity_request')
     if not request:return None
     if request['identity_kind']=='children':
+        # The current extractor proves the explicit plural "sons" grammar.
+        # Parenthood alone does not prove sex or a complete list of daughters.
+        if request.get('requested_children')=='daughters':return None
         children=engine.graph.find(request['parent'],'children',lambda sid:engine.resolve(sid,budget))
+        children=[e for e in children if e['method']=='explicit-plural-genealogy-inverse']
         if not children:return None
         people=[{'name':e['object'],'father_qualifier':request['parent']} for e in children]
     else:people=request['subjects']
     evidence=[];individuals=[];options=[]
     for person in people:
         qualifier=person['father_qualifier'];subject=person['name']
-        options.append(engine.graph.find(subject+(' בן '+qualifier if qualifier else ''),'father',lambda sid:engine.resolve(sid,budget)))
+        scoped=subject+(' בן '+qualifier if qualifier else '')
+        found=engine.graph.find(scoped,'father',lambda sid:engine.resolve(sid,budget))
+        found+=engine.graph.find(scoped,'parent',lambda sid:engine.resolve(sid,budget))
+        options.append(found)
     shared=set.intersection(*[{name(e['object']) for e in edges} for edges in options]) if len(options)>1 else set()
     for person,edges in zip(people,options):
         subject=person['name'];qualifier=person['father_qualifier']
@@ -26,12 +33,14 @@ def resolve_identity(engine,route,budget):
         edge=edges[0];evidence.append(edge);individuals.append((subject,edge['object']))
     # Joint names are not merged into one person. Every requested subject needs proof.
     grouped=len({name(parent) for _,parent in individuals})==1
+    explicit_sons=all(e['method'] in ('explicit-plural-genealogy','explicit-ben-lineage') for e in evidence)
     if grouped:
         subjects=' ו'.join(p for p,_ in individuals);parent=individuals[0][1]
-        answer=subjects+(' היו בניו של ' if len(individuals)>1 else ' היה בנו של ')+parent+'.'
+        relation=(' היו בני ' if len(individuals)>1 else ' נזכר כבן ') if explicit_sons else (' היו מילדיו של ' if len(individuals)>1 else ' נזכר כאחד מילדיו של ')
+        answer=subjects+relation+parent+'.'
         if len(individuals)==1 and not people[0]['father_qualifier']:
-            answer='במקור שנמצא מופיע '+subjects+' בן '+parent+'. אין בכך הוכחה שאין אדם נוסף בשם זה.'
-    else:answer=' '.join(subject+' היה בנו של '+parent+'.' for subject,parent in individuals)
+            answer='במקור שנמצא מופיע '+subjects+(' בן ' if explicit_sons else ' בקשר הורות עם ')+parent+'. אין בכך הוכחה שאין אדם נוסף בשם זה.'
+    else:answer=' '.join('במקור '+parent+' מופיע כאביו של '+subject+'.' for subject,parent in individuals)
     roles=[];places=[]
     for subject,parent in individuals:
         scoped=subject+' בן '+parent
@@ -53,7 +62,7 @@ def resolve_identity(engine,route,budget):
         if not any(s['source_id']==source['source_id'] for s in sources):sources.append(source)
     answer+=' ('+'; '.join(s['reference'] for s in sources)+').'
     result=engine.result(answer,sources,route,budget,kind='verified-person-identification',facts=evidence)
-    result['knowledge_context']={'people':[{'name':s,'father':p} for s,p in individuals],
+    result['knowledge_context']={'people':[{'name':s,'parent':p} for s,p in individuals],
                                  'evidence_source_ids':[s['source_id'] for s in sources]}
     result['answer_complete']=True
     return result

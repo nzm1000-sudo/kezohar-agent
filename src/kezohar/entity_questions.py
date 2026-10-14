@@ -17,7 +17,8 @@ def identity_request(question):
     children=re.match(r'מי (?:היו )?(?:בניו|בני|בנותיו|בנות)\s+(?:של\s+)?(.+)',q)
     if children:
         parent=re.sub(r'\s+(?:הכהן|המלך|אבינו|רבנו)$','',children[1])
-        return {'identity_kind':'children','parent':name(parent),'subjects':[],'unresolved':[]}
+        return {'identity_kind':'children','parent':name(parent),'subjects':[],'unresolved':[],
+                'requested_children':'daughters' if re.search(r'בנות',q) else 'sons'}
     who=re.match(r'מי (?:היו|היה|הייתה|היתה|זה|אלה)\s+(.+)',q)
     if not who:return None
     # Relationship/book questions keep their existing dedicated routes.
