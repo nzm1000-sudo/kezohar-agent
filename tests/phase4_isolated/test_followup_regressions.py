@@ -2213,3 +2213,31 @@ def test_evidence_unit_ids_do_not_upgrade_interpretation_to_proved_fact():
     claims,_=validate({'claims':[c]},[s],lambda sid:s)
     assert claims[0]['quotation_verified'] and not claims[0]['semantic_entailment_verified']
     assert not claims[0]['halachic_verified']
+
+
+def test_simple_answer_drops_unsolicited_inference_but_still_validates_remaining_evidence():
+    from kezohar.knowledge_claims import answer_packet,validate,ClaimRejected
+    from kezohar.knowledge_units import units
+    s=source(text='תיאור סינתטי קצר של מושג.')
+    one={'claim_id':'C1','kind':'paraphrase','statement':'זהו תיאור סינתטי של המושג.',
+         'evidence':[{'source_id':'s1','unit_id':units(s)[0]['unit_id']}]}
+    extra=dict(one,claim_id='C2',kind='inference',statement='הסקה נוספת סינתטית שלא נשאלה.')
+    kept,removed=answer_packet({'claims':[one,extra]},allow_inference=False)
+    assert len(kept['claims'])==1 and removed[0]['claim_id']=='C2'
+    claims,_=validate(kept,[s],lambda sid:s)
+    assert len(claims)==1 and not claims[0]['semantic_entailment_verified']
+    with pytest.raises(ClaimRejected,match='changed-source'):
+        validate(kept,[s],lambda sid:dict(s,version='changed'))
+    deep,removed=answer_packet({'claims':[one,extra]},allow_inference=True)
+    assert len(deep['claims'])==2 and not removed
+
+
+def test_omitting_unrequested_kind_cannot_hide_duplicate_claim_ids_or_missing_evidence():
+    from kezohar.knowledge_claims import answer_packet,validate,ClaimRejected
+    one={'claim_id':'C1','kind':'paraphrase','statement':'טענה סינתטית ללא ראיה.', 'evidence':[]}
+    with pytest.raises(ClaimRejected,match='missing-evidence'):
+        validate(answer_packet({'claims':[one]},False)[0],[],lambda sid:None)
+    with pytest.raises(ClaimRejected,match='invalid-claim-id'):
+        answer_packet({'claims':[one,dict(one,kind='inference')]},False)
+    with pytest.raises(ClaimRejected,match='no-requested-claim-kind'):
+        answer_packet({'claims':[dict(one,kind='inference')]},False)

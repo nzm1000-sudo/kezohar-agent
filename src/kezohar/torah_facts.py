@@ -353,7 +353,8 @@ class TorahFactAnswerEngine:
                             return result
                     return self.result('המקורות שנמצאו אינם מספיקים לתשובה המבוקשת. לא נוצרה מסקנה מזיכרון המודל.',[],route,budget)
                 if isinstance(packet,dict) and 'claims' in packet:
-                    from .knowledge_claims import validate
+                    from .knowledge_claims import validate,answer_packet
+                    packet,removed=answer_packet(packet,allow_inference=route['complexity']=='deep')
                     claims,sources=validate(packet,candidates,lambda sid:self.resolve(sid,budget,force=True))
                     quotes=[e for c in claims for e in c['evidence']]
                     lines=[]
@@ -364,6 +365,8 @@ class TorahFactAnswerEngine:
                     result=self.result('\n'.join(lines),sources,route,budget,kind='source-linked-explanation',quotes=quotes)
                     result.update(verdict='knowledge_explanation',answer_complete=False,claims=claims,
                         claim_generation={'model':generated.get('model'),'finish_reason':generated.get('finish_reason')})
+                    result['claim_status']={'removed':removed,'partial':bool(removed),
+                        'meaning_verified':False,'kind_classification':'model-labelled; not semantic proof'}
                     result['verification']['support']='exact-evidence; proposed-meaning-not-certified'
                     result['verification_layers']['claim_support']='source-linked-proposal'
                     result['verification_layers']['semantic_entailment_verified']=False

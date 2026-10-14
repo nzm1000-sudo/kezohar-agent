@@ -51,6 +51,7 @@ render=function(d){previousRender(d);lastResponse=d;analysisBody.replaceChildren
  if(d.web_policy){const p=document.createElement('p');p.textContent='מחקר אינטרנטי: '+(d.discovery_backend||'ממשקי אתרים')+' · '+(d.web_policy.requests||0)+' בקשות. קטע אינטרנטי אינו אישור הלכתי.';analysisBody.append(p)}
  const dossier=d.research_dossier||{};analysisBox.open=false;
  for(const claim of d.claims||[]){const p=document.createElement('p');p.textContent=claim.claim_id+' · '+claim.kind+' · '+claim.statement+' · תמיכה: '+claim.claim_support;analysisBody.append(p)}
+ for(const removed of d.claim_status?.removed||[]){const p=document.createElement('p');p.textContent='טענה שלא הוצגה: '+removed.claim_id+' — היסק נוסף לא נדרש בתשובה פשוטה.';analysisBody.append(p)}
  const intro=document.createElement('p');intro.textContent='זהו תיק מקורות.  תנאים והפניות הם טקסטים שאותרו; אין הנחה שכל התנאים מזוהים או מתקיימים.';analysisBody.append(intro);
  for(const claim of dossier.claims||[]){const part=document.createElement('details');const title=document.createElement('summary');title.textContent=claim.reference||'מקור';part.append(title);
   const quote=document.createElement('p');quote.style.whiteSpace='pre-wrap';quote.textContent=claim.quote||claim.text||'';part.append(quote);

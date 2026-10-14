@@ -11,6 +11,23 @@ from .hebrew import strip_niqqud
 class ClaimRejected(ValueError):
     pass
 
+def answer_packet(packet,allow_inference):
+    """Omit unsolicited research conclusions; do not relax any evidence check."""
+    if not isinstance(packet,dict) or set(packet)!={'claims'}:raise ClaimRejected('invalid-claim-envelope')
+    claims=packet['claims']
+    if not isinstance(claims,list) or not 1<=len(claims)<=4:raise ClaimRejected('invalid-claim-count')
+    ids=[]
+    for c in claims:
+        if not isinstance(c,dict) or set(c)!={'claim_id','kind','statement','evidence'}:raise ClaimRejected('invalid-claim-schema')
+        if not isinstance(c['claim_id'],str) or not re.fullmatch(r'C[1-4]',c['claim_id']):raise ClaimRejected('invalid-claim-id')
+        ids.append(c['claim_id'])
+    if len(set(ids))!=len(ids):raise ClaimRejected('invalid-claim-id')
+    removed=[{'claim_id':c['claim_id'],'reason':'inference-not-requested-in-simple-answer'} for c in claims
+             if not allow_inference and c['kind']=='inference']
+    kept=[c for c in claims if allow_inference or c['kind']!='inference']
+    if not kept:raise ClaimRejected('no-requested-claim-kind')
+    return {'claims':kept},removed
+
 def validate(packet,candidates,resolve):
     if not isinstance(packet,dict) or set(packet)!={'claims'}:raise ClaimRejected('invalid-claim-envelope')
     claims=packet['claims']
