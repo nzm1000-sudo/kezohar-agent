@@ -24,7 +24,7 @@ const previousRender=render;
 render=function(d){previousRender(d);lastResponse=d;analysisBody.replaceChildren();$('feedbackStatus').textContent='';
  if(d.mode==='fast'){$('verdict').textContent='חישוב זמנים ולוח — ללא מודל';$('verification').textContent='חישוב מקומי לפי השיטה המוצגת, עם אזור הזמן Asia/Jerusalem. השוואה חיצונית אינה אישור הלכתי.'}
  const oldCalendar=$('calendarReference');if(oldCalendar)oldCalendar.remove();
- if(d.mode==='fast'&&d.details?.zmanim&&d.details.location==='נתיבות'){
+ if(d.mode==='fast'&&d.details?.zmanim&&d.details.location==='נתיבות'&&d.details.lat===31.4227&&d.details.lon===34.5966){
   const panel=document.createElement('div');panel.id='calendarReference';const b=document.createElement('button');b.textContent='השווה את זמני נתיבות מול Hebcal';panel.append(b);$('result').append(panel);
   b.onclick=async()=>{b.disabled=true;const p=document.createElement('p');panel.append(p);try{const r=await api('/demo/calendar-reference?date='+encodeURIComponent(d.details.gregorian));p.textContent=r.comparison.map(x=>`${x.field}: מקומי ${x.local}, הפרש ${x.difference_minutes} דקות`).join(' · ')+' · הושוו רק שיטות תואמות; אינו אישור הלכתי';const a=document.createElement('a');a.href=r.method_reference;a.target='_blank';a.rel='noopener noreferrer';a.textContent='תיעוד שיטות החישוב';panel.append(a)}catch(e){p.textContent=e.message}finally{b.disabled=false}};
  }
