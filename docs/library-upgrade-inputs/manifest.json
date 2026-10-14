@@ -1,0 +1,12 @@
+[
+  {
+    "file": "request-1.txt",
+    "sha256": "8aa2035dcf347a9442b0ffeb3968087da7aaa7b0e9896cd35699eef4576cf03d",
+    "bytes": 32791
+  },
+  {
+    "file": "request-2.txt",
+    "sha256": "0c4ebc15925a0ff251e9e1d25dbe10b3239a21f1c982621f239b2dbd731fa29b",
+    "bytes": 39232
+  }
+]

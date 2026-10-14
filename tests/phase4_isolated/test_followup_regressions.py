@@ -1401,7 +1401,7 @@ def test_api_web_source_unknown_rights_is_discovery_only_and_instructions_quaran
             self.license_id=license_id;self.text=text
         def read(self,url,**kw):return {'source_url':url,'title':'הלכות אלפא','text':self.text,
             'author':'','published_at':'','version':'fixture-v1','license':self.license_id,'page_sha256':'fixture-hash'}
-    url='https://www.sefaria.org/Fixture_1'
+    url='https://he.wikisource.org/wiki/הלכות_אלפא'
     licenses={'fixture-license':{'allows_full_text':True,'scope':{'local_storage':True,'search_index':True,'rag_answers':True}}}
     from kezohar.request_budget import RequestBudget
     def collect(reader):return WebResearchEngine(fetcher=reader,sites=SITES,licenses=licenses).research('מקור אלפא',urls=[url],request_budget=RequestBudget())['sources'][0]
@@ -1417,7 +1417,7 @@ def test_web_revalidation_rejects_version_content_license_and_permission_changes
     from kezohar.permissions import permission_for
     license_id='fixture-license';licenses={license_id:{'allows_full_text':True,'scope':{'local_storage':True,'search_index':True,'rag_answers':True}}}
     engine=HybridHalachicResearch(licenses=licenses)
-    url='https://www.sefaria.org/Fixture_1';_,permission=permission_for(license_id,licenses,{},url)
+    url='https://he.wikisource.org/wiki/Fixture';_,permission=permission_for(license_id,licenses,{},url)
     s=source(version='v1');s.update(source_url=url,license=license_id)
     s['metadata'].update(page_sha256='hash',permission=copy.deepcopy(permission),source_unit_complete=True)
     doc={'page_sha256':'hash','version':'v1','license':license_id}
@@ -2013,3 +2013,173 @@ def test_zmanim_explicit_locations_do_not_reuse_previous_place_cache(monkeypatch
     a.ask(q,lat=31.4,lon=34.6,location='מקום בדיקה אלפא')
     r=a.ask(q,lat=32.1,lon=35.1,location='מקום בדיקה ביתא')
     assert not r.get('cached') and r['details']['location']=='מקום בדיקה ביתא'
+
+
+def test_owner_confirmed_sefaria_scope_is_not_gated_by_missing_license_label(monkeypatch):
+    from kezohar.jewish_web import source_from_doc
+    from kezohar.source_registry import owner_authorization
+    d={'source_url':'https://www.sefaria.org/Fixture_1','title':'ספר בדיקה','reference':'בדיקה א׳',
+       'text':'תוכן סינתטי בלבד','page_sha256':'synthetic','version':'fixture-v1','license':''}
+    s=source_from_doc(d,licenses={})
+    assert s and s['metadata']['permission']['status']=='owner_confirmed'
+    assert not s['metadata']['permission']['document_reviewed']
+    assert owner_authorization('https://www.sefaria.org/sheets/123') is None
+    assert owner_authorization('https://evil.invalid/Fixture') is None
+    assert owner_authorization('https://www.toratemetfreeware.com/online/fixture.html')['status']=='owner_confirmed'
+
+
+def test_generic_plural_genealogy_identifies_each_child_and_scopes_same_name():
+    from kezohar.entity_graph import TorahEntityGraph
+    s=source(text='בשלה ושם שני בני אלפא בטא וגמא כהנים');s['metadata']['knowledge_primary_kind']='biblical-text'
+    other=source('other',text='גמא בן דלתא');other['metadata']['knowledge_primary_kind']='biblical-text'
+    graph=TorahEntityGraph();graph.ingest(s);graph.ingest(other)
+    resolve=lambda sid:s if sid=='s1' else other
+    assert {e['object'] for e in graph.find('גמא','father',resolve)}=={'אלפא','דלתא'}
+    assert graph.find('גמא בן אלפא','role',resolve)[0]['object']=='כהנים'
+    assert not graph.find('גמא בן דלתא','role',resolve)
+    assert {e['object'] for e in graph.find('אלפא','children',resolve)}=={'בטא','גמא'}
+
+
+def test_joint_identity_uses_shared_parent_without_conflating_same_named_person(tmp_path):
+    from kezohar.torah_facts import TorahFactAnswerEngine
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.request_budget import RequestBudget
+    s=source(text='בשלה ושם שני בני אלפא בטא וגמא כהנים');s['metadata']['knowledge_primary_kind']='biblical-text'
+    other=source('other',text='גמא בן דלתא');other['metadata']['knowledge_primary_kind']='biblical-text'
+    a=agent([s,other]);q='מי היו בטא וגמא?'
+    r=TorahFactAnswerEngine(a,root=tmp_path/'facts').answer(q,QuestionIntentRouter().route(q),RequestBudget())
+    assert 'אלפא' in r['answer'] and 'דלתא' not in r['answer'] and r['fact_verified']
+    assert not a.answer_model.calls and not r['internet_used']
+
+
+def test_identity_ambiguity_and_explicit_parent_are_separate(tmp_path):
+    from kezohar.torah_facts import TorahFactAnswerEngine
+    from kezohar.identity_answers import resolve_identity
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.request_budget import RequestBudget
+    one=source(text='בטא בן אלפא');two=source('s2',text='בטא בן גמא')
+    for s in (one,two):s['metadata']['knowledge_primary_kind']='biblical-text'
+    engine=TorahFactAnswerEngine(agent([one,two]),root=tmp_path/'identity')
+    engine.remember(one);engine.remember(two)
+    route=QuestionIntentRouter().route('מי היה בטא?')
+    r=resolve_identity(engine,route,RequestBudget())
+    assert r['verdict']=='identity_ambiguous' and not r['fact_verified']
+    r=resolve_identity(engine,QuestionIntentRouter().route('מי היה בטא בן אלפא?'),RequestBudget())
+    assert r['fact_verified'] and 'גמא' not in r['answer']
+
+
+def test_genealogy_location_is_bound_to_same_clause():
+    from kezohar.entity_graph import TorahEntityGraph
+    s=source(text='במקוםא ושם שני בני אלפא בטא וגמא כהנים. במקוםב ושם שני בני דלתא זטא ואטא כהנים')
+    s['metadata']['knowledge_primary_kind']='biblical-text'
+    edges=TorahEntityGraph.extract(s)
+    assert {e['object'] for e in edges if e['subject']=='זטא' and e['relation']=='served_at'}=={'מקוםב'}
+
+
+def test_knowledge_claim_protocol_separates_quote_from_proposed_meaning():
+    from kezohar.knowledge_claims import validate,ClaimRejected
+    s=source(text='הסבר סינתטי למושג אלפא בלבד.')
+    claim={'claim_id':'C1','kind':'paraphrase','statement':'זהו הסבר למושג אלפא.',
+           'evidence':[{'source_id':'s1','quote':s['text']}]}
+    rows,sources=validate({'claims':[claim]},[s],lambda sid:s)
+    assert rows[0]['quotation_verified'] and not rows[0]['semantic_entailment_verified']
+    assert rows[0]['claim_support']=='source-linked-proposal' and not rows[0]['halachic_verified']
+    assert rows[0]['evidence'][0]['span']==[0,len(s['text'])]
+    with pytest.raises(ClaimRejected,match='changed-source'):
+        validate({'claims':[claim]},[s],lambda sid:dict(s,version='different-edition'))
+    with pytest.raises(ClaimRejected,match='inexact-quote'):
+        validate({'claims':[dict(claim,evidence=[{'source_id':'s1','quote':'ציטוט מומצא לחלוטין'}])]},[s],lambda sid:s)
+    with pytest.raises(ClaimRejected,match='unsent-source'):
+        validate({'claims':[dict(claim,evidence=[{'source_id':'unknown','quote':s['text']}])]},[s],lambda sid:s)
+
+
+def test_knowledge_claim_protocol_blocks_omitted_conditions_numbers_and_rulings():
+    from kezohar.knowledge_claims import validate,ClaimRejected
+    s=source(text='אפשרות סינתטית אם מתקיים תנאי אלפא.')
+    claim={'claim_id':'C1','kind':'paraphrase','statement':'אפשרות סינתטית כללית.',
+           'evidence':[{'source_id':'s1','quote':s['text']}]}
+    with pytest.raises(ClaimRejected,match='omitted-explicit-condition'):
+        validate({'claims':[claim]},[s],lambda sid:s)
+    claim['statement']='אפשרות 77 אם מתקיים תנאי אלפא.'
+    with pytest.raises(ClaimRejected,match='unsupported-number'):
+        validate({'claims':[claim]},[s],lambda sid:s)
+    claim['statement']='חייב לעשות כך אם מתקיים תנאי אלפא.'
+    with pytest.raises(ClaimRejected,match='ruling-in-knowledge-explanation'):
+        validate({'claims':[claim]},[s],lambda sid:s)
+
+
+def test_new_graph_extraction_does_not_reactivate_historical_edges():
+    from kezohar.entity_graph import TorahEntityGraph
+    old=source(text='בטא בן אלפא');old['metadata']['knowledge_primary_kind']='biblical-text'
+    graph=TorahEntityGraph();graph.ingest(old)
+    for edge in graph.memory.values():edge.pop('identity_scope',None)
+    current=copy.deepcopy(old);current['version']='current-edition'
+    assert not graph.find('בטא','father',lambda sid:current)
+    graph.ingest(current)
+    rows=graph.find('בטא בן אלפא','father',lambda sid:current)
+    assert rows and rows[0]['version']=='current-edition'
+    assert rows[0] in TorahEntityGraph.extract(current)
+    current['text']='אין כאן קשר משפחתי מפורש.'
+    assert not graph.find('בטא','father',lambda sid:current)
+    current['text']=old['text'];current['metadata']['rag_answers_allowed']=False
+    assert not graph.find('בטא','father',lambda sid:current)
+
+
+def test_knowledge_evidence_cannot_cut_sentence_before_material_condition():
+    from kezohar.knowledge_claims import validate,ClaimRejected
+    s=source(text='טענה סינתטית אם מתקיים תנאי חשוב.')
+    claim={'claim_id':'C1','kind':'paraphrase','statement':'טענה סינתטית ללא הגבלה.',
+           'evidence':[{'source_id':'s1','quote':'טענה סינתטית'}]}
+    with pytest.raises(ClaimRejected,match='fragmentary-evidence-unit'):
+        validate({'claims':[claim]},[s],lambda sid:s)
+
+
+def test_definition_fallback_cannot_substitute_an_unrelated_concept():
+    from kezohar.knowledge_evidence import issue
+    from kezohar.question_intent import QuestionIntentRouter
+    q='מה פירוש מושגאלפא?';route=QuestionIntentRouter().route(q)
+    wrong=source(text='מושגביתא הוא תחום לימוד כללי.',work_title='מושגביתא')
+    right=source(text='מושגאלפא הוא מושג סינתטי.',work_title='מושגאלפא')
+    assert issue(q,route,wrong)
+    assert not issue(q,route,right)
+
+
+def test_explanation_grammar_does_not_fall_back_to_halachic_adjudication():
+    from kezohar.question_intent import QuestionIntentRouter
+    route=QuestionIntentRouter().route
+    assert route('מה משמעות הביטוי מושגסינתטי?')['engine']=='jewish-knowledge'
+    assert route('מה פירוש מושגסינתטי?')['engine']=='jewish-knowledge'
+    assert route('מה משמעות הברכה והאם חייב לברך?')['engine']=='halachic'
+
+
+def test_explanation_evidence_cannot_drop_adjacent_explicit_exception():
+    from kezohar.knowledge_claims import validate,ClaimRejected
+    s=source(text='טענה סינתטית כללית. אבל יש חריג סינתטי מפורש.')
+    claim={'claim_id':'C1','kind':'paraphrase','statement':'טענה סינתטית כללית.',
+           'evidence':[{'source_id':'s1','quote':'טענה סינתטית כללית.'}]}
+    with pytest.raises(ClaimRejected,match='adjacent-condition-omitted'):
+        validate({'claims':[claim]},[s],lambda sid:s)
+
+
+def test_claim_identity_conflict_is_quarantined_without_blocking_other_source():
+    from kezohar.knowledge_claims import validate,ClaimRejected
+    valid=source(text='משפט סינתטי תקין בלבד.')
+    bad=source('conflict',text='משפט סינתטי אחר בלבד.')
+    collision=dict(bad,version='other-edition')
+    c={'claim_id':'C1','kind':'quote','statement':valid['text'],
+       'evidence':[{'source_id':'s1','quote':valid['text']}]}
+    rows,_=validate({'claims':[c]},[valid,bad,collision],lambda sid:valid)
+    assert rows[0]['quotation_verified']
+    c.update(statement=bad['text'],evidence=[{'source_id':'conflict','quote':bad['text']}])
+    with pytest.raises(ClaimRejected,match='unsent-source'):
+        validate({'claims':[c]},[valid,bad,collision],lambda sid:bad)
+
+
+def test_knowledge_claims_reject_private_or_revoked_source():
+    from kezohar.knowledge_claims import validate,ClaimRejected
+    s=source(text='משפט סינתטי שאינו פרטי באמת.')
+    c={'claim_id':'C1','kind':'quote','statement':s['text'],'evidence':[{'source_id':'s1','quote':s['text']}]}
+    s['metadata']['owner_id']='synthetic-owner'
+    with pytest.raises(ClaimRejected,match='private-source'):validate({'claims':[c]},[s],lambda sid:s)
+    s['metadata'].pop('owner_id');s['metadata']['rag_answers_allowed']=False
+    with pytest.raises(ClaimRejected,match='ineligible-source'):validate({'claims':[c]},[s],lambda sid:s)

@@ -390,6 +390,9 @@ class HybridHalachicResearch(WebResearchEngine):
             doc=TorahWebReader().read(source['source_url'],request_budget)
             license_id={'Public Domain':'public-domain'}.get(doc.get('license'),doc.get('license',''))
             allowed,permission=permission_for(license_id,licenses,grants,source['source_url'])
+            from .source_registry import owner_authorization
+            declared=owner_authorization(source['source_url'])
+            if declared:allowed,permission=True,declared
             return (allowed and doc.get('page_sha256')==source.get('metadata',{}).get('page_sha256')
                 and doc.get('version')==source.get('version') and license_id==source.get('license')
                 and permission==source.get('metadata',{}).get('permission')

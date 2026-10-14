@@ -4,7 +4,7 @@ from pathlib import Path
 from .hebrew import strip_niqqud
 from .source_snapshot import admissible,fingerprint
 
-BIBLE_BOOKS=('בראשית','שמות','ויקרא','במדבר','דברים','יהושע','שופטים','שמואל','מלכים','ישעיהו','ירמיהו','יחזקאל','רות','אסתר','דברי הימים')
+BIBLE_BOOKS=('בראשית','שמות','ויקרא','במדבר','דברים','יהושע','שופטים','שמואל','שמואל א','שמואל ב','שמואל א׳','שמואל ב׳','מלכים','מלכים א','מלכים ב','ישעיהו','ירמיהו','יחזקאל','רות','אסתר','דברי הימים')
 
 def biblical(source):
     return (source.get('metadata',{}).get('knowledge_primary_kind')=='biblical-text'
@@ -23,12 +23,13 @@ class TorahEntityGraph:
         meta=source.get('metadata',{})
         if meta.get('private') is True or meta.get('visibility')=='private' or meta.get('owner_id') or meta.get('user_id'):return []
         facts=[];text=strip_niqqud(source['text'].replace('־',' '));text=re.sub(r'\s+',' ',text);pin=fingerprint(source)
-        def add(subject,relation,obj,rule,structured=False):
+        def add(subject,relation,obj,rule,structured=False,father=None):
             # Values must occur literally in a primary text/metadata record.
             if not structured and relation!='child-count' and (subject not in text or obj not in text):return
             facts.append({'subject':subject,'relation':relation,'object':obj,'source_id':source['source_id'],
                 'reference':source['reference'],'version':source['version'],'source_snapshot':pin,
                 'quote':source['text'],'method':rule,'support':'bounded-primary-relation',
+                'identity_scope':{'father':father or (obj if relation=='father' else None)},
                 'halachic_verified':False,'human_review':'not-a-halachic-ruling'})
         if source.get('metadata',{}).get('knowledge_primary_kind')=='secondary-encyclopedia':
             from .question_intent import PUBLIC_ENTITIES
@@ -46,12 +47,25 @@ class TorahEntityGraph:
                     if isinstance(name,str) and name:add(data['title'],'author',name,'official-index-author-field',structured=True)
             return facts
         if not biblical(source):return []
+        # Explicit plural genealogy: never inferred from co-occurring names.
+        for m in re.finditer(r'(?:ושם\s+)?(?:שני\s+)?בני\s+([א-ת]+)\s+([א-ת]+)\s+ו([א-ת]+)(?:\s+(כהנים|כוהנים))?',text):
+            parent,c1,c2,role=m.groups()
+            for child in (c1,c2):
+                add(child,'father',parent,'explicit-plural-genealogy',father=parent)
+                add(parent,'children',child,'explicit-plural-genealogy-inverse')
+                if role:add(child,'role',role,'role-in-explicit-genealogy',father=parent)
+            if role and 'ושם' in m[0]:
+                place=re.search(r'(?:^|\s)ב([א-ת]+)\s+$',text[:m.start()])
+                if place:
+                    for child in (c1,c2):add(child,'served_at',place[1],'same-place-explicit-pronoun',father=parent)
         # Marriage + birth in one verse, explicit same subject and pronoun.
         pattern=r'ויקח\s+([א-ת]+)\s+את\s+([א-ת]+)\s+(?:(?:דדתו|דודתו)\s+)?לו\s+לאשה\s+ותלד\s+לו\s+את\s+([א-ת]+)(?:\s+ואת\s+([א-ת]+))?'
         for m in re.finditer(pattern,text):
             father,mother,c1,c2=m.groups();add(father,'wife',mother,'marriage-and-birth-verse')
             for child in (c1,c2):
-                if child:add(child,'father',father,'marriage-and-birth-verse');add(child,'mother',mother,'marriage-and-birth-verse')
+                if child:
+                    add(child,'father',father,'marriage-and-birth-verse');add(child,'mother',mother,'marriage-and-birth-verse',father=father)
+                    add(father,'children',child,'explicit-marriage-birth-inverse')
         for m in re.finditer(r'ותהר\s+([א-ת]+)\s+ותלד\s+בן\s+ותקרא\s+את\s+שמו\s+([א-ת]+)',text):
             add(m[2],'mother',m[1],'named-mother-and-naming-birth-verse')
         for m in re.finditer(r'([א-ת]+)\s+בן\s+([א-ת]+)',text):
@@ -71,14 +85,17 @@ class TorahEntityGraph:
             else:self.memory[key]=edge
         return edges
     def find(self,subject,relation,resolver):
+        from .entity_questions import qualified,name
+        subject,qualifier=qualified(subject)
         if self.path:
             with self.connect() as db:rows=[json.loads(r[0]) for r in db.execute('SELECT payload FROM edges LIMIT 50000')]
         else:rows=list(self.memory.values())
         result=[]
         for edge in rows:
-            if edge['subject']!=subject or edge['relation']!=relation:continue
+            if name(edge['subject'])!=subject or edge['relation']!=relation:continue
             source=resolver(edge['source_id'])
-            if source and admissible(source) and fingerprint(source)==edge['source_snapshot'] and source.get('version')==edge['version']:
+            if qualifier and name(edge.get('identity_scope',{}).get('father') or '')!=qualifier:continue
+            if source and admissible(source) and fingerprint(source)==edge['source_snapshot'] and source.get('version')==edge['version'] and edge in self.extract(source):
                 result.append(edge)
         return result
 

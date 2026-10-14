@@ -39,6 +39,10 @@ def issue(question,route,source):
         if term is None:
             definition=re.match(r'(?:מהי|מהו|מהנ|מהמ)\s+([א-ת]+(?:\s+[א-ת]+){0,2}?)(?=\s+(?:ב[א-ת]+|לפי|על פי)|\?|$)',q)
             if definition:term=definition[1]
+        if term is None:
+            phrase=re.match(r'(?:מה פירוש(?: הביטוי)?|מה משמעות(?: הביטוי)?|מהו|מהי)\s+(.+?)(?=\s+(?:בגמרא|לפי|על פי)|\?|$)',q)
+            if phrase:term=phrase[1].strip()
+        if term is None:return 'the requested definition target is unresolved'
         if term=='עשר הספירות' and 'ספירה' in normalize(source.get('work_title','')):term='ספירה'
         if term:
             if not re.search(re.escape(term)+r'.{0,120}(?:פירוש|משמעות|מונח|כלומר|הוא|היא|הנ |בארמית|מושג|תעמוד|לא הוכרע)|(?:פירוש|משמעות|מונח|מושג).{0,100}'+re.escape(term),t):

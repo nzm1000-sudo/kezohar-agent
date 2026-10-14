@@ -90,7 +90,8 @@ def status():
     from .torah_facts import FactSourceStore
     path=storage_path().parent/'source-units.sqlite3'
     learned=FactSourceStore(path).count() if path.exists() else 0
-    return {'available': ok, 'model': agent.model,
+    from .source_registry import registry
+    return {'available': ok, 'model': agent.model,'source_registry':registry(),
             'error': '' if ok else str(info), 'retrieval': agent.knowledge.status(),'knowledge_catalog':catalog_status(),
             'learned_source_units':learned}
 

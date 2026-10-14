@@ -318,6 +318,9 @@ class WebResearchEngine:
                 aliases={'Public Domain':'public-domain','CC-BY':'CC-BY','CC-BY-SA':'CC-BY-SA'}
                 license_id=aliases.get(license_id,license_id)
                 allowed,permission=permission_for(license_id,self.licenses,self.grants,final)
+                from .source_registry import owner_authorization
+                declared=owner_authorization(final)
+                if declared:allowed,permission=True,declared
                 # Rights-unknown sites contribute a short transient excerpt, never the full page.
                 api_reader=hasattr(self.fetcher,'read')
                 # API source units remain complete. A clipped/context-unknown

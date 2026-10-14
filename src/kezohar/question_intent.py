@@ -4,8 +4,9 @@ from .hebrew import strip_niqqud
 
 PUBLIC_ENTITIES=('משה','עמרם','יוכבד','אהרן','מרים','שמואל','חנה','אלקנה','יעקב','ישראל','אברהם','שרה','יצחק','רבקה','יוסף','דוד','שלמה',
     'רבי נחמן מברסלב','שניאור זלמן מליאדי','הבעל שם טוב',
+    'חפני','חופני','פנחס','פינחס','עלי','אלעזר','בצלאל','אורי','צלפחד',
     'רבי מאיר','רבי עקיבא','אלישע בן אבויה','רבי יהודה הלוי','רבי חיים ויטאל','הרמב״ם','הרמבם','הרמב״ן','החיד״א','החידא','רשב״א')
-PUBLIC_TOPICS=('כוזרי','משנה תורה','תיקו','משנה','גמרא','תלמוד','תנאים','אמוראים','גאונים','עשר הספירות','ספר הבהיר','מדרש תנחומא','ארץ ישראל')
+PUBLIC_TOPICS=('כוזרי','משנה תורה','תיקו','משנה','גמרא','תלמוד','תנאים','אמוראים','גאונים','עשר הספירות','ספר הבהיר','מדרש תנחומא','ארץ ישראל','שמע ישראל','צלם אלוהים','צלם אלהים','ואהבת לרעך כמוך','אהבת לרעך כמוך')
 
 class QuestionIntentRouter:
     def route(self,question):
@@ -50,13 +51,18 @@ class QuestionIntentRouter:
                 corrections=[{'written':entity,'canonical':candidates[0],'basis':'unique one-edit public name with explicit biblical title; search aid only'}]
                 q=q.replace(entity,candidates[0]);entity=candidates[0]
                 entities=list(dict.fromkeys(entities+[entity]))
-        kind=('halachic' if hal else 'fact' if relation or re.match(r'מי (?:היה|הייתה|היתה)',q) else
-              'interpretation' if re.search(r'מדוע|למה|פירוש|פרשנות|מה ההבדל|הסבר',q) else 'research')
+        from .entity_questions import identity_request
+        identity=identity_request(q) if not hal else None
+        if identity and identity['identity_kind']=='children':relation='children';entity=identity['parent']
+        if identity and any(s['name'] in ('חפני','פנחס','עלי','בצלאל','צלפחד') for s in identity['subjects']):domains.append('tanakh')
+        if identity and identity['parent'] in ('עלי','צלפחד','יעקב'):domains.append('tanakh')
+        kind=('halachic' if hal else 'fact' if relation or identity or re.match(r'מי (?:היה|הייתה|היתה)',q) else
+              'interpretation' if re.search(r'מדוע|למה|פירוש|משמעות|פרשנות|מה ההבדל|הסבר',q) else 'research')
         explicit_deep=bool(re.search(r'עיון מעמיק|מחקר|חקור|לעומק',q))
         from .knowledge_catalog import catalog_matches
         catalog=catalog_matches(q)
         if catalog and not domains:domains.append('people-and-books')
-        knowledge=not hal and bool(relation or domains or entities or catalog or any(t in q for t in PUBLIC_TOPICS+TOPICS))
+        knowledge=not hal and bool(kind=='interpretation' or relation or identity or domains or entities or catalog or any(t in q for t in PUBLIC_TOPICS+TOPICS))
         from .fastpath import is_out_of_scope,is_fast_question
         if is_out_of_scope(question):knowledge=False
         if is_fast_question(question) and not relation and kind!='interpretation':knowledge=False
@@ -65,6 +71,7 @@ class QuestionIntentRouter:
         return {'kind':kind,'domains':list(dict.fromkeys(domains)) or ['unclassified'],
             'engine':'jewish-knowledge' if knowledge else 'halachic',
             'relation':relation,'entity':entity,'public_entities':entities,
+            'identity_request':identity,
             'public_catalog_matches':catalog,
             'complexity':'deep' if explicit_deep else 'simple' if kind=='fact' else 'explanation',
             'normalized_question':q,'decision_basis':'question grammar and topic cues; not an asserted fact',

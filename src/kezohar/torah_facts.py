@@ -127,6 +127,7 @@ class TorahFactAnswerEngine:
             else:fresh=web.read(old['source_url'],budget)
             if fresh is None or fresh['source_id']!=sid:return None
             fresh=self.store.remember(fresh) or fresh;self.current[sid]=fresh;self.fresh.add(sid)
+            self.graph.ingest(fresh)  # Fresh extraction; historical edges remain invalid.
             return fresh
         except (OSError,ValueError,LLMUnavailable) as exc:
             self.errors.append({'stage':'knowledge-source-refresh','error':type(exc).__name__});return None
@@ -148,13 +149,13 @@ class TorahFactAnswerEngine:
                 'facts':facts,'evidence':quotes,'general_entailment_verified':False},
             'verification_layers':{'quotation_integrity':'exact' if facts or quotes else 'not-proved',
                 'claim_support':'typed-primary-fact' if primary_fact else 'reported-secondary-relationship' if facts else 'quoted-reading-only' if quotes else 'not-proved',
-                'human_review':'required','halachic_verified':False},
+                'human_review':'not-performed','halachic_verified':False},
             'structured_answer':{'short_answer':answer,'sources':sources,'quotations':[
                 {'source_id':s['source_id'],'text':s['text'],'reference':s['reference']} for s in sources] if facts else [
                 {'source_id':e['source_id'],'text':e['quote'],'reference':e['reference']} for e in quotes]},
             'answer_status':{'message':'מידע תורני מבוסס מקור; אינו פסיקה הלכתית.'},
             'fact_verified':primary_fact,'answer_complete':primary_fact,
-            'human_review':'required','halachic_verified':False,
+            'human_review':'not-performed','halachic_verified':False,
             'internet_used':self.used_web,'search_status':{'partial':bool(errors),'errors':errors},
             'knowledge_discovery':{'sources':list(self.current.values())[:50],
                 'attempts':self.web.attempts if self.web else [],'method':'bounded relationship and subject routes'},
@@ -169,7 +170,13 @@ class TorahFactAnswerEngine:
                 'answer_sources':[s['source_id'] for s in sources]},
             'orchestration':{'stages':['question-intent-router','knowledge-retrieval','independent-fact-verification'],
                 'budget':budget.report(),'complexity':route['complexity']}}
+    @staticmethod
+    def unqualified_single_identity(route):
+        request=route.get('identity_request') or {}
+        subjects=request.get('subjects',[])
+        return request.get('identity_kind')=='people' and len(subjects)==1 and not subjects[0]['father_qualifier']
     def render_facts(self,edges,route,budget):
+        if route['relation']=='children':return None
         if not edges:return None
         # Conflicting explicit objects cannot be resolved by model confidence.
         if len({e['object'] for e in edges})!=1:
@@ -252,6 +259,9 @@ class TorahFactAnswerEngine:
         answer=self.render_facts(self.facts(route,budget),route,budget)
         if answer:return answer
         self.local_search(route,budget)
+        from .identity_answers import resolve_identity
+        identity=resolve_identity(self,route,budget)
+        if identity and not self.unqualified_single_identity(route):return identity
         answer=self.render_facts(self.facts(route,budget),route,budget)
         if answer:return answer
         excerpt=self.render_excerpt(question,route,budget)
@@ -279,6 +289,8 @@ class TorahFactAnswerEngine:
             for url in self.web.search(question,route,budget,limit=6):
                 try:self.remember(self.web.read(url,budget))
                 except Exception as exc:self.errors.append({'stage':'knowledge-web-read','error':type(exc).__name__})
+                identity=resolve_identity(self,route,budget)
+                if identity and not self.unqualified_single_identity(route):return identity
                 answer=self.render_facts(self.facts(route,budget),route,budget)
                 if answer:return answer
             if route['relation'] not in ('father','mother','wife','child-count'):
@@ -287,6 +299,8 @@ class TorahFactAnswerEngine:
                     answer=self.render_facts(self.facts(route,budget),route,budget)
                     if answer:return answer
                 except Exception as exc:self.errors.append({'stage':'encyclopedia','error':type(exc).__name__})
+        identity=resolve_identity(self,route,budget)
+        if identity:return identity
         # Source reading is useful for explanation/history, but does not create
         # an unchecked direct relationship fact or a personal halachic ruling.
         if route['relation']=='author':
@@ -338,6 +352,22 @@ class TorahFactAnswerEngine:
                             result.update(verdict='partial_knowledge',answer_complete=False)
                             return result
                     return self.result('המקורות שנמצאו אינם מספיקים לתשובה המבוקשת. לא נוצרה מסקנה מזיכרון המודל.',[],route,budget)
+                if isinstance(packet,dict) and 'claims' in packet:
+                    from .knowledge_claims import validate
+                    claims,sources=validate(packet,candidates,lambda sid:self.resolve(sid,budget,force=True))
+                    quotes=[e for c in claims for e in c['evidence']]
+                    lines=[]
+                    for c in claims:
+                        prefix='הצעת פרשנות: ' if c['kind']=='interpretation' else 'הסקה מוצעת: ' if c['kind']=='inference' else 'הסבר מוצע לפי המקור: ' if c['kind']=='paraphrase' else ''
+                        refs=list(dict.fromkeys(e['reference'] for e in c['evidence']))
+                        lines.append(prefix+c['statement']+' ('+'; '.join(refs)+').')
+                    result=self.result('\n'.join(lines),sources,route,budget,kind='source-linked-explanation',quotes=quotes)
+                    result.update(verdict='knowledge_explanation',answer_complete=False,claims=claims,
+                        claim_generation={'model':generated.get('model'),'finish_reason':generated.get('finish_reason')})
+                    result['verification']['support']='exact-evidence; proposed-meaning-not-certified'
+                    result['verification_layers']['claim_support']='source-linked-proposal'
+                    result['verification_layers']['semantic_entailment_verified']=False
+                    return result
                 ids=packet.get('selected_sources') if isinstance(packet,dict) and set(packet)=={'selected_sources'} else None
                 if not isinstance(ids,list) or not 1<=len(ids)<=2 or len(set(ids))!=len(ids):raise ValueError('invalid knowledge source selection')
                 quotes=[];sources=[]
@@ -377,7 +407,8 @@ class TorahFactAnswerEngine:
                     result=self.result(answer,sources,route,budget,quotes=quotes)
                     if narrative:result['verification_layers']['historical_event_verified']=False
                     return result
-            except (ValueError,TypeError,LLMUnavailable) as exc:self.errors.append({'stage':'knowledge-generation','error':type(exc).__name__})
+            except (ValueError,TypeError,LLMUnavailable) as exc:self.errors.append({'stage':'knowledge-generation','error':type(exc).__name__,
+                'reason':str(exc)[:160] if isinstance(exc,ValueError) else 'local-model-unavailable'})
         return self.result('לא נמצא מקור ישיר שמוכיח את הפרט המבוקש. נעשה חיפוש ממוקד נוסף; אין להשלים את העובדה מזיכרון המודל.',[],route,budget)
 
 FastJewishQA=TorahFactAnswerEngine
@@ -393,4 +424,4 @@ class JewishResearchOrchestrator:
             return {'answer':'החיפוש הגיע למגבלת הזמן. לא מוצגת עובדה שלא אומתה.','sources':[],
                 'verdict':'budget_exhausted','mode':'knowledge-sources-only','question_intent':route,
                 'search_status':{'partial':True,'errors':[{'stage':'knowledge','error':'deadline-exhausted'}]},
-                'halachic_verified':False,'human_review':'required'}
+                'halachic_verified':False,'human_review':'not-performed'}

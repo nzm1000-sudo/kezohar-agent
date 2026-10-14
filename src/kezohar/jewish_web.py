@@ -32,6 +32,9 @@ def source_from_doc(doc,licenses=None):
     licenses=load_licenses() if licenses is None else licenses
     license_id={'Public Domain':'public-domain'}.get(doc.get('license',''),doc.get('license',''))
     allowed,permission=permission_for(license_id,licenses,{},doc['source_url'])
+    from .source_registry import owner_authorization
+    declared=owner_authorization(doc['source_url'])
+    if declared:allowed,permission=True,declared
     if not allowed or not doc.get('version') or len(doc.get('text','').encode())>32000:return None
     meta={'rag_answers_allowed':True,'source_unit_complete':True,'permission':permission,
         'page_sha256':doc['page_sha256'],'knowledge_primary_kind':doc.get('primary_kind','text'),
@@ -59,7 +62,7 @@ class JewishKnowledgeWebSearch:
         from .knowledge_catalog import catalog_matches
         named_books=catalog_matches(route['normalized_question'])
         filters=[]
-        if 'tanakh' in route['domains'] and (route['relation'] in ('father','mother','wife','child-count') or route['kind']=='interpretation'):filters=['Tanakh']
+        if 'tanakh' in route['domains'] and (route['relation'] in ('father','mother','wife','child-count','children') or route['kind']=='interpretation' or route.get('identity_request')):filters=['Tanakh']
         elif 'chasidut' in route['domains'] or 'traditional-narrative' in route['domains']:filters=['Chasidut']
         elif 'kabbalah' in route['domains']:filters=['Kabbalah']
         elif 'jewish-thought' in route['domains']:filters=['Musar','Jewish Thought']

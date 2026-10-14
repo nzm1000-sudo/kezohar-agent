@@ -3,14 +3,14 @@ let turnHistory=[],lastResponse=null,activeRequest=null;
 const controls=document.createElement('div');controls.className='row';
 controls.innerHTML='<label>מצב מענה<select id="studyMode"><option value="normal">מענה רגיל — מקור ציבורי לפי הצורך</option><option value="hybrid">חיפוש משולב — גם באינטרנט</option><option value="deep">עיון מעמיק — מקומי ואינטרנט</option></select></label><label><input type="checkbox" id="followup"> המשך המקרה הקודם</label><button type="button" id="newCase">מקרה חדש · נקה שיחה זמנית</button><button type="button" id="cancelRequest" disabled>בטל בקשה</button>';
 $('form').append(controls);
-const privacy=document.createElement('p');privacy.className='muted';privacy.textContent='כשנדרש מקור מהאינטרנט נשלחים רק שמות אישים ציבוריים ומונחי נושא רשומים. השאלה והיסטוריית השיחה אינן נשלחות. אתרים שהרשאותיהם טרם נבדקו אינם נקראים אוטומטית.';$('form').append(privacy);
+const privacy=document.createElement('p');privacy.className='muted';privacy.textContent='כשנדרש מקור מהאינטרנט נשלחים רק שמות אישים ציבוריים ומונחי נושא רשומים. השאלה והיסטוריית השיחה אינן נשלחות. ספריא ותורת אמת נכללים בהצהרת ההרשאה של בעל הפרויקט; כל מקור עדיין נבדק לזהות ולמהדורה.';$('form').append(privacy);
 const analysisBox=document.createElement('details');analysisBox.id='analysisBox';
-analysisBox.append(document.createElement('summary'));analysisBox.firstChild.textContent='תיק עיון: הבנת המקרה, תנאים והפניות';
+analysisBox.append(document.createElement('summary'));analysisBox.firstChild.textContent='פרטי המקורות והבדיקות';
 const analysisBody=document.createElement('div');analysisBox.append(analysisBody);$('result').append(analysisBox);
 const review=document.createElement('div');review.className='row';
 review.innerHTML='<label>סמן בעיה לבדיקה<select id="feedbackIssue"><option value="source-mismatch">מקור לא מתאים</option><option value="missing-condition">חסר תנאי</option><option value="unclear-answer">תשובה לא ברורה</option><option value="unnecessary-clarification">הבהרה מיותרת</option><option value="citation-problem">בעיה בציטוט</option></select></label><button type="button" id="sendFeedback">שמור משוב אנונימי מקומי</button><span id="feedbackStatus"></span>';
 $('result').append(review);
-document.querySelector('footer').textContent='אימות תוכנה אינו אישור הלכתי. היסטוריית השיחה זמנית בחלון זה בלבד; רענון מנקה אותה. המשוב שומר סוג בעיה, מזהי מקור וגיבוב תשובה בלבד. אין פרסום או שמירת שאלות ומשוב אישי.';
+document.querySelector('footer').textContent=' היסטוריית השיחה זמנית בחלון זה בלבד; רענון מנקה אותה. המשוב שומר סוג בעיה, מזהי מקור וגיבוב תשובה בלבד. אין פרסום או שמירת שאלות ומשוב אישי.';
 function clearConversation(){turnHistory=[];lastResponse=null;facts={};ruleAnswers={};currentQuestion='';$('followup').checked=false;$('result').hidden=true;$('question').value='';$('answer').textContent='';$('sources').replaceChildren();analysisBody.replaceChildren();$('sourceText').textContent='';if($('sourceDialog').open)$('sourceDialog').close()}
 $('newCase').onclick=()=>{if(!busy)clearConversation()};
 $('samples').addEventListener('click',()=>{$('followup').checked=false;turnHistory=[]});
@@ -22,6 +22,8 @@ for(const question of ['מי היה אבא של משה רבנו?','מי כתב �
 api('/demo/status').then(d=>{if(d.knowledge_catalog?.public_books){const info=document.createElement('p');info.className='muted';info.textContent=`קטלוג חיפוש: ${d.knowledge_catalog.public_books.toLocaleString('he-IL')} ספרים בספריא · ${d.learned_source_units||0} יחידות אינטרנט באינדקס לגילוי · לצד הספרייה המקומית · כל שימוש דורש מקור עדכני`; $('status').after(info)}}).catch(()=>{});
 const previousRender=render;
 render=function(d){previousRender(d);lastResponse=d;analysisBody.replaceChildren();$('feedbackStatus').textContent='';
+ $('elapsed').textContent=`${d.demo_elapsed_s} שניות`;
+ const technical=document.createElement('p');technical.textContent=`פניות למודל: ${d.demo_model_calls} · מצב: ${d.verdict}`;analysisBody.append(technical);
  if(d.mode==='fast'){$('verdict').textContent='חישוב זמנים ולוח — ללא מודל';$('verification').textContent='חישוב מקומי לפי השיטה המוצגת, עם אזור הזמן Asia/Jerusalem. השוואה חיצונית אינה אישור הלכתי.'}
  const oldCalendar=$('calendarReference');if(oldCalendar)oldCalendar.remove();
  if(d.mode==='fast'&&d.details?.zmanim&&d.details.location==='נתיבות'&&d.details.lat===31.4227&&d.details.lon===34.5966){
@@ -31,9 +33,10 @@ render=function(d){previousRender(d);lastResponse=d;analysisBody.replaceChildren
  if(d.verification?.verdict==='ok')$('verdict').textContent='ציטוט אומת בתוכנה · נדרשת בדיקה הלכתית';
  if(d.verdict==='source_lookup')$('verdict').textContent='טקסט מקור לפי מראה מקום · אינו פסק';
  if(d.question_intent?.engine==='jewish-knowledge'){
-  $('verdict').textContent=d.fact_verified?'עובדה נתמכת במקור ישיר':d.verdict==='reported_fact'?'קשר מוצהר במקור משני':d.verdict==='partial_knowledge'?'מידע חלקי — השאלה טרם הושלמה':d.verdict==='knowledge_reading'?'קריאת מקור — ללא מסקנה חדשה':'לא נמצאה ראיה ישירה';
-  $('verification').textContent=d.fact_verified?'הקשר נבדק במקור ובמהדורה. זו תשובת ידע, לא פסיקה הלכתית.':'התאמת המשמעות דורשת בדיקה; אין להשלים עובדות מזיכרון המודל.';
+  $('verdict').textContent=d.fact_verified?'עובדה נתמכת במקור ישיר':d.verdict==='knowledge_explanation'?'הסבר מקושר למקור':d.verdict==='identity_ambiguous'?'נדרש זיהוי האדם':d.verdict==='reported_fact'?'קשר מוצהר במקור משני':d.verdict==='partial_knowledge'?'מידע חלקי — השאלה טרם הושלמה':d.verdict==='knowledge_reading'?'קריאת מקור — ללא מסקנה חדשה':'לא נמצאה ראיה ישירה';
+  $('verification').textContent=d.fact_verified?'':d.verdict==='knowledge_explanation'?'קטעי הראיה אומתו; הפרשנות או ההסבר אינם עובדה שהוכחה אוטומטית.':'התאמת המשמעות לא הוכחה.';
   const route=document.createElement('p');route.textContent='סוג השאלה: '+d.question_intent.kind+' · תחומים: '+d.question_intent.domains.join(', ')+' · אינטרנט: '+(d.internet_used?'כן':'לא');analysisBody.append(route);
+  if(d.search_status?.partial)$('verification').textContent+=' החיפוש חלקי; חלק מהשלבים לא הושלמו.';
   for(const edge of d.verification?.facts||[]){const p=document.createElement('p');p.textContent=edge.subject+' — '+edge.relation+' — '+edge.object+' ('+edge.reference+')';analysisBody.append(p)}
  }
  for(const box of $('sources').children){const text=box.textContent;const s=(d.sources||[]).find(s=>text.includes(s.reference));if(s?.source_project==='verified-web'||s?.source_project==='jewish-knowledge-web'){
@@ -46,8 +49,9 @@ render=function(d){previousRender(d);lastResponse=d;analysisBody.replaceChildren
    try{const u=new URL(s.source_url);if(u.protocol==='https:'){const a=document.createElement('a');a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';a.textContent='פתח מקור אינטרנטי';box.append(a)}}catch(e){}$('sources').append(box)
   }}
  if(d.web_policy){const p=document.createElement('p');p.textContent='מחקר אינטרנטי: '+(d.discovery_backend||'ממשקי אתרים')+' · '+(d.web_policy.requests||0)+' בקשות. קטע אינטרנטי אינו אישור הלכתי.';analysisBody.append(p)}
- const dossier=d.research_dossier||{};analysisBox.open=dossier.study_mode==='deep';
- const intro=document.createElement('p');intro.textContent='זהו תיק מקורות, לא הכרעה אישית. תנאים והפניות הם טקסטים שאותרו; אין הנחה שכל התנאים מזוהים או מתקיימים.';analysisBody.append(intro);
+ const dossier=d.research_dossier||{};analysisBox.open=false;
+ for(const claim of d.claims||[]){const p=document.createElement('p');p.textContent=claim.claim_id+' · '+claim.kind+' · '+claim.statement+' · תמיכה: '+claim.claim_support;analysisBody.append(p)}
+ const intro=document.createElement('p');intro.textContent='זהו תיק מקורות.  תנאים והפניות הם טקסטים שאותרו; אין הנחה שכל התנאים מזוהים או מתקיימים.';analysisBody.append(intro);
  for(const claim of dossier.claims||[]){const part=document.createElement('details');const title=document.createElement('summary');title.textContent=claim.reference||'מקור';part.append(title);
   const quote=document.createElement('p');quote.style.whiteSpace='pre-wrap';quote.textContent=claim.quote||claim.text||'';part.append(quote);
   const marked=(claim.conditions_and_exceptions||[]).filter(c=>c.condition_markers?.length);for(const c of marked){const p=document.createElement('p');p.textContent='תנאי או סייג בטקסט: '+c.quote;part.append(p)}analysisBody.append(part)}
