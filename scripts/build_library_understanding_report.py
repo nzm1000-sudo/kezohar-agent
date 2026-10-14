@@ -53,7 +53,7 @@ def main():
         audit={'selected_source_ids':[s['source_id'] for s in d.get('sources',[])],
             'discovery_sources':[{'source_id':s['source_id'],'reference':s['reference'],'version':s.get('version')}
                 for s in d.get('knowledge_discovery',{}).get('sources',[])],
-            'claims':d.get('claims',[]),'verification':d.get('verification'),
+            'claims':d.get('claims',[]),'claim_status':d.get('claim_status'),'verification':d.get('verification'),
             'verification_layers':d.get('verification_layers'),'search_status':d.get('search_status'),
             'orchestration':d.get('orchestration')}
         out.append(esc(json.dumps(audit,ensure_ascii=False,indent=2))+'</pre></details>')
