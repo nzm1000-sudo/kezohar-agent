@@ -14,13 +14,20 @@ document.querySelector('footer').textContent='אימות תוכנה אינו א�
 function clearConversation(){turnHistory=[];lastResponse=null;facts={};ruleAnswers={};currentQuestion='';$('followup').checked=false;$('result').hidden=true;$('question').value='';$('answer').textContent='';$('sources').replaceChildren();analysisBody.replaceChildren();$('sourceText').textContent='';if($('sourceDialog').open)$('sourceDialog').close()}
 $('newCase').onclick=()=>{if(!busy)clearConversation()};
 $('samples').addEventListener('click',()=>{$('followup').checked=false;turnHistory=[]});
-for(const question of ['מי היה אבא של משה רבנו?','מי כתב את מסילת ישרים?','מהו ספר יצירה?']){
+for(const question of ['מי היה אבא של משה רבנו?','מי כתב את מסילת ישרים?','מהו ספר יצירה?',
+ 'תן קטע מוסר מתוך מסילת ישרים','תן קטע קצר מתוך סיפורי מעשיות','מתי שקיעה היום בנתיבות?']){
  const button=document.createElement('button');button.textContent=question;
  button.onclick=()=>{if(busy)return;$('question').value=question;facts={};ruleAnswers={};$('result').hidden=true};$('samples').prepend(button);
 }
-api('/demo/status').then(d=>{if(d.knowledge_catalog?.public_books){const info=document.createElement('p');info.className='muted';info.textContent=`קטלוג חיפוש: ${d.knowledge_catalog.public_books.toLocaleString('he-IL')} ספרים בספריא · לצד הספרייה המקומית · כל תשובה דורשת מקור מתאים`; $('status').after(info)}}).catch(()=>{});
+api('/demo/status').then(d=>{if(d.knowledge_catalog?.public_books){const info=document.createElement('p');info.className='muted';info.textContent=`קטלוג חיפוש: ${d.knowledge_catalog.public_books.toLocaleString('he-IL')} ספרים בספריא · ${d.learned_source_units||0} יחידות אינטרנט באינדקס לגילוי · לצד הספרייה המקומית · כל שימוש דורש מקור עדכני`; $('status').after(info)}}).catch(()=>{});
 const previousRender=render;
 render=function(d){previousRender(d);lastResponse=d;analysisBody.replaceChildren();$('feedbackStatus').textContent='';
+ if(d.mode==='fast'){$('verdict').textContent='חישוב זמנים ולוח — ללא מודל';$('verification').textContent='חישוב מקומי לפי השיטה המוצגת, עם אזור הזמן Asia/Jerusalem. השוואה חיצונית אינה אישור הלכתי.'}
+ const oldCalendar=$('calendarReference');if(oldCalendar)oldCalendar.remove();
+ if(d.mode==='fast'&&d.details?.zmanim&&d.details.location==='נתיבות'){
+  const panel=document.createElement('div');panel.id='calendarReference';const b=document.createElement('button');b.textContent='השווה את זמני נתיבות מול Hebcal';panel.append(b);$('result').append(panel);
+  b.onclick=async()=>{b.disabled=true;const p=document.createElement('p');panel.append(p);try{const r=await api('/demo/calendar-reference?date='+encodeURIComponent(d.details.gregorian));p.textContent=r.comparison.map(x=>`${x.field}: מקומי ${x.local}, הפרש ${x.difference_minutes} דקות`).join(' · ')+' · הושוו רק שיטות תואמות; אינו אישור הלכתי';const a=document.createElement('a');a.href=r.method_reference;a.target='_blank';a.rel='noopener noreferrer';a.textContent='תיעוד שיטות החישוב';panel.append(a)}catch(e){p.textContent=e.message}finally{b.disabled=false}};
+ }
  if(d.verification?.verdict==='ok')$('verdict').textContent='ציטוט אומת בתוכנה · נדרשת בדיקה הלכתית';
  if(d.verdict==='source_lookup')$('verdict').textContent='טקסט מקור לפי מראה מקום · אינו פסק';
  if(d.question_intent?.engine==='jewish-knowledge'){
@@ -30,7 +37,7 @@ render=function(d){previousRender(d);lastResponse=d;analysisBody.replaceChildren
   for(const edge of d.verification?.facts||[]){const p=document.createElement('p');p.textContent=edge.subject+' — '+edge.relation+' — '+edge.object+' ('+edge.reference+')';analysisBody.append(p)}
  }
  for(const box of $('sources').children){const text=box.textContent;const s=(d.sources||[]).find(s=>text.includes(s.reference));if(s?.source_project==='verified-web'||s?.source_project==='jewish-knowledge-web'){
-  const meta=document.createElement('p');meta.className='muted';meta.textContent=['מקור אינטרנטי',s.metadata?.site_name,s.author?'ייחוס מוצהר בדף: '+s.author:'המחבר לא זוהה',s.metadata?.published_at,s.metadata?.rag_answers_allowed?'טקסט מורשה; התאמתו למקרה דורשת אימות':'קטע לגילוי בלבד; אינו ראיה לפסק'].filter(Boolean).join(' · ');box.prepend(meta);
+  const meta=document.createElement('p');meta.className='muted';meta.textContent=['מקור אינטרנטי',s.metadata?.site_name,s.author?'ייחוס מוצהר בדף: '+s.author:'המחבר לא זוהה',s.metadata?.knowledge_genre==='traditional-narrative'?'ספרות סיפורים ומסורת; אין אימות היסטורי':s.metadata?.knowledge_genre==='kabbalistic-teaching'?'מקור קבלי':s.metadata?.knowledge_genre==='chasidic-teaching'?'מקור חסידי':'',s.metadata?.published_at,s.metadata?.rag_answers_allowed?'טקסט מורשה; התאמתו למקרה דורשת אימות':'קטע לגילוי בלבד; אינו ראיה לפסק'].filter(Boolean).join(' · ');box.prepend(meta);
   const button=box.querySelector('button');if(button)button.remove();try{const u=new URL(s.source_url);if(u.protocol==='https:'){const a=document.createElement('a');a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';a.textContent='פתח את העמוד המקורי';box.append(a)}}catch(e){}
  }}
  const findings=d.web_findings||[];if(findings.length){const h=document.createElement('h3');h.textContent='מקורות אינטרנטיים שנקראו — בנפרד מהספרייה';$('sources').append(h);

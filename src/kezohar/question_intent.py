@@ -3,6 +3,7 @@ import re
 from .hebrew import strip_niqqud
 
 PUBLIC_ENTITIES=('משה','עמרם','יוכבד','אהרן','מרים','שמואל','חנה','אלקנה','יעקב','ישראל','אברהם','שרה','יצחק','רבקה','יוסף','דוד','שלמה',
+    'רבי נחמן מברסלב','שניאור זלמן מליאדי','הבעל שם טוב',
     'רבי מאיר','רבי עקיבא','אלישע בן אבויה','רבי יהודה הלוי','רבי חיים ויטאל','הרמב״ם','הרמבם','הרמב״ן','החיד״א','החידא','רשב״א')
 PUBLIC_TOPICS=('כוזרי','משנה תורה','תיקו','משנה','גמרא','תלמוד','תנאים','אמוראים','גאונים','עשר הספירות','ספר הבהיר','מדרש תנחומא','ארץ ישראל')
 
@@ -21,6 +22,8 @@ class QuestionIntentRouter:
         if re.search(r'כוזרי|מחשבת ישראל|חסידות',q):domains.append('jewish-thought')
         if re.search(r'היסטורי|תקופת|גאונים|נחתם|מתי נולד',q):domains.append('history')
         if re.search(r'רבי|רבו|תלמיד|החיד|רמב|מי כתב|מחבר',q):domains.append('people-and-books')
+        from .torah_domains import question_domains,TOPICS
+        domains.extend(question_domains(q))
         relation=None
         for pattern,kind in ((r'(?:אביו|אב) של','father'),(r'(?:אמו|אימו|אם) של','mother'),
                              (r'(?:אשתו|אישה) של','wife'),(r'(?:בנו|בן) של','son'),
@@ -53,10 +56,12 @@ class QuestionIntentRouter:
         from .knowledge_catalog import catalog_matches
         catalog=catalog_matches(q)
         if catalog and not domains:domains.append('people-and-books')
-        knowledge=not hal and bool(relation or domains or entities or catalog or any(t in q for t in PUBLIC_TOPICS))
+        knowledge=not hal and bool(relation or domains or entities or catalog or any(t in q for t in PUBLIC_TOPICS+TOPICS))
         from .fastpath import is_out_of_scope,is_fast_question
         if is_out_of_scope(question):knowledge=False
         if is_fast_question(question) and not relation and kind!='interpretation':knowledge=False
+        from .locator_search import parse
+        if parse(question):knowledge=False  # Keep explicit legal locators on the existing verified path.
         return {'kind':kind,'domains':list(dict.fromkeys(domains)) or ['unclassified'],
             'engine':'jewish-knowledge' if knowledge else 'halachic',
             'relation':relation,'entity':entity,'public_entities':entities,

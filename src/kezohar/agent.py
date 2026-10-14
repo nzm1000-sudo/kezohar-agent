@@ -123,7 +123,7 @@ class Agent:
     def ask(self, question, top_k=5, lat=None, lon=None, location=None, timeout=4.5, cache_ttl=300, retrieved_sources=None, answer_model=None):
         t0 = time.time()
         q = (question or "").strip()
-        cacheable = answer_model is None and retrieved_sources is None
+        cacheable = answer_model is None and retrieved_sources is None and lat is None and lon is None and location is None
         if not q:
             return {"answer": "נא לשאול שאלה.", "sources": [], "verdict": "empty",
                     "mode": "refuse", "elapsed_s": 0.0}
@@ -140,6 +140,7 @@ class Agent:
                 pinned={s['source_id']:fingerprint(s) for s in res.get('sources',[])}
                 unchanged=all((current:=self.knowledge.source_by_id(sid)) is not None
                               and fingerprint(current)==digest for sid,digest in pinned.items())
+                if res.get('mode')=='fast' and res.get('details',{}).get('base_date')!=fastpath.today_israel().isoformat():unchanged=False
                 if unchanged:
                     r = dict(res)
                     r["cached"] = True

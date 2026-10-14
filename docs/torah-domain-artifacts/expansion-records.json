@@ -1,0 +1,599 @@
+[
+  {
+    "sources": [
+      {
+        "domain": "chasidut",
+        "url": "https://www.sefaria.org/Ketubot_2a%3A4",
+        "status": "permission-or-version-not-established"
+      },
+      {
+        "domain": "chasidut",
+        "source_id": "c78b6fa02c9f7572",
+        "reference": "עין זוכר, מערכת א ט׳",
+        "version": "Yair Ozen, Livorno 1792",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Ayin_Zokher%2C_Letter_Alef_9",
+        "genre": "unclassified-text",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "21522694f3fa153a33537f100e7cf0b89a644ae4a933aa71bae766a822d683a3"
+      },
+      {
+        "domain": "kabbalah",
+        "url": "https://www.sefaria.org/Notes_by_Rabbi_Yehoshua_Hartman_on_Be%27er_HaGolah%2C_Well_2_4%3A42",
+        "status": "permission-or-version-not-established"
+      },
+      {
+        "domain": "kabbalah",
+        "source_id": "3af5b065e6eee997",
+        "reference": "אוצר מדרשים, ספר יצירה, הקדמה ב׳",
+        "version": "Otzar Midrashim, New York, 1915",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Otzar_Midrashim%2C_Sefer_Yetzirah%2C_Introduction_2",
+        "genre": "unclassified-text",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "91b45495a393f824d186d50a77851c70cb7867f6910d35599102cb6ad5e40ca9"
+      },
+      {
+        "domain": "stories",
+        "source_id": "1f646a59716f481a",
+        "reference": "סיפורי מעשיות, שיחות שאחר סיפורי המעשיות א׳",
+        "version": "OYW",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Sippurei_Maasiyot%2C_Talks_Following_the_Story_Tales_1",
+        "genre": "traditional-narrative",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "cf0eb59ce4ce953c55b7adf08679d3213b6a0e4540cb86329956bbe005842946"
+      },
+      {
+        "domain": "stories",
+        "source_id": "c31665f38e5d2a0b",
+        "reference": "מאור עינים, וישב א׳",
+        "version": "Me'or Einayim -- OYW",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Me%27or_Einayim%2C_Vayeshev_1",
+        "genre": "chasidic-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "5ba598e4beee05b5954a5e33b184807918975c9b3991155db6edc198f7737303"
+      },
+      {
+        "domain": "musar",
+        "source_id": "ed1756caa90bea25",
+        "reference": "הגיונות אל עמי, חלק ב, ויצא ל״ד:ל״ה",
+        "version": "Antwerp, 1933-1936",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Hegyonot_El_Ami%2C_Volume_II%2C_Vayetzei_34%3A35",
+        "genre": "ethical-or-philosophical-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "40a6b4989f36bc49aedf5d17f3d449c8146ba4f0c2e4943cce0845712a6d27e5"
+      },
+      {
+        "domain": "musar",
+        "url": "https://www.sefaria.org/Notes_by_Rabbi_Yehoshua_Hartman_on_Be%27er_HaGolah%2C_Well_5_11%3A47",
+        "status": "permission-or-version-not-established"
+      }
+    ],
+    "errors": [],
+    "budget": {
+      "elapsed_s": 12.251,
+      "deadline_s": 120,
+      "model_calls": 0,
+      "max_model_calls": 0,
+      "context_bytes": 0,
+      "max_context_bytes": 48000,
+      "dropped_source_ids": [],
+      "stop_reason": null,
+      "context_measure": "UTF-8 prompt bytes, not tokenizer tokens",
+      "deadline_kind": "cooperative; in-flight I/O is not forcibly cancelled",
+      "web_requests": 12,
+      "max_web_requests": 18
+    },
+    "model_calls": 0,
+    "automatic_rulings": false
+  },
+  {
+    "sources": [
+      {
+        "domain": "chasidut",
+        "url": "https://www.sefaria.org/Sources_and_References_on_Likkutei_Torah%2C_Re%27eh_31%3A97",
+        "status": "permission-or-version-not-established"
+      },
+      {
+        "domain": "chasidut",
+        "source_id": "aa9cac64088c3f05",
+        "reference": "בית אהרן, דרושים על התורה ומועדים, מר' אשר הגדול מסטאלין, סדר במדבר, שלח א׳",
+        "version": "Beit Aharon, Brody, 1875.",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Beit_Aharon%2C_Teachings_on_Torah_and_Holidays%2C_R%27_Asher_%28the_First%29_of_Stolin%2C_Numbers%2C_Sh%27lach_1",
+        "genre": "chasidic-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "1bc8969003aa3e03644a89e4cc326d9f9f2455bf9336fc46163891a75861beac"
+      },
+      {
+        "domain": "kabbalah",
+        "source_id": "e7383a65471ccfda",
+        "reference": "שער מאמרי רשב\"י, פירוש על ספר יצירה א׳",
+        "version": "Shaar Maamarei Rashbi",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Sha%27ar_Ma%27amarei_Rashbi%2C_Commentary_on_the_Book_of_Yetzirah_1",
+        "genre": "kabbalistic-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "38599a26b17a7fcc62c89013b0a6b1ebcab4173fba093cc81b4e2a4e6d19f2a5"
+      },
+      {
+        "domain": "kabbalah",
+        "url": "https://www.sefaria.org/Sulam_on_Zohar%2C_Ki_Tisa_4%3A1",
+        "status": "permission-or-version-not-established"
+      },
+      {
+        "domain": "stories",
+        "source_id": "1f646a59716f481a",
+        "reference": "סיפורי מעשיות, שיחות שאחר סיפורי המעשיות א׳",
+        "version": "OYW",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Sippurei_Maasiyot%2C_Talks_Following_the_Story_Tales_1",
+        "genre": "traditional-narrative",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "cf0eb59ce4ce953c55b7adf08679d3213b6a0e4540cb86329956bbe005842946"
+      },
+      {
+        "domain": "stories",
+        "source_id": "c31665f38e5d2a0b",
+        "reference": "מאור עינים, וישב א׳",
+        "version": "Me'or Einayim -- OYW",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Me%27or_Einayim%2C_Vayeshev_1",
+        "genre": "chasidic-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "5ba598e4beee05b5954a5e33b184807918975c9b3991155db6edc198f7737303"
+      },
+      {
+        "domain": "musar",
+        "source_id": "ed1756caa90bea25",
+        "reference": "הגיונות אל עמי, חלק ב, ויצא ל״ד:ל״ה",
+        "version": "Antwerp, 1933-1936",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Hegyonot_El_Ami%2C_Volume_II%2C_Vayetzei_34%3A35",
+        "genre": "ethical-or-philosophical-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "40a6b4989f36bc49aedf5d17f3d449c8146ba4f0c2e4943cce0845712a6d27e5"
+      },
+      {
+        "domain": "musar",
+        "url": "https://www.sefaria.org/Notes_by_Rabbi_Yehoshua_Hartman_on_Be%27er_HaGolah%2C_Well_5_11%3A47",
+        "status": "permission-or-version-not-established"
+      },
+      {
+        "domain": "halacha",
+        "source_id": "0f23debfabefbc04",
+        "reference": "שולחן ערוך, אורח חיים כ״ט:א׳",
+        "version": "Maginei Eretz: Shulchan Aruch Orach Chaim, Lemberg, 1893",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Shulchan_Arukh%2C_Orach_Chayim_29%3A1",
+        "genre": "halachic-text-candidate",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "279bccf5819782bfa6aa9b8eacb5172981062b15b4453b26dbd412a80e280109"
+      },
+      {
+        "domain": "halacha",
+        "url": "https://www.sefaria.org/Yein_HaTov%2C_Part_I%2C_Orach_Chayim_5%3A9",
+        "status": "permission-or-version-not-established"
+      }
+    ],
+    "errors": [],
+    "budget": {
+      "elapsed_s": 19.128,
+      "deadline_s": 120,
+      "model_calls": 0,
+      "max_model_calls": 0,
+      "context_bytes": 0,
+      "max_context_bytes": 48000,
+      "dropped_source_ids": [],
+      "stop_reason": null,
+      "context_measure": "UTF-8 prompt bytes, not tokenizer tokens",
+      "deadline_kind": "cooperative; in-flight I/O is not forcibly cancelled",
+      "web_requests": 15,
+      "max_web_requests": 18
+    },
+    "model_calls": 0,
+    "automatic_rulings": false
+  },
+  {
+    "sources": [
+      {
+        "domain": "chasidut",
+        "url": "https://www.sefaria.org/Sources_and_References_on_Likkutei_Torah%2C_Re%27eh_31%3A97",
+        "status": "permission-or-version-not-established"
+      },
+      {
+        "domain": "chasidut",
+        "source_id": "aa9cac64088c3f05",
+        "reference": "בית אהרן, דרושים על התורה ומועדים, מר' אשר הגדול מסטאלין, סדר במדבר, שלח א׳",
+        "version": "Beit Aharon, Brody, 1875.",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Beit_Aharon%2C_Teachings_on_Torah_and_Holidays%2C_R%27_Asher_%28the_First%29_of_Stolin%2C_Numbers%2C_Sh%27lach_1",
+        "genre": "chasidic-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "1bc8969003aa3e03644a89e4cc326d9f9f2455bf9336fc46163891a75861beac"
+      },
+      {
+        "domain": "kabbalah",
+        "source_id": "e7383a65471ccfda",
+        "reference": "שער מאמרי רשב\"י, פירוש על ספר יצירה א׳",
+        "version": "Shaar Maamarei Rashbi",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Sha%27ar_Ma%27amarei_Rashbi%2C_Commentary_on_the_Book_of_Yetzirah_1",
+        "genre": "kabbalistic-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "38599a26b17a7fcc62c89013b0a6b1ebcab4173fba093cc81b4e2a4e6d19f2a5"
+      },
+      {
+        "domain": "kabbalah",
+        "url": "https://www.sefaria.org/Sulam_on_Zohar%2C_Ki_Tisa_4%3A1",
+        "status": "permission-or-version-not-established"
+      },
+      {
+        "domain": "musar",
+        "source_id": "ed1756caa90bea25",
+        "reference": "הגיונות אל עמי, חלק ב, ויצא ל״ד:ל״ה",
+        "version": "Antwerp, 1933-1936",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Hegyonot_El_Ami%2C_Volume_II%2C_Vayetzei_34%3A35",
+        "genre": "ethical-or-philosophical-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "40a6b4989f36bc49aedf5d17f3d449c8146ba4f0c2e4943cce0845712a6d27e5"
+      },
+      {
+        "domain": "musar",
+        "url": "https://www.sefaria.org/Notes_by_Rabbi_Yehoshua_Hartman_on_Be%27er_HaGolah%2C_Well_5_11%3A47",
+        "status": "permission-or-version-not-established"
+      }
+    ],
+    "errors": [],
+    "budget": {
+      "elapsed_s": 9.184,
+      "deadline_s": 120,
+      "model_calls": 0,
+      "max_model_calls": 0,
+      "context_bytes": 0,
+      "max_context_bytes": 48000,
+      "dropped_source_ids": [],
+      "stop_reason": null,
+      "context_measure": "UTF-8 prompt bytes, not tokenizer tokens",
+      "deadline_kind": "cooperative; in-flight I/O is not forcibly cancelled",
+      "web_requests": 9,
+      "max_web_requests": 18
+    },
+    "model_calls": 0,
+    "automatic_rulings": false
+  },
+  {
+    "sources": [
+      {
+        "domain": "chasidut",
+        "url": "https://www.sefaria.org/Tanya%2C_Part_I%3B_Likkutei_Amarim_1%3A1",
+        "status": "permission-or-version-not-established"
+      },
+      {
+        "domain": "chasidut",
+        "url": "https://www.sefaria.org/Sources_and_References_on_Likkutei_Torah%2C_Re%27eh_31%3A97",
+        "status": "permission-or-version-not-established"
+      },
+      {
+        "domain": "kabbalah",
+        "source_id": "12c31163c141f015",
+        "reference": "ספר יצירה א׳:א׳",
+        "version": "Sefer Yetzirah, Warsaw 1884",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Sefer_Yetzirah_1%3A1",
+        "genre": "kabbalistic-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "711b95744a73077c76486f3758f3653234c4678fd042ee651b624d7d0b495641"
+      },
+      {
+        "domain": "kabbalah",
+        "source_id": "e7383a65471ccfda",
+        "reference": "שער מאמרי רשב\"י, פירוש על ספר יצירה א׳",
+        "version": "Shaar Maamarei Rashbi",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Sha%27ar_Ma%27amarei_Rashbi%2C_Commentary_on_the_Book_of_Yetzirah_1",
+        "genre": "kabbalistic-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "38599a26b17a7fcc62c89013b0a6b1ebcab4173fba093cc81b4e2a4e6d19f2a5"
+      },
+      {
+        "domain": "stories",
+        "source_id": "1f646a59716f481a",
+        "reference": "סיפורי מעשיות, שיחות שאחר סיפורי המעשיות א׳",
+        "version": "OYW",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Sippurei_Maasiyot%2C_Talks_Following_the_Story_Tales_1",
+        "genre": "traditional-narrative",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "cf0eb59ce4ce953c55b7adf08679d3213b6a0e4540cb86329956bbe005842946"
+      },
+      {
+        "domain": "stories",
+        "source_id": "1fa32961ffdf96ba",
+        "reference": "סיפורי מעשיות, סיפורי מעשיות נוספים ג׳:א׳",
+        "version": "OYW",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Sippurei_Maasiyot%2C_Additional_Tales_3%3A1",
+        "genre": "traditional-narrative",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "c98c8750bfb210a2ffa04b3af7e4c69a87a6038fd2113f7f5ae7d2b12e6c346e"
+      },
+      {
+        "domain": "musar",
+        "source_id": "705c5dbe4cc5d24a",
+        "reference": "מסילת ישרים א׳",
+        "version": "Sefaria Vocalized Edition",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Mesillat_Yesharim_1",
+        "genre": "ethical-or-philosophical-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "45b5a1f581913c64c88397f77c7693680171ac71be468aabb7732c595690216f"
+      },
+      {
+        "domain": "musar",
+        "source_id": "ed1756caa90bea25",
+        "reference": "הגיונות אל עמי, חלק ב, ויצא ל״ד:ל״ה",
+        "version": "Antwerp, 1933-1936",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Hegyonot_El_Ami%2C_Volume_II%2C_Vayetzei_34%3A35",
+        "genre": "ethical-or-philosophical-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "40a6b4989f36bc49aedf5d17f3d449c8146ba4f0c2e4943cce0845712a6d27e5"
+      },
+      {
+        "domain": "halacha",
+        "source_id": "0f23debfabefbc04",
+        "reference": "שולחן ערוך, אורח חיים כ״ט:א׳",
+        "version": "Maginei Eretz: Shulchan Aruch Orach Chaim, Lemberg, 1893",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Shulchan_Arukh%2C_Orach_Chayim_29%3A1",
+        "genre": "halachic-text-candidate",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "279bccf5819782bfa6aa9b8eacb5172981062b15b4453b26dbd412a80e280109"
+      },
+      {
+        "domain": "halacha",
+        "url": "https://www.sefaria.org/Yein_HaTov%2C_Part_I%2C_Orach_Chayim_5%3A9",
+        "status": "permission-or-version-not-established"
+      }
+    ],
+    "errors": [],
+    "budget": {
+      "elapsed_s": 17.17,
+      "deadline_s": 120,
+      "model_calls": 0,
+      "max_model_calls": 0,
+      "context_bytes": 0,
+      "max_context_bytes": 48000,
+      "dropped_source_ids": [],
+      "stop_reason": null,
+      "context_measure": "UTF-8 prompt bytes, not tokenizer tokens",
+      "deadline_kind": "cooperative; in-flight I/O is not forcibly cancelled",
+      "web_requests": 15,
+      "max_web_requests": 18
+    },
+    "model_calls": 0,
+    "automatic_rulings": false
+  },
+  {
+    "sources": [
+      {
+        "domain": "kabbalah",
+        "source_id": "088114099550a2c1",
+        "reference": "ספר יצירה א׳:ב׳",
+        "version": "Sefer Yetzirah, Warsaw 1884",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Sefer_Yetzirah_1%3A2",
+        "genre": "kabbalistic-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "c8695d26acd5815896d56fd36705222b443d84eabf31a5e1af62815cc1ea1f41"
+      },
+      {
+        "domain": "kabbalah",
+        "source_id": "e7383a65471ccfda",
+        "reference": "שער מאמרי רשב\"י, פירוש על ספר יצירה א׳",
+        "version": "Shaar Maamarei Rashbi",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Sha%27ar_Ma%27amarei_Rashbi%2C_Commentary_on_the_Book_of_Yetzirah_1",
+        "genre": "kabbalistic-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "38599a26b17a7fcc62c89013b0a6b1ebcab4173fba093cc81b4e2a4e6d19f2a5"
+      }
+    ],
+    "errors": [],
+    "budget": {
+      "elapsed_s": 3.157,
+      "deadline_s": 120,
+      "model_calls": 0,
+      "max_model_calls": 0,
+      "context_bytes": 0,
+      "max_context_bytes": 48000,
+      "dropped_source_ids": [],
+      "stop_reason": null,
+      "context_measure": "UTF-8 prompt bytes, not tokenizer tokens",
+      "deadline_kind": "cooperative; in-flight I/O is not forcibly cancelled",
+      "web_requests": 3,
+      "max_web_requests": 18
+    },
+    "model_calls": 0,
+    "automatic_rulings": false
+  },
+  {
+    "sources": [
+      {
+        "domain": "stories",
+        "source_id": "1b55ca7d170217ab",
+        "reference": "סיפורי מעשיות א׳:ב׳",
+        "version": "OYW",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Sippurei_Maasiyot_1%3A2",
+        "genre": "traditional-narrative",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "35b6012d1b384d48bb807a0d88f87ab48f70e6c7eebd3ea36b654b8b732e021f"
+      },
+      {
+        "domain": "stories",
+        "source_id": "1f646a59716f481a",
+        "reference": "סיפורי מעשיות, שיחות שאחר סיפורי המעשיות א׳",
+        "version": "OYW",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Sippurei_Maasiyot%2C_Talks_Following_the_Story_Tales_1",
+        "genre": "traditional-narrative",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "cf0eb59ce4ce953c55b7adf08679d3213b6a0e4540cb86329956bbe005842946"
+      }
+    ],
+    "errors": [],
+    "budget": {
+      "elapsed_s": 3.169,
+      "deadline_s": 120,
+      "model_calls": 0,
+      "max_model_calls": 0,
+      "context_bytes": 0,
+      "max_context_bytes": 48000,
+      "dropped_source_ids": [],
+      "stop_reason": null,
+      "context_measure": "UTF-8 prompt bytes, not tokenizer tokens",
+      "deadline_kind": "cooperative; in-flight I/O is not forcibly cancelled",
+      "web_requests": 3,
+      "max_web_requests": 18
+    },
+    "model_calls": 0,
+    "automatic_rulings": false,
+    "next_positions": {
+      "stories": 1
+    }
+  },
+  {
+    "sources": [
+      {
+        "domain": "chasidut",
+        "url": "https://www.sefaria.org/Tanya%2C_Part_I%3B_Likkutei_Amarim_1%3A1",
+        "status": "permission-or-version-not-established"
+      },
+      {
+        "domain": "chasidut",
+        "url": "https://www.sefaria.org/Sources_and_References_on_Likkutei_Torah%2C_Re%27eh_31%3A97",
+        "status": "permission-or-version-not-established"
+      },
+      {
+        "domain": "kabbalah",
+        "source_id": "088114099550a2c1",
+        "reference": "ספר יצירה א׳:ב׳",
+        "version": "Sefer Yetzirah, Warsaw 1884",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Sefer_Yetzirah_1%3A2",
+        "genre": "kabbalistic-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "c8695d26acd5815896d56fd36705222b443d84eabf31a5e1af62815cc1ea1f41"
+      },
+      {
+        "domain": "kabbalah",
+        "source_id": "e7383a65471ccfda",
+        "reference": "שער מאמרי רשב\"י, פירוש על ספר יצירה א׳",
+        "version": "Shaar Maamarei Rashbi",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Sha%27ar_Ma%27amarei_Rashbi%2C_Commentary_on_the_Book_of_Yetzirah_1",
+        "genre": "kabbalistic-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "38599a26b17a7fcc62c89013b0a6b1ebcab4173fba093cc81b4e2a4e6d19f2a5"
+      },
+      {
+        "domain": "musar",
+        "source_id": "705c5dbe4cc5d24a",
+        "reference": "מסילת ישרים א׳",
+        "version": "Sefaria Vocalized Edition",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Mesillat_Yesharim_1",
+        "genre": "ethical-or-philosophical-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "45b5a1f581913c64c88397f77c7693680171ac71be468aabb7732c595690216f"
+      },
+      {
+        "domain": "musar",
+        "source_id": "ed1756caa90bea25",
+        "reference": "הגיונות אל עמי, חלק ב, ויצא ל״ד:ל״ה",
+        "version": "Antwerp, 1933-1936",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Hegyonot_El_Ami%2C_Volume_II%2C_Vayetzei_34%3A35",
+        "genre": "ethical-or-philosophical-teaching",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "40a6b4989f36bc49aedf5d17f3d449c8146ba4f0c2e4943cce0845712a6d27e5"
+      },
+      {
+        "domain": "halacha",
+        "source_id": "0f23debfabefbc04",
+        "reference": "שולחן ערוך, אורח חיים כ״ט:א׳",
+        "version": "Maginei Eretz: Shulchan Aruch Orach Chaim, Lemberg, 1893",
+        "license": "public-domain",
+        "url": "https://www.sefaria.org/Shulchan_Arukh%2C_Orach_Chayim_29%3A1",
+        "genre": "halachic-text-candidate",
+        "status": "indexed-public-unit",
+        "halachic_verified": false,
+        "source_snapshot": "279bccf5819782bfa6aa9b8eacb5172981062b15b4453b26dbd412a80e280109"
+      },
+      {
+        "domain": "halacha",
+        "url": "https://www.sefaria.org/Yein_HaTov%2C_Part_I%2C_Orach_Chayim_5%3A9",
+        "status": "permission-or-version-not-established"
+      }
+    ],
+    "errors": [],
+    "budget": {
+      "elapsed_s": 13.906,
+      "deadline_s": 120,
+      "model_calls": 0,
+      "max_model_calls": 0,
+      "context_bytes": 0,
+      "max_context_bytes": 48000,
+      "dropped_source_ids": [],
+      "stop_reason": null,
+      "context_measure": "UTF-8 prompt bytes, not tokenizer tokens",
+      "deadline_kind": "cooperative; in-flight I/O is not forcibly cancelled",
+      "web_requests": 13,
+      "max_web_requests": 18
+    },
+    "model_calls": 0,
+    "automatic_rulings": false,
+    "next_positions": {
+      "stories": 2,
+      "chasidut": 1,
+      "kabbalah": 1,
+      "musar": 1,
+      "halacha": 1
+    }
+  }
+]

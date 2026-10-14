@@ -11,7 +11,11 @@ def knowledge_queries(question,route):
     if route.get('export_allowed') is False:return []
     q=route['normalized_question'];names=[n for n in PUBLIC_ENTITIES if n in q]
     from .knowledge_catalog import catalog_matches
-    topics=[t for t in PUBLIC_TOPICS if t in q]+[r['heTitle'] for r in catalog_matches(q)]
+    from .torah_domains import TOPICS
+    topics=[t for t in PUBLIC_TOPICS+TOPICS if t in q]+[r['heTitle'] for r in catalog_matches(q)]
+    modifiers={'חסידות','ברסלב','חב״ד','קבלה','מוסר'}
+    substantive=[t for t in topics if t not in modifiers]
+    if substantive:topics=substantive
     if not names and not topics:return []
     terms=list(dict.fromkeys(names+topics))[:4]
     relation={'father':['ותלד','בני'],'mother':['ותהר','אם'],'wife':['אשתו','לאשה'],
@@ -34,6 +38,11 @@ def source_from_doc(doc,licenses=None):
         'site_name':doc.get('site_name',''),'locator_status':doc.get('locator_status'),
         'source_reliability':'official API; meaning separately checked','instruction_policy':'untrusted-data',
         'source_api_url':doc.get('source_api_url','')}
+    from .knowledge_catalog import source_catalog_entry
+    from .torah_domains import source_genre
+    entry=source_catalog_entry(doc['source_url'])
+    if entry:
+        meta.update(knowledge_categories=entry['categories'],knowledge_genre=source_genre(entry['categories'],entry['title']))
     if re.search(r'ignore (?:all |previous )*instructions|system prompt|התעלם.{0,30}הוראות',doc['text'],re.I):return None
     return Source(source_id=stable_id('jewish-knowledge',doc['source_url'],doc['text']),work_title=doc['title'],
         reference=doc.get('reference',doc['title']),text=doc['text'],normalized_text=hebrew.normalize(doc['text']),
@@ -47,16 +56,26 @@ class JewishKnowledgeWebSearch:
         self.reader=TorahWebReader(self.transport);self.attempts=[];self.errors=[]
     def search(self,question,route,budget,limit=6):
         queries=knowledge_queries(question,route);urls=[]
+        from .knowledge_catalog import catalog_matches
+        named_books=catalog_matches(route['normalized_question'])
+        filters=[]
+        if 'tanakh' in route['domains'] and (route['relation'] in ('father','mother','wife','child-count') or route['kind']=='interpretation'):filters=['Tanakh']
+        elif 'chasidut' in route['domains'] or 'traditional-narrative' in route['domains']:filters=['Chasidut']
+        elif 'kabbalah' in route['domains']:filters=['Kabbalah']
+        elif 'jewish-thought' in route['domains']:filters=['Musar','Jewish Thought']
         for query in queries:
             budget.check('knowledge web search')
             try:
                 data=self.transport.json('https://www.sefaria.org/api/search-wrapper',
                     {'query':query,'type':'text','field':'naive_lemmatizer','slop':30,'size':min(30,limit*4),
                      'source_proj':['ref','heRef','title','categories'],
-                     **({'filters':['Tanakh'],'filter_fields':['path']} if 'tanakh' in route['domains'] and (route['relation'] in ('father','mother','wife','child-count') or route['kind']=='interpretation') else {})},budget)
+                     **({'filters':filters,'filter_fields':['path']*len(filters)} if filters else {})},budget)
                 hits=data.get('hits',{}).get('hits',[])
                 # Primary biblical text first for biblical family facts.
-                hits=sorted(hits,key=lambda h:'Tanakh' not in h.get('_source',{}).get('categories',[]))
+                def named_hit(hit):
+                    ref=hit.get('_source',{}).get('ref','')
+                    return any(ref==b['title'] or ref.startswith(b['title']+',') or ref.startswith(b['title']+' ') or ref.startswith(b['title']+'.') for b in named_books)
+                hits=sorted(hits,key=lambda h:(bool(named_books) and not named_hit(h),'Tanakh' not in h.get('_source',{}).get('categories',[])))
                 urls.extend('https://www.sefaria.org/'+urllib.parse.quote(h['_source']['ref'].replace(' ','_'))
                     for h in hits if h.get('_source',{}).get('ref'))
                 self.attempts.append({'query':query,'backend':'sefaria-official','count':len(hits)})

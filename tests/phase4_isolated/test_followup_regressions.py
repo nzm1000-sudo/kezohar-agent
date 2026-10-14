@@ -11,6 +11,7 @@ from kezohar.verification import ExtractiveSourceVerifier
 from kezohar.answer_composition import VerifiedAnswerComposer
 from kezohar.source_snapshot import fingerprint
 from kezohar.conversation_state import ConversationConflict
+from kezohar.fastpath import handle as REAL_FASTPATH_HANDLE
 
 UNIT = 'בדיקת סמל אלפא: רק כאשר דגל בדיקה פעיל, מציגים אלפא; אם כבוי אין להציג.'
 FULL = 'הקדמה סינתטית נפרדת.\n' + UNIT + '\nפרק נפרד על סמל ביתא: מציגים ביתא רק כשמצב ביתא פעיל.'
@@ -1691,10 +1692,14 @@ def test_knowledge_small_definition_can_be_singular_for_plural_concept():
     assert not issue(q,QuestionIntentRouter().route(q),source(text='ספירה היא מושג יסודי בעולמה של הקבלה',work_title='ספירה (קבלה)'))
 
 
-def test_no_source_model_status_can_show_scoped_definition_without_claiming_complete_answer(tmp_path):
+def test_no_source_model_status_can_show_scoped_definition_without_claiming_complete_answer(tmp_path,monkeypatch):
     from kezohar.torah_facts import TorahFactAnswerEngine
     from kezohar.question_intent import QuestionIntentRouter
     from kezohar.request_budget import RequestBudget
+    from kezohar.jewish_web import JewishKnowledgeWebSearch
+    from kezohar.jewish_encyclopedia import JewishEncyclopediaEngine
+    monkeypatch.setattr(JewishKnowledgeWebSearch,'search',lambda *a,**k:[])
+    monkeypatch.setattr(JewishEncyclopediaEngine,'search',lambda *a,**k:[])
     s=source(text='אלפא הוא מושג סינתטי לבדיקה, ואין כאן רשימה מלאה.',work_title='מושג אלפא')
     s['metadata']['knowledge_primary_kind']='secondary-encyclopedia'
     a=agent([s]);a.answer_model=FixedAnswer(json.dumps({'status':'no_source'}))
@@ -1788,3 +1793,223 @@ def test_secondary_book_attribution_is_quoted_without_becoming_primary_fact(tmp_
     s['work_title']='ספר ביתא';a=agent([s])
     r=TorahFactAnswerEngine(a,root=tmp_path/'other').answer(q,QuestionIntentRouter().route(q),RequestBudget())
     assert not r['sources'] and r['verdict']=='knowledge_insufficient'
+
+
+def test_public_source_search_indexes_updates_and_rejects_private_units(tmp_path):
+    from kezohar.torah_facts import FactSourceStore
+    store=FactSourceStore(tmp_path/'units.sqlite3')
+    s=source(text='בדיקת סמל אלפא ביתא גמא');store.remember(s)
+    assert store.search('אלפא ביתא')[0]['source_id']=='s1'
+    changed=copy.deepcopy(s);changed['text']='בדיקת סמל דלתא גמא';store.remember(changed)
+    assert not store.search('אלפא') and store.search('דלתא')
+    private=source('private',text='סוד אישי סינתטי');private['metadata']['owner_id']='user-A'
+    assert store.remember(private) is None and store.get('private') is None and not store.search('סוד')
+    assert not store.search('" OR *')  # FTS operators cannot escape the normalized query.
+
+
+def test_source_search_is_discovery_not_permission_to_use_stale_text(tmp_path,monkeypatch):
+    from kezohar.torah_facts import TorahFactAnswerEngine
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.request_budget import RequestBudget
+    s=source('cached-only',text='אלפא הוא מושג סינתטי בקבלה',work_title='אלפא')
+    a=agent([]);engine=TorahFactAnswerEngine(a,root=tmp_path/'facts');engine.store.remember(s)
+    monkeypatch.setattr(engine,'resolve',lambda *a,**k:None)
+    engine.local_search(QuestionIntentRouter().route('מה פירוש אלפא בקבלה?'),RequestBudget())
+    assert 'cached-only' not in engine.current and not a.answer_model.calls
+
+
+def test_broad_torah_topics_preserve_halacha_and_calendar_routing():
+    from kezohar.question_intent import QuestionIntentRouter
+    route=QuestionIntentRouter().route
+    assert 'chasidut' in route('מהי התבודדות בברסלב?')['domains']
+    assert 'traditional-narrative' in route('ספר סיפור מתוך סיפורי מעשיות')['domains']
+    assert 'kabbalah' in route('הסבר את הצמצום בקבלה')['domains']
+    assert route('האם מותר ללמוד תניא בשבת?')['engine']=='halachic'
+    assert route('מתי שקיעה היום?')['engine']=='halachic'
+
+
+def test_dst_transition_uses_real_jerusalem_timezone_not_calendar_month():
+    from datetime import date
+    from kezohar.fastpath import _israel_tz_offset
+    assert _israel_tz_offset(date(2026,3,26))==2
+    assert _israel_tz_offset(date(2026,3,27))==3
+    assert _israel_tz_offset(date(2026,10,24))==3
+    assert _israel_tz_offset(date(2026,10,25))==2
+
+
+def test_hasidic_book_search_is_category_scoped_and_named_book_ranked_first(tmp_path,monkeypatch):
+    from kezohar import knowledge_catalog as kc
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.jewish_web import JewishKnowledgeWebSearch
+    from kezohar.request_budget import RequestBudget
+    p=tmp_path/'catalog.json';monkeypatch.setattr(kc,'storage_path',lambda:p)
+    kc.save_catalog([{'category':'Chasidut','contents':[{'title':'Tanya','heTitle':'תניא'}]}],p)
+    class Transport:
+        def json(self,url,payload=None,*args,**kwargs):
+            assert payload['filters']==['Chasidut'] and payload['filter_fields']==['path']
+            return {'hits':{'hits':[{'_source':{'ref':'Other 1','categories':['Chasidut']}},
+                {'_source':{'ref':'Tanya, Part I 1:1','categories':['Chasidut']}}]}}
+    q='הסבר על תניא';urls=JewishKnowledgeWebSearch(Transport()).search(q,QuestionIntentRouter().route(q),RequestBudget())
+    assert urls[0].startswith('https://www.sefaria.org/Tanya')
+
+
+def test_traditional_story_genre_does_not_approve_historical_event():
+    from kezohar.torah_domains import source_genre
+    assert source_genre(['Chasidut'],'Sippurei Maasiyot')=='traditional-narrative'
+    assert source_genre(['Kabbalah'],'Fixture')=='kabbalistic-teaching'
+    assert source_genre(['Halakhah'],'Fixture')=='halachic-text-candidate'
+
+
+def test_calendar_crosscheck_requires_matching_place_date_offset_and_method():
+    from datetime import date
+    from kezohar.calendar_reference import compare_netivot
+    from kezohar.fastpath import DEFAULT_LAT,DEFAULT_LON
+    from kezohar.torah_web import ResearchError
+    d={'date':'2026-10-14','location':{'latitude':DEFAULT_LAT,'longitude':DEFAULT_LON,'tzid':'Asia/Jerusalem'},
+       'times':{k:'2026-10-14T12:00:00+03:00' for k in ('sunrise','sunset','sofZmanShma','sofZmanTfilla','tzeit42min')}}
+    class Transport:
+        def json(self,url,**kwargs):
+            assert 'question' not in url and 'latitude=31.4227' in url
+            return copy.deepcopy(d)
+    r=compare_netivot(date(2026,10,14),Transport())
+    assert len(r['comparison'])==5 and not r['halachic_verified'] and r['not_compared']
+    d['location']['latitude']=0
+    with pytest.raises(ResearchError,match='location'):compare_netivot(date(2026,10,14),Transport())
+    d['location']['latitude']=DEFAULT_LAT;d['times']['sunrise']='2026-10-14T12:00:00+02:00'
+    with pytest.raises(ResearchError,match='timestamp'):compare_netivot(date(2026,10,14),Transport())
+
+
+def test_explicit_book_excerpt_rejects_mention_in_other_work_and_encyclopedia(tmp_path,monkeypatch):
+    from kezohar import knowledge_catalog as kc
+    from kezohar.knowledge_evidence import issue
+    from kezohar.question_intent import QuestionIntentRouter
+    p=tmp_path/'catalog.json';monkeypatch.setattr(kc,'storage_path',lambda:p)
+    kc.save_catalog([{'title':'Fixture Work','heTitle':'ספר אלפא'}],p)
+    q='תן קטע מתוך ספר אלפא';r=QuestionIntentRouter().route(q)
+    assert issue(q,r,source(text='המחבר הביא דברים מתוך ספר אלפא',work_title='ספר אחר'))
+    genuine=source(text='טקסט סינתטי של ספר אלפא',work_title='ספר אלפא')
+    assert not issue(q,r,genuine)
+    genuine['metadata']['knowledge_primary_kind']='secondary-encyclopedia'
+    assert issue(q,r,genuine)
+
+
+def test_definition_of_new_torah_concept_requires_definition_not_usage():
+    from kezohar.knowledge_evidence import issue
+    from kezohar.question_intent import QuestionIntentRouter
+    q='מהי אלפא בחסידות?';r=QuestionIntentRouter().route(q)
+    assert issue(q,r,source(text='גם כשלא מצליחים באלפא, אומרים דבר סינתטי בלבד'))
+    assert not issue(q,r,source(text='אלפא היא מושג סינתטי לצורך בדיקה בלבד'))
+
+
+def test_domain_label_is_not_required_as_literal_word_inside_concept_source():
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.jewish_web import knowledge_queries
+    q='מהי התבודדות בברסלב?';r=QuestionIntentRouter().route(q)
+    queries=knowledge_queries(q,r)
+    assert queries and all('התבודדות' in text and 'ברסלב' not in text for text in queries)
+
+
+def test_story_heading_does_not_count_as_narrative_content():
+    from kezohar.knowledge_evidence import issue
+    from kezohar.question_intent import QuestionIntentRouter
+    q='ספר סיפור חסידי';r=QuestionIntentRouter().route(q)
+    assert issue(q,r,source(text='מעשה א: מלך וקיסר'))
+
+
+def test_literal_book_excerpt_uses_complete_paragraph_without_model(tmp_path,monkeypatch):
+    from kezohar import knowledge_catalog as kc
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.torah_facts import TorahFactAnswerEngine
+    from kezohar.jewish_web import JewishKnowledgeWebSearch
+    from kezohar.jewish_encyclopedia import JewishEncyclopediaEngine
+    from kezohar.request_budget import RequestBudget
+    p=tmp_path/'catalog.json';monkeypatch.setattr(kc,'storage_path',lambda:p)
+    kc.save_catalog([{'title':'Fixture Book','heTitle':'ספר אלפא'}],p)
+    monkeypatch.setattr(JewishKnowledgeWebSearch,'search',lambda *a,**k:[])
+    monkeypatch.setattr(JewishEncyclopediaEngine,'search',lambda *a,**k:[])
+    text='כאשר דגל בדיקה סינתטי פעיל, אפשר להציג רק את סמל אלפא; כאשר הדגל כבוי, אין להציג אותו. זהו קטע סינתטי בספר בדיקה, וכל תנאיו נשמרים בשלמותם לצורך בדיקה בלבד.'
+    s=source(text=text,work_title='ספר אלפא');a=agent([s]);q='תן קטע מתוך ספר אלפא'
+    r=TorahFactAnswerEngine(a,root=tmp_path/'facts').answer(q,QuestionIntentRouter().route(q),RequestBudget())
+    assert r['mode']=='verified-book-reading' and text in r['answer'] and not a.answer_model.calls
+    assert not r['fact_verified'] and not r['answer_complete'] and not r['halachic_verified']
+
+
+def test_calendar_demo_endpoint_validates_input_and_never_uses_model(monkeypatch):
+    from kezohar import calendar_reference as cr
+    calls=[]
+    def compare(date,**kwargs):calls.append(date);return {'halachic_verified':False,'location':'Netivot'}
+    monkeypatch.setattr(cr,'compare_netivot',compare)
+    r=demo_request('/demo/calendar-reference?date=2026-10-14',method='GET')
+    assert r.status_code==200 and not r.json()['halachic_verified'] and len(calls)==1
+    assert demo_request('/demo/calendar-reference?date=bad',method='GET').status_code==422
+    assert demo_request('/demo/calendar-reference?date=2026-10-14',headers={'host':'evil.invalid'},method='GET').status_code==403
+    assert len(calls)==1
+
+
+def test_long_named_book_unit_ranks_before_short_mentions_in_learned_index(tmp_path):
+    from kezohar.torah_facts import FactSourceStore
+    store=FactSourceStore(tmp_path/'sources.sqlite3')
+    genuine=source('book',text='תוכן סינתטי ארוך לצורך בדיקת דירוג בלבד. '*80,work_title='ספר אלפא')
+    store.remember(genuine)
+    for i in range(30):store.remember(source('mention-'+str(i),text='המחבר מצטט ספר אלפא בלבד.',work_title='ספר אחר '+str(i)))
+    assert store.search('ספר אלפא')[0]['source_id']=='book'
+
+
+def test_expansion_rotates_public_topics_and_deduplicates_without_model(tmp_path):
+    import runpy
+    from pathlib import Path
+    from kezohar.torah_facts import FactSourceStore
+    module=runpy.run_path(str(Path(__file__).resolve().parents[2]/'scripts/expand_torah_knowledge.py'),run_name='test_expansion')
+    class Web:
+        errors=[]
+        queries=[]
+        def search(self,q,*args,**kwargs):self.queries.append(q);return ['https://www.sefaria.org/Fixture_1']
+        def read(self,url,*args):return source(text='תוכן סינתטי אלפא',source_url=url,metadata={'rag_answers_allowed':True,'page_sha256':'synthetic'})
+    web=Web();store=FactSourceStore(tmp_path/'sources.sqlite3')
+    first=module['expand'](['halacha'],web=web,store=store)
+    second=module['expand'](['halacha'],web=web,store=store,positions=first['next_positions'])
+    assert len(set(web.queries))==2 and second['next_positions']['halacha']==2
+    assert store.count()==1 and first['model_calls']==second['model_calls']==0
+
+
+def test_halachic_research_uses_learned_urls_without_trusting_cached_text(tmp_path,monkeypatch):
+    from kezohar import knowledge_catalog as kc
+    from kezohar.torah_facts import FactSourceStore
+    from kezohar.torah_web import HybridHalachicResearch,TorahWebReader
+    from kezohar.web_research import WebResearchEngine
+    from kezohar.request_budget import RequestBudget
+    monkeypatch.setattr(kc,'storage_path',lambda:tmp_path/'public-catalog.json')
+    store=FactSourceStore(tmp_path/'source-units.sqlite3')
+    s=source(text='תפילין בדיקת סמל סינתטי בלבד',source_url='https://www.sefaria.org/Fixture_1')
+    s['metadata']['knowledge_genre']='halachic-text-candidate';store.remember(s)
+    def capture(engine,*args,**kwargs):
+        assert engine.searcher.cached_urls==[s['source_url']]
+        assert isinstance(engine.fetcher,TorahWebReader)
+        return {'sources':[],'errors':[],'discovery_attempts':[]}
+    monkeypatch.setattr(WebResearchEngine,'research',capture)
+    hybrid=HybridHalachicResearch(licenses={})
+    assert not hybrid.allow_local_reuse
+    r=hybrid.research('תפילין',request_budget=RequestBudget())
+    assert not r['sources'] and not r['web_policy']['halachic_verified']
+
+
+def test_zmanim_tomorrow_and_midnight_cache_do_not_reuse_wrong_day(monkeypatch):
+    from datetime import date
+    from kezohar import fastpath
+    monkeypatch.setattr(fastpath,'handle',REAL_FASTPATH_HANDLE)
+    monkeypatch.setattr(fastpath,'today_israel',lambda:date(2026,10,24))
+    a=agent([]);r=a.ask('מתי שקיעה מחר?')
+    assert r['details']['gregorian']=='2026-10-25' and r['details']['zmanim']['tz_offset']==2
+    assert 'מחר' in r['answer'] and not a.answer_model.calls
+    monkeypatch.setattr(fastpath,'today_israel',lambda:date(2026,10,25))
+    r=a.ask('מתי שקיעה מחר?')
+    assert not r.get('cached') and r['details']['gregorian']=='2026-10-26'
+
+
+def test_zmanim_explicit_locations_do_not_reuse_previous_place_cache(monkeypatch):
+    from kezohar import fastpath
+    monkeypatch.setattr(fastpath,'handle',REAL_FASTPATH_HANDLE)
+    a=agent([]);q='מתי שקיעה היום?'
+    a.ask(q,lat=31.4,lon=34.6,location='מקום בדיקה אלפא')
+    r=a.ask(q,lat=32.1,lon=35.1,location='מקום בדיקה ביתא')
+    assert not r.get('cached') and r['details']['location']=='מקום בדיקה ביתא'

@@ -18,6 +18,12 @@ from . import hebrew
 from .web_research import ResearchError, USER_AGENT, MAX_PAGE_BYTES, PageParser
 
 SITES = {
+    'www.hebcal.com': {'name':'Hebcal','access':'official-api',
+        'policy_url':'https://www.hebcal.com/home/1663/zmanim-halachic-times-api',
+        'tradition':'multiple calculation methods','reliability':'calculated-calendar-data','authority':''},
+    'www.chabad.org': {'name':'Chabad.org','access':'reference-only',
+        'policy_url':'https://www.chabad.org/multimedia/media_cdo/aid/1036462/jewish/Terms-of-Use.htm',
+        'reason':'public reading does not authorize a RAG archive; permission needed for automatic reuse'},
     'he.wikipedia.org': {'name':'ויקיפדיה העברית','access':'official-api',
         'policy_url':'https://foundation.wikimedia.org/wiki/Policy:Terms_of_Use',
         'tradition':'','reliability':'secondary-encyclopedia','authority':''},
@@ -256,6 +262,7 @@ class TorahWebReader:
     def read(self,url,request_budget=None):
         url=canonical_url(url);p=urllib.parse.urlsplit(url)
         if SITES[p.hostname]['access']!='official-api':raise ResearchError('site access scope requires review')
+        if p.hostname not in ('he.wikisource.org','www.sefaria.org'):raise ResearchError('not a registered Torah text reader')
         if p.hostname=='he.wikisource.org':
             if not p.path.startswith('/wiki/'):raise ResearchError('not a wiki text locator')
             title=urllib.parse.unquote(p.path[6:]).replace('_',' ')
@@ -341,6 +348,21 @@ class HybridHalachicResearch(WebResearchEngine):
             if request_budget:request_budget.check('web metadata index')
             index=WebMetadataIndex(Path(self.store_path).parent/'metadata.sqlite3')
         cached=index.candidates(public_queries(question),limit=2) if index else []
+        # Shared learned units contribute URLs only; the existing research
+        # engine still re-reads text, licensing, identity and claim support.
+        from .knowledge_catalog import storage_path
+        from .torah_facts import FactSourceStore
+        learned_path=storage_path().parent/'source-units.sqlite3'
+        if learned_path.exists():
+            learned=FactSourceStore(learned_path)
+            for query in public_queries(question):
+                if request_budget:request_budget.check('learned halachic source discovery')
+                for source in learned.search(query,limit=2):
+                    if source.get('metadata',{}).get('knowledge_genre')!='halachic-text-candidate':continue
+                    try:url=canonical_url(source['source_url'])
+                    except ResearchError:continue
+                    if url not in cached:cached.append(url)
+            cached=cached[:2]
         engine=WebResearchEngine(searcher=TorahWebSearch(transport,cached),fetcher=TorahWebReader(transport),
             sites=self.sites,licenses=self.licenses,grants=self.grants,store_path=self.store_path)
         result=engine.research(question,limit,urls,request_budget)

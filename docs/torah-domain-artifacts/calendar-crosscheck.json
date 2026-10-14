@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-14",
+  "location": "Netivot",
+  "method_reference": "https://www.hebcal.com/home/1663/zmanim-halachic-times-api",
+  "data_url": "https://www.hebcal.com/zmanim?cfg=json&latitude=31.4227&longitude=34.5966&tzid=Asia%2FJerusalem&date=2026-10-14",
+  "comparison": [
+    {
+      "field": "sunrise",
+      "local": "06:44",
+      "external": "2026-10-14T06:44:00+03:00",
+      "difference_minutes": 0
+    },
+    {
+      "field": "sunset",
+      "local": "18:11",
+      "external": "2026-10-14T18:11:00+03:00",
+      "difference_minutes": 0
+    },
+    {
+      "field": "sof_shma",
+      "local": "09:36",
+      "external": "2026-10-14T09:36:00+03:00",
+      "difference_minutes": 0
+    },
+    {
+      "field": "sof_tefila",
+      "local": "10:33",
+      "external": "2026-10-14T10:33:00+03:00",
+      "difference_minutes": 0
+    },
+    {
+      "field": "tzeit",
+      "local": "18:53",
+      "external": "2026-10-14T18:53:00+03:00",
+      "difference_minutes": 0
+    }
+  ],
+  "halachic_verified": false,
+  "automatic_method_selection": false,
+  "not_compared": [
+    "alot_hashachar: local fixed 72 minutes versus API 16.1 degrees"
+  ]
+}

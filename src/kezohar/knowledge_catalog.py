@@ -83,3 +83,14 @@ def catalog_status():
     try:count=len(_load(str(p),p.stat().st_mtime_ns))
     except (OSError,ValueError,TypeError):count=0
     return {'public_books':count,'scope':'title discovery; source verification required','book_bodies_copied':False}
+
+def source_catalog_entry(url):
+    from urllib.parse import urlsplit,unquote
+    parsed=urlsplit(url)
+    if parsed.hostname!='www.sefaria.org':return None
+    ref=unquote(parsed.path.lstrip('/')).replace('_',' ');p=storage_path()
+    try:rows=_load(str(p),p.stat().st_mtime_ns)
+    except (OSError,ValueError,TypeError):return None
+    found=[r for r in rows if ref==r['title'] or ref.startswith(r['title']+',') or ref.startswith(r['title']+' ')
+           or ref.startswith(r['title']+'.')]
+    return max(found,key=lambda r:len(r['title'])) if found else None

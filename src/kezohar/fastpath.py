@@ -47,6 +47,10 @@ def is_fast_question(q):
 def is_out_of_scope(q):
     return bool(OUT_OF_SCOPE_RE.search(q or ""))
 
+def today_israel():
+    from zoneinfo import ZoneInfo
+    return datetime.datetime.now(ZoneInfo('Asia/Jerusalem')).date()
+
 # ---- astronomy (NOAA) ----
 def _sun_times(date, lat, lon, tz_offset=3.0):
     """Sunrise/sunset in local time (hours float). Method: NOAA solar calculation.
@@ -80,8 +84,10 @@ def _fmt(h):
     return f"{hh:02d}:{mm:02d}"
 
 def _israel_tz_offset(date):
-    """Rough IDT (UTC+3) Apr–Oct, IST (UTC+2) otherwise. Documented approximation."""
-    return 3.0 if 4 <= date.month <= 10 else 2.0
+    """Use the installed timezone database, including actual DST transition dates."""
+    from zoneinfo import ZoneInfo
+    noon=datetime.datetime.combine(date,datetime.time(12),tzinfo=ZoneInfo('Asia/Jerusalem'))
+    return noon.utcoffset().total_seconds()/3600
 
 def zmanim(date, lat=DEFAULT_LAT, lon=DEFAULT_LON, method="GRA"):
     """Halachic day times. method GRA: proportional hours from sunrise/sunset.
@@ -94,6 +100,8 @@ def zmanim(date, lat=DEFAULT_LAT, lon=DEFAULT_LON, method="GRA"):
     return {
         "date": date.isoformat(),
         "method_astronomy": "NOAA solar calculation",
+        "method_reference": "https://www.hebcal.com/home/1663/zmanim-halachic-times-api",
+        "timezone": "Asia/Jerusalem",
         "method_halacha": method + ": שעה זמנית=יום/12; עלות=זריחה-72דקות; צאת=שקיעה+42דקות (3 כוכבים)",
         "sunrise": _fmt(sr),
         "sunset": _fmt(ss),
@@ -141,24 +149,27 @@ def handle(question, lat=DEFAULT_LAT, lon=DEFAULT_LON, location=DEFAULT_LOCATION
                 "no_llm": True}
     if not is_fast_question(question):
         return None
-    d = today or datetime.date.today()
+    d = today or today_israel()
     if isinstance(d, datetime.datetime):
         d = d.date()
+    base_date=d
+    when='מחר' if 'מחר' in question else 'היום'
+    if when=='מחר':d+=datetime.timedelta(days=1)
     q = question
     z = zmanim(d, lat, lon)
     hi = hebrew_date_info(d)
     heb = hi.get("hebrew_date", "")
     out = {"kind": "fast", "no_llm": True, "location": location, "lat": lat, "lon": lon,
-           "gregorian": d.isoformat(), "hebrew": heb, "method": z["method_halacha"]}
+           "gregorian": d.isoformat(), "base_date":base_date.isoformat(),"hebrew": heb, "method": z["method_halacha"]}
     if "פרשה" in q or "פרשת" in q:
         p = parasha_info(d)
         out["answer"] = f"פרשת השבוע: {p}. התאריך העברי היום: {heb}."
         out["parasha"] = p
     elif "שקיעה" in q:
-        out["answer"] = f"שקיעה היום ב{location}: {z['sunset']} (שיטת חישוב: {z['method_astronomy']})."
+        out["answer"] = f"שקיעה {when} ב{location}: {z['sunset']} (שיטת חישוב: {z['method_astronomy']})."
         out["zmanim"] = z
     elif "זריחה" in q:
-        out["answer"] = f"זריחה היום ב{location}: {z['sunrise']} (שיטת חישוב: {z['method_astronomy']})."
+        out["answer"] = f"זריחה {when} ב{location}: {z['sunrise']} (שיטת חישוב: {z['method_astronomy']})."
         out["zmanim"] = z
     elif "קריאת שמע" in q or "סוף זמן" in q:
         out["answer"] = (f"סוף זמן קריאת שמע ב{location}: {z['sof_shma']} (שיטת הגר\"א, {z['method_halacha']}).")

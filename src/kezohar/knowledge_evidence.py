@@ -6,6 +6,7 @@ from .jewish_encyclopedia import ALIASES
 def expected_kind(question,route):
     q=normalize(question)
     if route['relation']:return 'explicit-relationship'
+    if 'traditional-narrative' in route['domains']:return 'traditional-narrative'
     if q.startswith(('מי היה','מי היתה','מי הייתה')):return 'biography'
     if 'מה ההבדל' in q:return 'concept-comparison'
     if any(w in q for w in ('מה פירוש','פירוש המילה','מהי ','מהנ ','מהו ')):return 'definition'
@@ -14,6 +15,18 @@ def expected_kind(question,route):
 
 def issue(question,route,source):
     kind=expected_kind(question,route);t=normalize(source.get('text',''));q=normalize(question)
+    if kind=='traditional-narrative' and (len(source.get('text',''))<80 or len(t.split())<12):
+        return 'a short title is not a narrative excerpt'
+    from .knowledge_catalog import catalog_matches,source_catalog_entry
+    requested=catalog_matches(route['normalized_question'])
+    if requested and re.search(r'מתוך|מה אומר|בספר|לפי הספר',route['normalized_question']):
+        entry=source_catalog_entry(source.get('source_url',''))
+        title=normalize(source.get('work_title',''))
+        belongs=any((entry and entry['title']==book['title']) or title==normalize(book['heTitle'])
+                    or title.startswith(normalize(book['heTitle'])+' ') for book in requested)
+        if not belongs:return 'a mention of the requested book is not a passage from that book'
+        if source.get('metadata',{}).get('knowledge_primary_kind')=='secondary-encyclopedia':
+            return 'an encyclopedia summary is not the requested book excerpt'
     if kind=='biography':
         entity=route.get('entity');name=normalize(ALIASES.get(entity,entity or ''))
         if not name or name not in normalize(source.get('work_title','')):
@@ -23,6 +36,9 @@ def issue(question,route,source):
     if kind=='definition':
         match=re.search(r'(?:המילה|המושג)\s+([א-ת]+)',q)
         term=match[1] if match else next((normalize(w) for w in ('עשר הספירות','תיקו','תקופת הגאונים','הבהיר') if normalize(w) in q),None)
+        if term is None:
+            definition=re.match(r'(?:מהי|מהו|מהנ|מהמ)\s+([א-ת]+(?:\s+[א-ת]+){0,2}?)(?=\s+(?:ב[א-ת]+|לפי|על פי)|\?|$)',q)
+            if definition:term=definition[1]
         if term=='עשר הספירות' and 'ספירה' in normalize(source.get('work_title','')):term='ספירה'
         if term:
             if not re.search(re.escape(term)+r'.{0,120}(?:פירוש|משמעות|מונח|כלומר|הוא|היא|הנ |בארמית|מושג|תעמוד|לא הוכרע)|(?:פירוש|משמעות|מונח|מושג).{0,100}'+re.escape(term),t):

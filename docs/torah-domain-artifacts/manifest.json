@@ -1,0 +1,32 @@
+[
+  {
+    "file": "domains-2026-10-14.jsonl.gz",
+    "records": 5,
+    "sha256": "074ea272fb97cbbcda6b34fa7e34710e0d750e12f3c1287d67e1a858deb6f2cf"
+  },
+  {
+    "file": "domains-final-2026-10-14.jsonl.gz",
+    "records": 3,
+    "sha256": "12e9bbbe98d673cac508cc90287c25f7bc82cc3628196a6271b90686efecf0ee"
+  },
+  {
+    "file": "domains-fixed-2026-10-14.jsonl.gz",
+    "records": 4,
+    "sha256": "a811d6a98e9add4951fc4253afdd9b62e1aa5a599977aef19c4cecdd0c6b67f0"
+  },
+  {
+    "file": "reading-2026-10-14.jsonl.gz",
+    "records": 2,
+    "sha256": "1d6bfa6b3fed7e8e70bc21da42434b89bac0b3752249fc7a0f6650b66726152b"
+  },
+  {
+    "file": "reading-fast-2026-10-14.jsonl.gz",
+    "records": 2,
+    "sha256": "b97241679da11a90b73767a5c35495cba325dc68f4818337362d6b0cf7a0e2c7"
+  },
+  {
+    "file": "reading-ranked-2026-10-14.jsonl.gz",
+    "records": 2,
+    "sha256": "d16fc13527582eaf863896b5b35f299d821b06f2468f292804536db2ce5f70b0"
+  }
+]

@@ -17,21 +17,51 @@ from .llm import LLMUnavailable
 class FactSourceStore:
     def __init__(self,path):
         self.path=Path(path);self.path.parent.mkdir(parents=True,exist_ok=True)
-        with self.connect() as db:db.execute('CREATE TABLE IF NOT EXISTS sources(id TEXT PRIMARY KEY,payload TEXT NOT NULL)')
+        with self.connect() as db:
+            db.execute('CREATE TABLE IF NOT EXISTS sources(id TEXT PRIMARY KEY,payload TEXT NOT NULL)')
+            db.execute('CREATE VIRTUAL TABLE IF NOT EXISTS source_search USING fts5(id UNINDEXED,text)')
+            db.execute('CREATE TABLE IF NOT EXISTS source_search_meta(revision INTEGER)')
+            revision=db.execute('SELECT revision FROM source_search_meta').fetchone()
+            if revision!=(2,):
+                db.execute('DELETE FROM source_search')  # Search index only; source payloads stay intact.
+                db.execute('DELETE FROM source_search_meta');db.execute('INSERT INTO source_search_meta VALUES(2)')
+            for sid,payload in db.execute('SELECT id,payload FROM sources WHERE id NOT IN (SELECT id FROM source_search)').fetchall():
+                s=json.loads(payload)
+                if self.public(s):db.execute('INSERT INTO source_search VALUES(?,?)',(sid,self.index_text(s)))
     def connect(self):return sqlite3.connect(str(self.path),timeout=2)
+    @staticmethod
+    def public(s):
+        if not admissible(s):return False
+        meta=s.get('metadata',{})
+        return not (meta.get('private') is True or meta.get('visibility')=='private' or meta.get('owner_id') or meta.get('user_id'))
+    @staticmethod
+    def index_text(s):return hebrew.normalize(' '.join(s.get(k,'') for k in ('work_title','reference','text')))
     def remember(self,s):
-        if not admissible(s):return
+        if not self.public(s):return
         with self.connect() as db:
             old=db.execute('SELECT payload FROM sources WHERE id=?',(s['source_id'],)).fetchone()
             if old:
                 previous=json.loads(old[0]);candidate=dict(s,ingested_at=previous.get('ingested_at',''))
                 if fingerprint(candidate)==fingerprint(previous):s=previous
-            if old or db.execute('SELECT count(*) FROM sources').fetchone()[0]<300:
+            if old or db.execute('SELECT count(*) FROM sources').fetchone()[0]<1000:
                 db.execute('INSERT OR REPLACE INTO sources VALUES(?,?)',(s['source_id'],json.dumps(s,ensure_ascii=False)))
+                db.execute('DELETE FROM source_search WHERE id=?',(s['source_id'],))
+                db.execute('INSERT INTO source_search VALUES(?,?)',(s['source_id'],self.index_text(s)))
         return s
     def get(self,sid):
         with self.connect() as db:r=db.execute('SELECT payload FROM sources WHERE id=?',(sid,)).fetchone()
-        return json.loads(r[0]) if r else None
+        s=json.loads(r[0]) if r else None
+        return s if s and self.public(s) else None
+    def search(self,query,limit=4,min_text_chars=0):
+        tokens=list(dict.fromkeys(hebrew.tokens(query)))[:12]
+        if not tokens:return []
+        match=' AND '.join('"'+t.replace('"','""')+'"' for t in tokens)
+        with self.connect() as db:
+            rows=db.execute("SELECT s.payload FROM source_search JOIN sources s ON s.id=source_search.id WHERE source_search MATCH ? ORDER BY CASE WHEN json_extract(s.payload,'$.work_title') LIKE ? AND coalesce(json_extract(s.payload,'$.metadata.knowledge_primary_kind'),'')!='secondary-encyclopedia' THEN 0 ELSE 1 END,bm25(source_search) LIMIT ?",
+                (match,query.strip()+'%',24)).fetchall()
+        return [s for (payload,) in rows for s in [json.loads(payload)] if self.public(s) and len(s['text'])>=min_text_chars][:max(1,min(6,limit))]
+    def count(self):
+        with self.connect() as db:return db.execute('SELECT count(*) FROM source_search').fetchone()[0]
 
 class CrossSourceVerification:
     @staticmethod
@@ -158,10 +188,33 @@ class TorahFactAnswerEngine:
         result['knowledge_context']={'focus_entity':obj,'previous_subject':subject,'previous_relation':edge['relation'],
             'source_id':edge['source_id'],'source_snapshot':edge['source_snapshot']}
         return result
+    def render_excerpt(self,question,route,budget,candidates=None):
+        from .knowledge_catalog import catalog_matches
+        from .knowledge_evidence import issue
+        if not re.search(r'(?:תן|הבא|הצג) קטע',question) or not catalog_matches(route['normalized_question']):return None
+        for candidate in (list(self.current.values()) if candidates is None else candidates):
+            if issue(question,route,candidate):continue
+            passages=[p.strip() for p in candidate['text'].split('\n') if 120<=len(p.strip())<=700
+                      and not issue(question,route,dict(candidate,text=p.strip()))]
+            if not passages:continue
+            fresh=self.resolve(candidate['source_id'],budget,force=True)
+            if not fresh or fingerprint(fresh)!=fingerprint(candidate):continue
+            text=passages[0]
+            if not CrossSourceVerification.quotation(fresh,text):continue
+            narrative='traditional-narrative' in route['domains']
+            answer=('קטע מספרות הסיפורים והמסורת; אין כאן אימות היסטורי של האירוע:\n' if narrative else '')+'״'+text+'״ ('+fresh['reference']+').'
+            result=self.result(answer,[fresh],route,budget,kind='verified-book-reading',quotes=[{'source_id':fresh['source_id'],'reference':fresh['reference'],'quote':text}])
+            if narrative:result['verification_layers']['historical_event_verified']=False
+            return result
+        return None
     def local_search(self,route,budget):
         from .ranking import RetrievalQuery
         queries=knowledge_queries(route['normalized_question'],route)
-        if not queries:queries=[route['entity'] or route['normalized_question']]
+        from .knowledge_catalog import catalog_matches
+        named=[book['heTitle'] for book in catalog_matches(route['normalized_question'])]
+        # Rich/private wording stays local. A narrow public vocabulary must
+        # never erase the user's actual subject from local retrieval.
+        queries=list(dict.fromkeys([route['normalized_question']]+named+queries))
         for query in queries[:2]:
             budget.check('knowledge local retrieval')
             # A separate action/relationship group prevents a frequent name
@@ -175,6 +228,15 @@ class TorahFactAnswerEngine:
             self.errors.extend(getattr(found,'errors',[]))
             for s in found:
                 if admissible(s) and len(s['text'].encode())<=32000:self.remember(s)
+            if self.facts(route,budget):break
+            # Cached text is discovery only. Re-read public source and current
+            # permissions before it can become context or graph evidence.
+            if route.get('export_allowed') is not False:
+                minimum=80 if re.search(r'קטע|סיפור',route['normalized_question']) and named else 0
+                for cached in self.store.search(query,min_text_chars=minimum):
+                    budget.check('learned source refresh')
+                    fresh=self.resolve(cached['source_id'],budget)
+                    if fresh:self.remember(fresh)
             if self.facts(route,budget):break
     def answer(self,question,route,budget,history=None):
         self.web=JewishKnowledgeWebSearch();self.encyclopedia=JewishEncyclopediaEngine(self.web.transport)
@@ -192,6 +254,8 @@ class TorahFactAnswerEngine:
         self.local_search(route,budget)
         answer=self.render_facts(self.facts(route,budget),route,budget)
         if answer:return answer
+        excerpt=self.render_excerpt(question,route,budget)
+        if excerpt:return excerpt
         # Only public registered subjects may be sent outside. A user-written
         # private/unresolved name is never exported by query generation.
         books=self.BOOK_ALIASES
@@ -242,12 +306,15 @@ class TorahFactAnswerEngine:
                 return self.result('הייחוס מופיע במקור אנציקלופדי משני:\n״'+quote+'״ ('+fresh['reference']+').',
                     [fresh],route,budget,quotes=[{'source_id':fresh['source_id'],'reference':fresh['reference'],'quote':quote}])
         from .knowledge_evidence import issue,expected_kind
+        from .knowledge_catalog import catalog_matches
         candidates=[s for s in self.current.values() if not issue(question,route,s)];keywords=knowledge_queries(question,route)
         tokens=hebrew.tokens(' '.join(keywords))
         candidates=sorted(candidates,key=lambda s:(
             'tanakh' in route['domains'] and s.get('metadata',{}).get('knowledge_primary_kind')!='biblical-text',
             expected_kind(question,route) in ('biography','definition') and s.get('metadata',{}).get('knowledge_primary_kind')!='secondary-encyclopedia',
             -sum(t in hebrew.normalize(s['text']) for t in tokens)))[:6]
+        excerpt=self.render_excerpt(question,route,budget,candidates)
+        if excerpt:return excerpt
         if candidates and not route['relation']:
             model=BudgetedAnswerModel(_KnowledgeModel(self.agent.answer_model),budget)
             try:
@@ -305,7 +372,11 @@ class TorahFactAnswerEngine:
                                 'quote':passages[0],'reading_kind':'interpretation; not a new historical fact'})
                             chosen.add(fresh['source_id'])
                     answer='\n'.join('״'+e['quote']+'״ ('+e['reference']+').' for e in quotes)
-                    return self.result(answer,sources,route,budget,quotes=quotes)
+                    narrative=any(s.get('metadata',{}).get('knowledge_genre')=='traditional-narrative' for s in sources)
+                    if narrative:answer='קטע מספרות הסיפורים והמסורת; אין כאן אימות היסטורי של האירוע:\n'+answer
+                    result=self.result(answer,sources,route,budget,quotes=quotes)
+                    if narrative:result['verification_layers']['historical_event_verified']=False
+                    return result
             except (ValueError,TypeError,LLMUnavailable) as exc:self.errors.append({'stage':'knowledge-generation','error':type(exc).__name__})
         return self.result('לא נמצא מקור ישיר שמוכיח את הפרט המבוקש. נעשה חיפוש ממוקד נוסף; אין להשלים את העובדה מזיכרון המודל.',[],route,budget)
 

@@ -86,8 +86,27 @@ def status():
     agent = demo_agent()
     ok, info = agent.answer_model.health(timeout=5)
     from .knowledge_catalog import catalog_status
+    from .knowledge_catalog import storage_path
+    from .torah_facts import FactSourceStore
+    path=storage_path().parent/'source-units.sqlite3'
+    learned=FactSourceStore(path).count() if path.exists() else 0
     return {'available': ok, 'model': agent.model,
-            'error': '' if ok else str(info), 'retrieval': agent.knowledge.status(),'knowledge_catalog':catalog_status()}
+            'error': '' if ok else str(info), 'retrieval': agent.knowledge.status(),'knowledge_catalog':catalog_status(),
+            'learned_source_units':learned}
+
+@app.get('/demo/calendar-reference')
+def calendar_reference(date: str):
+    import datetime
+    from .calendar_reference import compare_netivot
+    from .torah_web import ResearchError
+    from .request_budget import BudgetExceeded
+    try:
+        parsed=datetime.date.fromisoformat(date)
+        if not 1900<=parsed.year<=2100:raise ValueError('date range')
+    except ValueError:return JSONResponse({'error':'נדרש תאריך תקין להשוואת זמני נתיבות.'},status_code=422)
+    try:return compare_netivot(parsed,budget=RequestBudget(seconds=18,max_calls=0))
+    except (ResearchError,BudgetExceeded,OSError,ValueError):
+        return JSONResponse({'error':'ההשוואה החיצונית לא הושלמה; החישוב המקומי אינו מוצג כאימות חיצוני.'},status_code=502)
 
 @app.post('/demo/ask')
 async def ask(request: Request):
