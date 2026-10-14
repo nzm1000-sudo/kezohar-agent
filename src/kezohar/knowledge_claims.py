@@ -32,14 +32,21 @@ def validate(packet,candidates,resolve):
         if not isinstance(c['evidence'],list) or not 1<=len(c['evidence'])<=3:raise ClaimRejected('missing-evidence')
         evidence=[]
         for e in c['evidence']:
-            if not isinstance(e,dict) or set(e)!={'source_id','quote'}:raise ClaimRejected('invalid-evidence-schema')
-            sid=e['source_id'];quote=e['quote']
+            if not isinstance(e,dict) or set(e) not in ({'source_id','quote'},{'source_id','unit_id'}):raise ClaimRejected('invalid-evidence-schema')
+            sid=e['source_id']
             if not isinstance(sid,str) or sid not in sent:raise ClaimRejected('unsent-source')
             meta=sent[sid].get('metadata',{})
             if not admissible(sent[sid]) or not sent[sid].get('version'):raise ClaimRejected('ineligible-source')
             if meta.get('private') or meta.get('owner_id') or meta.get('user_id') or meta.get('visibility')=='private':raise ClaimRejected('private-source')
+            unit=None
+            if 'unit_id' in e:
+                from .knowledge_units import units
+                unit=next((u for u in units(sent[sid]) if u['unit_id']==e['unit_id']),None)
+                if not unit:raise ClaimRejected('unknown-evidence-unit')
+                quote=unit['text']
+            else:quote=e['quote']  # Legacy fixture protocol; same strict guards.
             if not isinstance(quote,str) or not 8<=len(quote)<=1800 or quote not in sent[sid]['text']:raise ClaimRejected('inexact-quote')
-            start=sent[sid]['text'].index(quote);end=start+len(quote)
+            start=unit['start'] if unit else sent[sid]['text'].index(quote);end=start+len(quote)
             before=sent[sid]['text'][:start].rstrip(' \t');after=sent[sid]['text'][end:].lstrip(' \t')
             if (before and before[-1] not in '.!?\n') or (after and not after.startswith('\n') and quote.rstrip()[-1] not in '.!?'):
                 raise ClaimRejected('fragmentary-evidence-unit')
@@ -49,7 +56,7 @@ def validate(packet,candidates,resolve):
             if not fresh or not admissible(fresh) or fingerprint(fresh)!=fingerprint(sent[sid]):raise ClaimRejected('changed-source')
             evidence.append({'source_id':sid,'quote':quote,'reference':fresh['reference'],
                 'version':fresh['version'],'source_snapshot':fingerprint(fresh),
-                'span':[fresh['text'].index(quote),fresh['text'].index(quote)+len(quote)]})
+                'span':[start,end],'unit_id':unit['unit_id'] if unit else None})
             if not any(s['source_id']==sid for s in sources):sources.append(fresh)
         context=' '.join(e['quote'] for e in evidence);plain=strip_niqqud(context);out=strip_niqqud(statement)
         if c['kind']=='quote' and statement not in context:raise ClaimRejected('statement-not-quotation')

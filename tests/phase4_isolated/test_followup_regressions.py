@@ -2183,3 +2183,33 @@ def test_knowledge_claims_reject_private_or_revoked_source():
     with pytest.raises(ClaimRejected,match='private-source'):validate({'claims':[c]},[s],lambda sid:s)
     s['metadata'].pop('owner_id');s['metadata']['rag_answers_allowed']=False
     with pytest.raises(ClaimRejected,match='ineligible-source'):validate({'claims':[c]},[s],lambda sid:s)
+
+
+def test_server_evidence_units_preserve_exact_text_and_adjacent_exception():
+    from kezohar.knowledge_units import units
+    from kezohar.knowledge_claims import validate,ClaimRejected
+    s=source(text='מושג סינתטי הוא רעיון לבדיקה.\nאבל יש הסתייגות סינתטית.');rows=units(s)
+    assert len(rows)==1 and rows[0]['text']==s['text']
+    c={'claim_id':'C1','kind':'interpretation','statement':'מדובר ברעיון לבדיקה עם הסתייגות.',
+       'evidence':[{'source_id':'s1','unit_id':rows[0]['unit_id']}]}
+    claims,_=validate({'claims':[c]},[s],lambda sid:s)
+    assert claims[0]['evidence'][0]['quote']==s['text']
+    assert claims[0]['evidence'][0]['span']==[0,len(s['text'])]
+    changed=dict(s,version='changed')
+    assert units(changed)[0]['unit_id']!=rows[0]['unit_id']
+    with pytest.raises(ClaimRejected,match='changed-source'):
+        validate({'claims':[c]},[s],lambda sid:changed)
+    c['evidence'][0]['unit_id']='u-invented'
+    with pytest.raises(ClaimRejected,match='unknown-evidence-unit'):
+        validate({'claims':[c]},[s],lambda sid:s)
+
+
+def test_evidence_unit_ids_do_not_upgrade_interpretation_to_proved_fact():
+    from kezohar.knowledge_units import units
+    from kezohar.knowledge_claims import validate
+    s=source(text='נתון סינתטי לדיון ולהסבר בלבד.')
+    c={'claim_id':'C1','kind':'inference','statement':'הסקה מוצעת מתוך הנתון בלבד.',
+       'evidence':[{'source_id':'s1','unit_id':units(s)[0]['unit_id']}]}
+    claims,_=validate({'claims':[c]},[s],lambda sid:s)
+    assert claims[0]['quotation_verified'] and not claims[0]['semantic_entailment_verified']
+    assert not claims[0]['halachic_verified']

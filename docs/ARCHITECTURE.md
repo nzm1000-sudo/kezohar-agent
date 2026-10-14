@@ -60,3 +60,7 @@ question_understanding מפריד כוונה/נסיבות/מסורת ומחזי�
 halachic_authority מפיק דירוג סמכות ושיוך דעות; case_coverage הוא תכונת אחזור, לא אישור טענה. בחירת הקשר מאזנת ספרים בלי למזג טקסטים. מועמד למחלוקת נשען על משפט מקור עם דעות מיוחסות ומסומן לבדיקה, בלי הכרעה סמנטית.
 
 locator_resolution משאיר SQLite/Parquet מקוריים ללא עריכה. קטלוג מאושר וקישור מהדורה מתועדים, התאמת טקסט מלא ומראה מקום יחיד מאפשרים רק הצעת שיוך. שחרור מחייב אישור סוקר ונימוק. SQLiteLibrarySearch מפעיל overlay רק לספריית המשתמש; שינוי ראיות/הרשאות/אישורים משנה revision. שינוי מהדורה או ראיה מבטל שחרור, ומקור שאינו מאושר אינו נכנס ל־RAG. המסלול החדש טרם נבדק בהרצה.
+
+## עדכון מסלול ידע — 2026-10-14
+
+QuestionIntentRouter → existing local/web retrieval → source-pinned scoped entity graph → typed fact or Qwen claim packet → knowledge_claims evidence checks → concise display. מקור, טקסט, מהדורה והרשאות נבדקים לפני כל שימוש. Graph schema refresh re-extracts fresh edges rather than approving historical edges. Claim meaning remains a proposal unless a typed extractor proves the direct relation; exact quote does not prove semantic entailment. Source registry records owner-confirmed administrative scope; Torat Emet and Otzaria are docs_verified, not connected adapters. Existing halachic path and halachic_verified=false remain.
