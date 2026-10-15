@@ -146,6 +146,24 @@ def test_selection_prefers_focused_relationship_over_repeated_incidental_mention
     incidental=source(text=('משנה היא נושא אחד.\nגמרא היא נושא אחר.\n'*10))
     assert selection_key(q,route,focused)<selection_key(q,route,incidental)
 
+def test_introductory_comparison_does_not_mix_in_unsolicited_historical_reconstruction():
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.knowledge_evidence import select_candidates
+    q='מה ההבדל בין משנה לגמרא?';route=QuestionIntentRouter().route(q)
+    direct=source(text='המשנה היא חיבור והגמרא היא פירוש למשנה.')
+    direct['metadata']['knowledge_primary_kind']='secondary-encyclopedia'
+    reconstruction=source(source_id='s2',text='המשנה והגמרא הן חלק ממחקר על פירוש וסדר החיבורים.')
+    selected=select_candidates(q,route,[reconstruction,direct])
+    assert selected==[direct]
+    assert len(select_candidates(q,dict(route,complexity='deep'),[reconstruction,direct]))==2
+    assert len(select_candidates(q,dict(route,normalized_question='לפי המקורות '+q),[reconstruction,direct]))==2
+
+def test_meaning_audit_preserves_explicit_restriction_on_historical_inference():
+    from kezohar.meaning_audit import audit
+    quote='אין להגיד שהחיבור התחיל בזמן אלפא. ההסבר הוא אחר.'
+    result=audit('החיבור התחיל בזמן אלפא.',quote,quote,'paraphrase')
+    assert 'explicit-inference-restriction-omitted' in result['risks']
+
 UNIT = 'בדיקת סמל אלפא: רק כאשר דגל בדיקה פעיל, מציגים אלפא; אם כבוי אין להציג.'
 FULL = 'הקדמה סינתטית נפרדת.\n' + UNIT + '\nפרק נפרד על סמל ביתא: מציגים ביתא רק כשמצב ביתא פעיל.'
 

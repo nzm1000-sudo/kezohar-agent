@@ -75,3 +75,16 @@ def selection_key(question,route,source):
         'tanakh' in route['domains'] and primary!='biblical-text',
         expected_kind(question,route) in ('biography','definition') and primary!='secondary-encyclopedia',
         len(source.get('text','')))
+
+def select_candidates(question,route,candidates,limit=6):
+    ordered=sorted(candidates,key=lambda s:selection_key(question,route,s))
+    # A basic concept comparison needs direct introductory context, not an
+    # unsolicited historical reconstruction. Explicit source requests and deep
+    # research retain their multiple-source route and counterevidence.
+    if (expected_kind(question,route)=='concept-comparison' and route['complexity']!='deep'
+            and not re.search(r'מתוך|לפי|בספר|במקורות|פירוש',route['normalized_question'])):
+        from .knowledge_units import units
+        introductory=[s for s in ordered if s.get('metadata',{}).get('knowledge_primary_kind')=='secondary-encyclopedia'
+            and any(not issue(question,route,dict(s,text=u['text'])) for u in units(s))]
+        if introductory:return introductory[:limit]
+    return ordered[:limit]

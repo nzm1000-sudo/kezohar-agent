@@ -323,8 +323,8 @@ class TorahFactAnswerEngine:
         from .knowledge_catalog import catalog_matches
         candidates=[s for s in self.current.values() if not issue(question,route,s)];keywords=knowledge_queries(question,route)
         tokens=hebrew.tokens(' '.join(keywords))
-        from .knowledge_evidence import selection_key
-        candidates=sorted(candidates,key=lambda s:selection_key(question,route,s))[:6]
+        from .knowledge_evidence import select_candidates
+        candidates=select_candidates(question,route,candidates)
         excerpt=self.render_excerpt(question,route,budget,candidates)
         if excerpt:return excerpt
         if candidates and not route['relation']:

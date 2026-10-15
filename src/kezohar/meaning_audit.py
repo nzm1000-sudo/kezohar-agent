@@ -27,6 +27,8 @@ def audit(statement,evidence,source_context,kind):
     opinion=r'(?:יש אומרים|יש מפרשים|לדעת|לשיטת|נחלקו|מחלוקת|מסופק|ספק אם|אפשר ש|ייתכן|יתכן)'
     if re.search(opinion,full) and not re.search(opinion+r'|לפי|פירוש|דעה|מציע|סובר|אמר|מפרש',out):
         risks.append('opinion-or-uncertainty-scope-omitted')
+    if re.search(r'אין (?:לומר|להגיד|לקבוע)|לא ניתן (?:לומר|לקבוע)',context) and not re.search(r'אין (?:לומר|להגיד|לקבוע)|לא ניתן (?:לומר|לקבוע)|שולל|מסתייג',out):
+        risks.append('explicit-inference-restriction-omitted')
     for predicate in ('היה','היו','נכנס','נכנסה','חטא','חטאו','כתב','אמר','עשה','עשו','בירך','ברך'):
         negative=r'(?<![א-ת])(?:לא|אינו|אינה|אין)\s+'+predicate+r'(?![א-ת])'
         # Align the actor as well as the predicate; different actors in a
