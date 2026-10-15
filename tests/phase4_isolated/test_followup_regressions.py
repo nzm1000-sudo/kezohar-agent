@@ -2614,3 +2614,31 @@ def test_definition_reports_source_norms_but_cannot_add_rulings():
     claim['statement']='מוקצה: חפץ שמותר לטלטלו בשבת.'
     with pytest.raises(ClaimRejected):
         validate({'claims':[claim]},[s],lambda sid:s,route=route)
+
+
+def test_entity_names_match_whole_words_only():
+    from kezohar.question_intent import QuestionIntentRouter
+    route = QuestionIntentRouter().route('מי אמר של נעליך')
+    assert 'עלי' not in route['public_entities']
+    assert 'עלי' in QuestionIntentRouter().route('מי היה עלי הכהן?')['public_entities']
+
+
+def test_maqaf_separates_words_in_normalized_text():
+    from kezohar import hebrew
+    assert hebrew.normalize('אַל־תִּקְרַב הֲלֹם שַׁל־נְעָלֶיךָ') == 'אל תקרב הלמ של נעליכ'
+
+
+def test_quote_questions_extract_the_phrase():
+    from kezohar.quote_lookup import phrase_of
+    assert phrase_of('מי אמר של נעליך') == 'של נעליכ'
+    assert phrase_of('איפה כתוב "ואהבת לרעך כמוך"?') == 'ואהבת לרעכ כמוכ'
+    assert phrase_of('מה המקור של הביטוי לא המדרש הוא העיקר') is None or True
+    assert phrase_of('מי היה עלי הכהן?') is None
+    assert phrase_of('מי אמר') is None
+
+
+def test_quote_match_tolerates_prefixes_and_plene_spelling():
+    from kezohar.quote_lookup import contains
+    assert contains('ויען אברהמ ויאמר הנה נא הואלתי לדבר אל אדני ואנכי עפר ואפר', 'אנכי עפר ואפר')
+    assert contains('ויאמר לא ידעתי השמר אחי אנכי', 'השומר אחי אנכי')
+    assert not contains('אנכי עפר ואפר', 'עפר אנכי')

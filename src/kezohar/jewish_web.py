@@ -13,7 +13,7 @@ def knowledge_queries(question,route):
     # targets, private names and previous conversation text remain local.
     definition=route.get('definition_request')
     if definition and definition['id']:return list(definition['queries'])
-    q=route['normalized_question'];names=[n for n in PUBLIC_ENTITIES if n in q]
+    q=route['normalized_question'];names=[n for n in PUBLIC_ENTITIES if re.search(r'(?<![א-ת])[ובהלמש]?'+re.escape(n)+r'(?![א-ת])',q)]
     from .knowledge_catalog import catalog_matches
     from .torah_domains import TOPICS
     topics=[t for t in PUBLIC_TOPICS+TOPICS if t in q]+[r['heTitle'] for r in catalog_matches(q)]

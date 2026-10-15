@@ -419,6 +419,9 @@ class Agent:
         return out
 
     def converse(self, question, circumstances=None, research=False, **kwargs):
+        from .quote_lookup import lookup,phrase_of
+        located=lookup(question,self.search) if not circumstances and phrase_of(question) else None
+        if located:return located
         from .orchestration import HalachicOrchestrator
         result=HalachicOrchestrator(self).answer(question,circumstances,research,**kwargs)
         from . import config

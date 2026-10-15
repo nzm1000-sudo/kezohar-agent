@@ -20,6 +20,8 @@ def normalize(s):
     if not s:
         return ""
     s = unicodedata.normalize("NFC", s)
+    # Maqaf joins words ("שַׁל־נְעָלֶיךָ"); stripping it with the niqqud fused them ("שלנעליכ").
+    s = s.replace("־", " ")
     s = strip_niqqud(s)
     s = unify_finals(s)
     for g in GERESH_VARIANTS:

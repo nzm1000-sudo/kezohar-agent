@@ -36,7 +36,8 @@ class QuestionIntentRouter:
                              (r'מי (?:כתב|חיבר)|מחבר','author'),(r'כמה בנים','child-count')):
             if re.search(pattern,q):relation=kind;break
         if relation is None and re.search(r'(?:ומי|מי)\s+הייתה\s+אשתו',q):relation='wife'
-        entities=[e for e in PUBLIC_ENTITIES if e in q]
+        # Whole words only (with a prefix letter): "עלי" must not match inside "נעליך".
+        entities=[e for e in PUBLIC_ENTITIES if re.search(r'(?<![א-ת])[ובהלמש]?'+re.escape(e)+r'(?![א-ת])',q)]
         # Keep public names separate from user-written/unresolved entity strings.
         entity=next((e for e in sorted(entities,key=len,reverse=True)),None)
         if relation in ('father','mother','wife','son','brother','teacher'):
