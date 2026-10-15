@@ -4,6 +4,7 @@ from .hebrew import normalize
 from .jewish_encyclopedia import ALIASES
 
 def expected_kind(question,route):
+    if route.get('definition_request'):return 'definition'
     q=normalize(question)
     if route['relation']:return 'explicit-relationship'
     if 'traditional-narrative' in route['domains']:return 'traditional-narrative'
@@ -37,6 +38,19 @@ def issue(question,route,source):
         if not any(w in t[:600] for w in ('היה','הוא','פוסק','מחבר','רב','תנא','אמורא','מקובל')):
             return 'identity description absent'
     if kind=='definition':
+        definition=route.get('definition_request')
+        if definition:
+            from .concept_questions import matches
+            if definition['target']=='תיקו' and 'גמרא' in q and not any(w in t for w in ('תלמוד','גמרא','ארמית','סוגיה')):
+                return 'modern sports sense is not the requested Talmudic meaning'
+            if not matches(source.get('text',''),definition['aliases']):return 'definition subject absent as a complete term'
+            if definition['context'] and not any(normalize(w) in t for w in definition['context']):return 'definition object context absent'
+            if definition.get('required_expansion') and normalize(definition['required_expansion']) in t and len(t)<180:
+                return None  # The literal expansion can support the expansion, not a ruling.
+            # Expansion + a described transfer is explanatory evidence; a bare
+            # acronym in a complex responsum remains only a search candidate.
+            explanatory=bool(re.search(r'דהיינו|היינו|כלומר|פירוש|משמעות|מונח|נקרא|הכוונה|הוא |היא |שהשתמש|נתנ טעמ.{0,70}(?:והכלי|ומנ|אל|לתוכ)',t))
+            return None if explanatory else 'term mention lacks an explanatory passage'
         match=re.search(r'(?:המילה|המושג)\s+([א-ת]+)',q)
         term=match[1] if match else next((normalize(w) for w in ('עשר הספירות','תיקו','תקופת הגאונים','הבהיר') if normalize(w) in q),None)
         if term is None:
@@ -70,7 +84,7 @@ def selection_key(question,route,source):
     from .knowledge_units import units
     queries=knowledge_queries(question,route)
     tokens=set(normalize(' '.join(queries)).split())
-    passages=[u['text'] for u in units(source)]
+    passages=[u['text'] for u in units(source,question)]
     relevant=[p for p in passages if not issue(question,route,dict(source,text=p))]
     coverage=max((len(tokens.intersection(normalize(p).split())) for p in relevant),default=0)
     primary=source.get('metadata',{}).get('knowledge_primary_kind')
@@ -81,6 +95,16 @@ def selection_key(question,route,source):
 
 def select_candidates(question,route,candidates,limit=6):
     ordered=sorted(candidates,key=lambda s:selection_key(question,route,s))
+    if route.get('definition_request'):
+        from .halachic_authority import profile
+        def focus(s):
+            t=normalize(s['text'])
+            return (4*bool(re.search(r'נתנ טעמ.{0,60}(?:והכלי|וממנו|והקדירה)',t))
+                +2*bool(re.search(r'דהיינו|כלומר|פירושו|הכוונה',t)))
+        ordered=sorted(ordered,key=lambda s:(-focus(s),profile(s)['authority'] not in ('maran','rav-ovadia-yosef','yalkut-yosef'),
+            len(s.get('text',''))))
+        best=focus(ordered[0]) if ordered else 0
+        return ordered[:1] if route['complexity']!='deep' or best>=4 else [s for s in ordered if not best or focus(s)==best][:2]
     # A basic concept comparison needs direct introductory context, not an
     # unsolicited historical reconstruction. Explicit source requests and deep
     # research retain their multiple-source route and counterevidence.

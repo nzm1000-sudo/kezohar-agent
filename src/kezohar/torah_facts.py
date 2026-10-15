@@ -13,6 +13,7 @@ from .jewish_web import JewishKnowledgeWebSearch,knowledge_queries
 from .jewish_encyclopedia import JewishEncyclopediaEngine
 from .request_budget import RequestBudget,BudgetedAnswerModel,BudgetExceeded
 from .llm import LLMUnavailable
+from .torah_web import ResearchError
 
 class FactSourceStore:
     def __init__(self,path):
@@ -142,6 +143,7 @@ class TorahFactAnswerEngine:
         facts=facts or [];quotes=quotes or []
         primary_fact=bool(facts) and all(e['support']=='bounded-primary-relation' for e in facts)
         errors=self.errors+(self.web.errors if self.web else [])
+        search_errors=[e for e in errors if e.get('stage')!='knowledge-generation']
         return {'answer':answer,'sources':sources,'verdict':'fact_supported' if primary_fact else 'reported_fact' if facts else 'knowledge_reading' if quotes else 'knowledge_insufficient',
             'mode':kind,'question_intent':route,'clarifications':[],
             'verification':{'verdict':'ok' if facts or quotes else 'insufficient_context',
@@ -156,7 +158,7 @@ class TorahFactAnswerEngine:
             'answer_status':{'message':'מידע תורני מבוסס מקור; אינו פסיקה הלכתית.'},
             'fact_verified':primary_fact,'answer_complete':primary_fact,
             'human_review':'not-performed','halachic_verified':False,
-            'internet_used':self.used_web,'search_status':{'partial':bool(errors),'errors':errors},
+            'internet_used':self.used_web,'search_status':{'partial':bool(search_errors),'errors':search_errors},
             'knowledge_discovery':{'sources':list(self.current.values())[:50],
                 'attempts':self.web.attempts if self.web else [],'method':'bounded relationship and subject routes'},
             'knowledge_research_dossier':{'scope':route['complexity'],
@@ -222,16 +224,19 @@ class TorahFactAnswerEngine:
         # Rich/private wording stays local. A narrow public vocabulary must
         # never erase the user's actual subject from local retrieval.
         queries=list(dict.fromkeys([route['normalized_question']]+named+queries))
+        definition=route.get('definition_request')
+        if definition:queries=list(dict.fromkeys(list(definition['queries'])+[definition['target']]))
         for query in queries[:2]:
             budget.check('knowledge local retrieval')
             # A separate action/relationship group prevents a frequent name
             # alone winning over a passage explicitly stating the relationship.
             rq=RetrievalQuery(query,[])
+            if definition:rq.concept_groups=[frozenset(hebrew.normalize(t) for t in definition['aliases'])]
             relation_terms={'father':['ותלד','בני','בן'],'mother':['ותהר','אם','ותלד'],
                 'wife':['אשת','אשה'],'child-count':['בני'],'teacher':['תלמיד','למד']}
             rq.concept_groups=[frozenset(hebrew.normalize(route['entity']).split())] if route['entity'] else []
             if route['relation'] in relation_terms:rq.concept_groups.append(frozenset(hebrew.normalize(w) for w in relation_terms[route['relation']]))
-            found=self.agent.knowledge.search.search(rq,top_k=30,request_budget=budget)
+            found=self.agent.knowledge.search.search(rq,top_k=100 if definition else 30,request_budget=budget)
             self.errors.extend(getattr(found,'errors',[]))
             for s in found:
                 if admissible(s) and len(s['text'].encode())<=32000:self.remember(s)
@@ -246,6 +251,7 @@ class TorahFactAnswerEngine:
                     if fresh:self.remember(fresh)
             if self.facts(route,budget):break
     def answer(self,question,route,budget,history=None):
+        answer_started=time.perf_counter()
         self.web=JewishKnowledgeWebSearch();self.encyclopedia=JewishEncyclopediaEngine(self.web.transport)
         # Follow-up focus is derived anew from verified previous evidence. Raw
         # conversation statements are never accepted as source-backed facts.
@@ -259,6 +265,20 @@ class TorahFactAnswerEngine:
         answer=self.render_facts(self.facts(route,budget),route,budget)
         if answer:return answer
         self.local_search(route,budget)
+        from .knowledge_evidence import issue as evidence_issue
+        from .knowledge_units import explanatory_units
+        def has_definition():
+            return bool(route.get('definition_request') and any(
+                not re.search(r'מותר|אסור|חייב|רשאי|להתיר|להחמיר|להקל|אוסר',hebrew.normalize(u['text']))
+                and not evidence_issue(question,route,dict(s,text=u['text']))
+                for s in self.current.values() for u in explanatory_units(s,question)))
+        local_definition_ready=has_definition()
+        if (route.get('definition_request') or {}).get('id') and not local_definition_ready and route.get('export_allowed') is not False:
+            self.used_web=True
+            try:
+                for title in self.encyclopedia.search(route,budget):self.remember(self.encyclopedia.read(title,budget))
+                local_definition_ready=has_definition()
+            except (OSError,ValueError,ResearchError) as exc:self.errors.append({'stage':'definition-discovery','error':type(exc).__name__})
         from .identity_answers import resolve_identity
         identity=resolve_identity(self,route,budget)
         if identity and not self.unqualified_single_identity(route):return identity
@@ -284,7 +304,7 @@ class TorahFactAnswerEngine:
                         answer=self.render_facts(self.facts(route,budget),route,budget)
                         if answer:return answer
                 except Exception as exc:self.errors.append({'stage':'bibliography','error':type(exc).__name__})
-        if knowledge_queries(question,route):
+        if knowledge_queries(question,route) and not (local_definition_ready and route['complexity']!='deep' and not route.get('explicit_web_requested')):
             self.used_web=True
             for url in self.web.search(question,route,budget,limit=6):
                 try:self.remember(self.web.read(url,budget))
@@ -329,9 +349,22 @@ class TorahFactAnswerEngine:
         if excerpt:return excerpt
         if candidates and not route['relation']:
             model=BudgetedAnswerModel(_KnowledgeModel(self.agent.answer_model),budget)
+            retrieval_s=time.perf_counter()-answer_started
+            generation_started=time.perf_counter();generated=None
             try:
                 generated=model.generate(question,candidates,timeout=min(30,budget.remaining()))
+                generation_s=time.perf_counter()-generation_started;verification_started=time.perf_counter()
                 packet=json.loads(generated['answer'])
+                if route.get('definition_request') and isinstance(packet,dict) and set(packet)=={'meaning','example'}:
+                    if len(candidates)!=1:raise ValueError('ambiguous-definition-evidence-binding')
+                    from .knowledge_units import explanatory_units
+                    source=candidates[0]
+                    offered=explanatory_units(source,question)
+                    if not offered:raise ValueError('missing-definition-evidence')
+                    if any(not isinstance(packet[k],str) for k in packet):raise ValueError('invalid-definition-text')
+                    packet={'claims':[{'claim_id':'C'+str(i+1),'kind':'paraphrase','statement':packet[k],
+                        'evidence':[{'source_id':source['source_id'],'unit_id':u['unit_id']} for u in offered]}
+                        for i,k in enumerate(('meaning','example'))]}
                 if packet=={'status':'no_source'}:
                     # A basic definition may still be useful, while explicitly
                     # NOT answering every part (e.g. a requested complete list).
@@ -345,21 +378,27 @@ class TorahFactAnswerEngine:
                             if not fresh or fingerprint(fresh)!=fingerprint(candidate):continue
                             text=paragraphs[0]
                             if not CrossSourceVerification.quotation(fresh,text):continue
-                            result=self.result('מצאתי הגדרה בסיסית למושג, אך לא אומתה תשובה מלאה לכל חלקי השאלה:\n״'+text+'״ ('+fresh['reference']+').',
+                            result=self.result('מקורות לעיון — לא נוצר הסבר לשאלה. קטע הגדרה חלקי:\n״'+text+'״ ('+fresh['reference']+').',
                                 [fresh],route,budget,kind='partial-knowledge-reading',quotes=[{'source_id':fresh['source_id'],'quote':text,'reference':fresh['reference']}])
                             result.update(verdict='partial_knowledge',answer_complete=False)
+                            result['generation_status']={'started':True,'completed':True,'used_for_answer':False,
+                                'finish_reason':generated.get('finish_reason'),'usage':generated.get('usage') or None}
                             return result
                     return self.result('המקורות שנמצאו אינם מספיקים לתשובה המבוקשת. לא נוצרה מסקנה מזיכרון המודל.',[],route,budget)
                 if isinstance(packet,dict) and 'claims' in packet:
                     from .knowledge_claims import validate,answer_packet
                     packet,removed=answer_packet(packet,allow_inference=route['complexity']=='deep')
+                    if route.get('definition_request') and sum(len(c['statement']) for c in packet['claims'])>900:
+                        raise ValueError('definition-explanation-too-long')
                     claims,sources=validate(packet,candidates,lambda sid:self.resolve(sid,budget,force=True),question,route)
                     quotes=[e for c in claims for e in c['evidence']]
                     lines=[]
                     for c in claims:
-                        prefix='הצעת פרשנות: ' if c['kind']=='interpretation' else 'הסקה מוצעת: ' if c['kind']=='inference' else 'הסבר מוצע לפי המקור: ' if c['kind']=='paraphrase' else ''
+                        prefix='' if route.get('definition_request') else 'הצעת פרשנות: ' if c['kind']=='interpretation' else 'הסקה מוצעת: ' if c['kind']=='inference' else 'הסבר מוצע לפי המקור: ' if c['kind']=='paraphrase' else ''
                         refs=list(dict.fromkeys(e['reference'] for e in c['evidence']))
-                        lines.append(prefix+c['statement']+' ('+'; '.join(refs)+').')
+                        lines.append(c['statement'] if route.get('definition_request') else prefix+c['statement']+' ('+'; '.join(refs)+').')
+                    if route.get('definition_request'):
+                        lines.append('מקור: '+'; '.join(dict.fromkeys(e['reference'] for c in claims for e in c['evidence'])))
                     result=self.result('\n'.join(lines),sources,route,budget,kind='source-linked-explanation',quotes=quotes)
                     result.update(verdict='knowledge_explanation',answer_complete=False,claims=claims,
                         claim_generation={'model':generated.get('model'),'finish_reason':generated.get('finish_reason')})
@@ -368,7 +407,14 @@ class TorahFactAnswerEngine:
                     result['verification']['support']='exact-evidence; proposed-meaning-not-certified'
                     result['verification_layers']['claim_support']='source-linked-proposal'
                     result['verification_layers']['semantic_entailment_verified']=False
+                    result['generation_status']={'started':True,'completed':True,'used_for_answer':True,
+                        'task':'definition-explanation' if route.get('definition_request') else 'knowledge-explanation',
+                        'model_returned':generated.get('model'),'finish_reason':generated.get('finish_reason'),
+                        'usage':generated.get('usage') or None}
+                    result['timings']={'retrieval_s':round(retrieval_s,3),'generation_s':round(generation_s,3),
+                        'verification_s':round(time.perf_counter()-verification_started,3)}
                     return result
+                if route.get('definition_request'):raise ValueError('definition-requires-explanation-not-source-selection')
                 ids=packet.get('selected_sources') if isinstance(packet,dict) and set(packet)=={'selected_sources'} else None
                 if not isinstance(ids,list) or not 1<=len(ids)<=2 or len(set(ids))!=len(ids):raise ValueError('invalid knowledge source selection')
                 quotes=[];sources=[]
@@ -408,13 +454,21 @@ class TorahFactAnswerEngine:
                     result=self.result(answer,sources,route,budget,quotes=quotes)
                     if narrative:result['verification_layers']['historical_event_verified']=False
                     return result
+            except BudgetExceeded:raise
             except (ValueError,TypeError,LLMUnavailable) as exc:self.errors.append({'stage':'knowledge-generation','error':type(exc).__name__,
-                'category':'technical-generation-error' if isinstance(exc,(json.JSONDecodeError,TypeError,LLMUnavailable)) else 'unsupported-model-claim',
+                'category':'model-unavailable' if isinstance(exc,LLMUnavailable) else 'invalid-model-format' if isinstance(exc,json.JSONDecodeError) else 'technical-generation-error' if isinstance(exc,TypeError) else 'unsupported-model-claim',
                 'reason':str(exc)[:160] if isinstance(exc,ValueError) else 'local-model-unavailable'})
         generation_errors=[e for e in self.errors if e.get('stage')=='knowledge-generation']
         if generation_errors:
-            result=self.result('נמצאו מקורות, אך התשובה שנוצרה לא עברה את בדיקות התמיכה או שהפקתה נכשלה. לא מוצגת מסקנה שלא אומתה.',[],route,budget)
+            category=generation_errors[-1]['category']
+            message={'model-unavailable':'נמצאו מקורות, אך המודל המקומי אינו זמין ולכן לא נוצר הסבר.',
+                'invalid-model-format':'נמצאו מקורות, אך המודל החזיר פלט במבנה פגום. לא הוצג הסבר.',
+                'technical-generation-error':'נמצאו מקורות, אך אירעה תקלה טכנית בהפקת ההסבר.'}.get(category,
+                'נמצאו מקורות, אך ההסבר שהמודל ניסח נפסל בבדיקת התמיכה. הוא לא הוחלף בציטוט ולא הוצג כתשובה מאומתת.')
+            result=self.result(message,[],route,budget)
             result['failure_details']={'category':generation_errors[-1]['category'],'errors':generation_errors}
+            result['generation_status']={'started':True,'completed':generated is not None,'used_for_answer':False,
+                'finish_reason':generated.get('finish_reason') if generated else None,'usage':generated.get('usage') if generated else None}
             return result
         return self.result('לא נמצא מקור ישיר שמוכיח את הפרט המבוקש. נעשה חיפוש ממוקד נוסף; אין להשלים את העובדה מזיכרון המודל.',[],route,budget)
 

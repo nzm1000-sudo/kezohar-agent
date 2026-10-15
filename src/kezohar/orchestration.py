@@ -15,9 +15,13 @@ class HalachicOrchestrator:
         self.composer = VerifiedAnswerComposer()
 
     def answer(self, question, circumstances=None, research=False, **kwargs):
+        from .concept_questions import focused_followup
+        focused=focused_followup(question,kwargs.get('conversation_history'))
+        if focused:question=focused
         from .question_intent import QuestionIntentRouter
         route=QuestionIntentRouter().route(question)
         if route['engine']=='jewish-knowledge':
+            if research:route=dict(route,explicit_web_requested=True)
             from .torah_facts import JewishResearchOrchestrator
             return JewishResearchOrchestrator(self.agent).answer(question,route,**kwargs)
         kwargs.pop('conversation_history',None)

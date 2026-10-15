@@ -14,6 +14,8 @@ class QuestionIntentRouter:
         q=q.replace('רמב"ם','הרמב״ם').replace('החיד"א','החיד״א')
         q=re.sub(r'\bה?חידא\b','החיד״א',q)
         hal=bool(re.search(r'מותר|אסור|חייב|צריך להמתין|מברכ|לברך|מה הדין|מה עושים|הלכה למעשה|שכחתי|יעלה ויבוא',q))
+        from .concept_questions import definition_request
+        definition=definition_request(question) if not hal else None
         domains=[]
         if hal:domains.append('halacha')
         if re.search(r'מנהג|נוהגים|נוהגין',q):domains.append('custom')
@@ -64,7 +66,9 @@ class QuestionIntentRouter:
         if catalog and not domains:domains.append('people-and-books')
         from .question_senses import classify
         if classify(question)['domain'] in ('fertility-treatment','procreation-commandment'):hal=True
-        knowledge=not hal and bool(kind=='interpretation' or relation or identity or domains or entities or catalog or any(t in q for t in PUBLIC_TOPICS+TOPICS))
+        if definition and classify(question)['domain']!='fertility-treatment':
+            hal=False;kind='definition'
+        knowledge=not hal and bool(definition or kind=='interpretation' or relation or identity or domains or entities or catalog or any(t in q for t in PUBLIC_TOPICS+TOPICS))
         from .fastpath import is_out_of_scope,is_fast_question
         if is_out_of_scope(question):knowledge=False
         if is_fast_question(question) and not relation and kind!='interpretation':knowledge=False
@@ -74,6 +78,7 @@ class QuestionIntentRouter:
             'engine':'jewish-knowledge' if knowledge else 'halachic',
             'relation':relation,'entity':entity,'public_entities':entities,
             'identity_request':identity,
+            'definition_request':definition,
             'public_catalog_matches':catalog,
             'complexity':'deep' if explicit_deep else 'simple' if kind=='fact' else 'explanation',
             'normalized_question':q,'decision_basis':'question grammar and topic cues; not an asserted fact',

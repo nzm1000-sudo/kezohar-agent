@@ -58,7 +58,7 @@ def validate(packet,candidates,resolve,question=None,route=None):
             unit=None
             if 'unit_id' in e:
                 from .knowledge_units import units
-                unit=next((u for u in units(sent[sid]) if u['unit_id']==e['unit_id']),None)
+                unit=next((u for u in units(sent[sid],question) if u['unit_id']==e['unit_id']),None)
                 if not unit:raise ClaimRejected('unknown-evidence-unit')
                 quote=unit['text']
             else:quote=e['quote']  # Legacy fixture protocol; same strict guards.
@@ -78,7 +78,7 @@ def validate(packet,candidates,resolve,question=None,route=None):
         context=' '.join(e['quote'] for e in evidence);plain=strip_niqqud(context);out=strip_niqqud(statement)
         if question is not None and route is not None:
             from .knowledge_evidence import issue
-            if all(issue(question,route,dict(sent[e['source_id']],text=e['quote'])) for e in evidence):
+            if all(issue(question,route,dict(sent[e['source_id']],text=context if route.get('definition_request') else e['quote'])) for e in evidence):
                 raise ClaimRejected('evidence-does-not-answer-question-kind')
         if c['kind']=='quote' and statement not in context:raise ClaimRejected('statement-not-quotation')
         if c['kind']!='quote':
@@ -95,4 +95,13 @@ def validate(packet,candidates,resolve,question=None,route=None):
         accepted.append(dict(c,evidence=evidence,quotation_verified=True,meaning_audit=meaning,
             claim_support=meaning['support_kind'],
             semantic_entailment_verified=False,halachic_verified=False))
+    if question:
+        from .concept_questions import definition_request
+        from .hebrew import normalize
+        definition=definition_request(question)
+        expansion=definition.get('required_expansion') if definition else None
+        if expansion:
+            if normalize(expansion) not in normalize(accepted[0]['statement']):raise ClaimRejected('missing-or-invented-acronym-expansion')
+            if normalize(expansion) not in normalize(' '.join(e['quote'] for e in accepted[0]['evidence'])):
+                raise ClaimRejected('acronym-expansion-not-in-evidence')
     return accepted,sources

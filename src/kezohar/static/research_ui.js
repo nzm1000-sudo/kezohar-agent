@@ -24,6 +24,8 @@ const previousRender=render;
 render=function(d){previousRender(d);lastResponse=d;analysisBody.replaceChildren();$('feedbackStatus').textContent='';
  $('elapsed').textContent=`${d.demo_elapsed_s} שניות`;
  const technical=document.createElement('p');technical.textContent=`פניות למודל: ${d.demo_model_calls} · מצב: ${d.verdict}`;analysisBody.append(technical);
+ if(d.server_version){const version=document.createElement('p');version.textContent='גרסת שרת: '+d.server_version;analysisBody.append(version)}
+ if(d.generation_status){const g=d.generation_status;const status=document.createElement('p');status.textContent='מודל התחיל: '+(g.started?'כן':'לא')+' · הסתיים: '+(g.completed?'כן':'לא')+' · פלט שימש להסבר: '+(g.used_for_answer?'כן':'לא')+' · סיום: '+(g.finish_reason||'לא זמין');analysisBody.append(status)}
  if(d.mode==='fast'){$('verdict').textContent='חישוב זמנים ולוח — ללא מודל';$('verification').textContent='חישוב מקומי לפי השיטה המוצגת, עם אזור הזמן Asia/Jerusalem. השוואה חיצונית אינה אישור הלכתי.'}
  const oldCalendar=$('calendarReference');if(oldCalendar)oldCalendar.remove();
  if(d.mode==='fast'&&d.details?.zmanim&&d.details.location==='נתיבות'&&d.details.lat===31.4227&&d.details.lon===34.5966){
@@ -33,7 +35,8 @@ render=function(d){previousRender(d);lastResponse=d;analysisBody.replaceChildren
  if(d.verification?.verdict==='ok')$('verdict').textContent='ציטוט אומת בתוכנה · נדרשת בדיקה הלכתית';
  if(d.verdict==='source_lookup')$('verdict').textContent='טקסט מקור לפי מראה מקום · אינו פסק';
  if(d.question_intent?.engine==='jewish-knowledge'){
-  $('verdict').textContent=d.fact_verified?'עובדה נתמכת במקור ישיר':d.verdict==='knowledge_explanation'?'הסבר מקושר למקור':d.verdict==='identity_ambiguous'?'נדרש זיהוי האדם':d.verdict==='reported_fact'?'קשר מוצהר במקור משני':d.verdict==='partial_knowledge'?'מידע חלקי — השאלה טרם הושלמה':d.verdict==='knowledge_reading'?'קריאת מקור — ללא מסקנה חדשה':'לא נמצאה ראיה ישירה';
+  if(d.question_intent.definition_request&&d.verdict==='knowledge_explanation')$('sourcesHeading').textContent='מקורות ההסבר';
+  $('verdict').textContent=d.fact_verified?'עובדה נתמכת במקור ישיר':d.verdict==='knowledge_explanation'?'הסבר מקושר למקור':d.verdict==='identity_ambiguous'?'נדרש זיהוי האדם':d.verdict==='reported_fact'?'קשר מוצהר במקור משני':d.verdict==='partial_knowledge'?'מידע חלקי — השאלה טרם הושלמה':d.verdict==='knowledge_reading'?'מקורות לעיון — לא נוצר הסבר לשאלה':d.failure_details?'ההסבר לא עבר בדיקה':'לא נמצאה ראיה ישירה';
   $('verification').textContent=d.fact_verified?'':d.verdict==='knowledge_explanation'?'קטעי הראיה אומתו; הפרשנות או ההסבר אינם עובדה שהוכחה אוטומטית.':'התאמת המשמעות לא הוכחה.';
   const route=document.createElement('p');route.textContent='סוג השאלה: '+d.question_intent.kind+' · תחומים: '+d.question_intent.domains.join(', ')+' · אינטרנט: '+(d.internet_used?'כן':'לא');analysisBody.append(route);
   if(d.search_status?.partial)$('verification').textContent+=' החיפוש חלקי; חלק מהשלבים לא הושלמו.';

@@ -9,6 +9,10 @@ from .question_intent import PUBLIC_ENTITIES,PUBLIC_TOPICS
 
 def knowledge_queries(question,route):
     if route.get('export_allowed') is False:return []
+    # Only registered editorial terms may be exported; arbitrary definition
+    # targets, private names and previous conversation text remain local.
+    definition=route.get('definition_request')
+    if definition and definition['id']:return list(definition['queries'])
     q=route['normalized_question'];names=[n for n in PUBLIC_ENTITIES if n in q]
     from .knowledge_catalog import catalog_matches
     from .torah_domains import TOPICS

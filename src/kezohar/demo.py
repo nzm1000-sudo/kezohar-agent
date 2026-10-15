@@ -4,6 +4,7 @@ import time
 import os
 import json
 import threading
+import hashlib
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse,Response
@@ -16,6 +17,7 @@ _audit_lock=threading.Lock()
 _requests={}
 _requests_lock=threading.Lock()
 FEEDBACK_PATH=Path(__file__).resolve().parents[2]/'data/store/private-demo-feedback/issues.jsonl'
+SERVER_VERSION=hashlib.sha256(b''.join(p.read_bytes() for p in sorted(Path(__file__).parent.glob('*.py')))).hexdigest()[:12]
 
 class _AuditedModel:
     def __init__(self, delegate, path):
@@ -91,7 +93,7 @@ def status():
     path=storage_path().parent/'source-units.sqlite3'
     learned=FactSourceStore(path).count() if path.exists() else 0
     from .source_registry import registry
-    return {'available': ok, 'model': agent.model,'source_registry':registry(),
+    return {'available': ok, 'model': agent.model,'source_registry':registry(),'server_version':SERVER_VERSION,
             'error': '' if ok else str(info), 'retrieval': agent.knowledge.status(),'knowledge_catalog':catalog_status(),
             'learned_source_units':learned}
 
@@ -118,8 +120,10 @@ async def ask(request: Request):
         from .question_intent import QuestionIntentRouter
         original=question
         question,facts,turn=browser_turn(question,body.get('history',[]),opts['circumstances'])
-        if QuestionIntentRouter().route(original)['engine']=='jewish-knowledge':
-            question=original;opts['conversation_history']=body.get('history',[])
+        from .concept_questions import focused_followup
+        focused=focused_followup(original,body.get('history',[]))
+        if focused or QuestionIntentRouter().route(original)['engine']=='jewish-knowledge':
+            question=focused or original;opts['conversation_history']=body.get('history',[])
             facts=opts['circumstances'];turn={'followup':bool(body.get('history')),'persistent':False,'history_is_evidence':False}
         opts['circumstances']=facts
         token=body.get('request_token')
@@ -152,6 +156,7 @@ async def ask(request: Request):
                       demo_elapsed_s=round(time.perf_counter()-started, 3),
                       demo_model=agent.model, demo_model_calls=budget.calls)
         result['temporary_conversation']=turn
+        result['server_version']=SERVER_VERSION
         return result
     try:return await asyncio.to_thread(run)
     except asyncio.CancelledError:

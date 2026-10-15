@@ -13,6 +13,63 @@ from kezohar.source_snapshot import fingerprint
 from kezohar.conversation_state import ConversationConflict
 from kezohar.fastpath import handle as REAL_FASTPATH_HANDLE
 
+@pytest.mark.parametrize('q',['מה זה אומר נט בר נט?','מה זה נ"ט בר נ"ט?','מה פירוש נ״ט בר נ״ט?','מהו כלי בן יומו?'])
+def test_definition_grammar_reaches_answer_generation_not_practical_source_selection(q):
+    from kezohar.question_intent import QuestionIntentRouter
+    route=QuestionIntentRouter().route(q)
+    assert route['engine']=='jewish-knowledge' and route['kind']=='definition'
+    assert route['definition_request']['id'] in ('nat-bar-nat','ben-yomo')
+    assert QuestionIntentRouter().route('האם מותר לבשל דגים בסיר בשרי בן יומו?')['engine']=='halachic'
+
+def test_definition_aliases_match_whole_expression_with_grammatical_prefix_only():
+    from kezohar.concept_questions import matches
+    assert matches('זה כנותן טעם בר נותן טעם.',('נותן טעם בר נותן טעם',))
+    assert not matches('נט ביתא בר אלפא נט סינתטי.',('נט בר נט',))
+
+def test_explanatory_unit_filter_does_not_confuse_taste_word_with_page_abbreviation():
+    from kezohar.knowledge_units import explanatory_units
+    s=source(text='נותן טעם בר נותן טעם הוא מונח סינתטי. טעם אלפא עבר לכלי והכלי נתן טעם לביתא. '+('תיאור סינתטי ארוך. '*12))
+    offered=explanatory_units(s,'מה זה אומר נט בר נט?')
+    assert any('טעם אלפא' in u['text'] for u in offered)
+
+def test_explanation_followup_carries_subject_without_turning_history_into_evidence():
+    from kezohar.concept_questions import focused_followup
+    q=focused_followup('תסביר יותר פשוט ותן דוגמה',['מהו כלי בן יומו?'])
+    assert q.startswith('מה פירוש כלי בן יומו?') and 'בקשת סגנון בלבד' in q
+    assert focused_followup('האם מותר להשתמש בתרומת ביצית?',['מהו כלי בן יומו?']) is None
+
+def test_definition_units_cannot_hide_an_adjacent_exception():
+    from kezohar.knowledge_units import units
+    from kezohar.knowledge_claims import validate,ClaimRejected
+    q='מהי אלפא?'
+    text='אלפא הוא סמל סינתטי לצורך בדיקה. אבל יש תנאי מפורש השייך להגדרה. '+('תיאור ארוך סינתטי. '*12)
+    s=source(text=text)
+    first=next(u for u in units(s,q) if u['text']=='אלפא הוא סמל סינתטי לצורך בדיקה.')
+    claim={'claim_id':'C1','kind':'paraphrase','statement':first['text'],'evidence':[{'source_id':'s1','unit_id':first['unit_id']}]}
+    with pytest.raises(ClaimRejected,match='adjacent-condition-omitted'):
+        validate({'claims':[claim]},[s],lambda sid:s,q,{'definition_request':True})
+
+def test_acronym_expansion_must_be_in_evidence_and_cannot_be_invented():
+    from kezohar.knowledge_claims import validate,ClaimRejected
+    from kezohar.question_intent import QuestionIntentRouter
+    s=source(text='נותן טעם בר נותן טעם הוא כינוי סינתטי בטקסט הבדיקה.')
+    q='מה זה אומר נט בר נט?';route=QuestionIntentRouter().route(q)
+    c={'claim_id':'C1','kind':'paraphrase','statement':'נט בר נט פירושו נטע בנטע.',
+       'evidence':[{'source_id':'s1','quote':s['text']}]}
+    with pytest.raises(ClaimRejected,match='missing-or-invented-acronym-expansion'):
+        validate({'claims':[c]},[s],lambda sid:s,q,route)
+
+def test_definition_rejects_source_selection_without_silently_replacing_explanation(tmp_path):
+    from kezohar.torah_facts import TorahFactAnswerEngine
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.request_budget import RequestBudget
+    q='מהי אלפא?';s=source(text='אלפא הוא סמל סינתטי לבדיקה.')
+    a=agent([s],FixedAnswer(json.dumps({'selected_sources':['s1']})))
+    result=TorahFactAnswerEngine(a,root=tmp_path/'facts').answer(q,QuestionIntentRouter().route(q),RequestBudget())
+    assert not result['generation_status']['used_for_answer']
+    assert result['failure_details']['errors'][-1]['reason']=='definition-requires-explanation-not-source-selection'
+    assert s['text'] not in result['answer']
+
 @pytest.mark.parametrize('q,procedures,ambiguous',[
     ('האם מותר לעשות הפריה?',[],True),
     ('האם מותר לעשות הפריה חוץ־גופית?',['ivf'],False),

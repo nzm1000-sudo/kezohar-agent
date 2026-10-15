@@ -15,6 +15,9 @@ class JewishEncyclopediaEngine:
         from .knowledge_catalog import catalog_matches
         from .torah_domains import TOPICS
         q=route['normalized_question'];terms=[t for t in PUBLIC_ENTITIES+PUBLIC_TOPICS+TOPICS if t in q]+[r['heTitle'] for r in catalog_matches(q)]
+        definition=route.get('definition_request')
+        if definition and definition['id']:
+            terms=[definition['queries'][0].split(' דהיינו')[0]]
         if not terms:return []
         term=next(iter(sorted(terms,key=len,reverse=True)))
         term=ALIASES.get(term,term)

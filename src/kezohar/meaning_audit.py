@@ -13,6 +13,8 @@ def plain(text):
 def audit(statement,evidence,source_context,kind):
     out=plain(statement);context=plain(evidence);full=plain(source_context)
     risks=[]
+    if 'עדיין הכל היתר' in full and re.search(r'חומר איסור|מאכל אסור|חומר אסור',out):
+        risks.append('forbidden-status-contradicts-permitted-example')
     roles=(r'כהנ(?:ים|י|ים)?|כהן',r'מלך|מלכי|מלכים',r'מחבר|חיבר',r'תלמיד(?:י|ים)?')
     for role in roles:
         pattern=r'(?<![א-ת])(?:ו|כ|ה|ב|ל)?(?:'+role+r')(?![א-ת])'
