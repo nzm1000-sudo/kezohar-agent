@@ -63,4 +63,10 @@ locator_resolution משאיר SQLite/Parquet מקוריים ללא עריכה. �
 
 ## עדכון מסלול ידע — 2026-10-14
 
-QuestionIntentRouter → existing local/web retrieval → source-pinned scoped entity graph → typed fact or Qwen claim packet → knowledge_claims evidence checks → concise display. מקור, טקסט, מהדורה והרשאות נבדקים לפני כל שימוש. Graph schema refresh re-extracts fresh edges rather than approving historical edges. Claim meaning remains a proposal unless a typed extractor proves the direct relation; exact quote does not prove semantic entailment. Source registry records owner-confirmed administrative scope; Torat Emet and Otzaria are docs_verified, not connected adapters. Existing halachic path and halachic_verified=false remain.
+QuestionIntentRouter → existing local/web retrieval → source-pinned scoped entity graph → typed fact or Qwen claim packet → knowledge_claims evidence checks → concise display. מקור, טקסט, מהדורה והרשאות נבדקים לפני כל שימוש. Graph schema refresh re-extracts fresh edges rather than approving historical edges. Claim meaning remains a proposal unless a typed extractor proves the direct relation; exact quote does not prove semantic entailment. Source registry records owner-confirmed administrative scope. Existing halachic path and halachic_verified=false remain.
+
+## עדכון 15.10.2026
+
+תורת אמת מחוברת כמתאם HTML מוגבל דרך PublicApiTransport: אינדקסים מפורסמים, קריאה בעוגן מקורי ורענון של גרסת הספר המלאה. אין API מומצא או שיקוף ספרייה. מקור עם פריסה לא נתמכת מוחרג עם סימון חיפוש חלקי; Otzaria עדיין docs_verified בלבד.
+
+בחירת ראיות ידע משתמשת בסוג השאלה ובקטע ממוקד; השוואה בסיסית מופרדת ממחקר מעמיק כשיש מקור מבוא מתאים. knowledge_claims מפעיל את meaning_audit בנוסף לאימות זהות, הרשאות, גרסה וציטוט. הביקורת יכולה לדחות סתירות והרחבות מסוימות, אך אינה מוכיחה entailment כללי. פירוט הגבולות, ההרצות והמקורות: MEANING_SELECTION_TORAT_EMET_2026-10-15.md.
