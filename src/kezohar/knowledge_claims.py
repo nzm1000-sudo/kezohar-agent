@@ -91,8 +91,8 @@ def validate(packet,candidates,resolve,question=None,route=None):
         from .meaning_audit import audit
         # Context includes the entire sent source, not merely a favorable quote.
         meaning=audit(statement,context,' '.join(sent[e['source_id']]['text'] for e in evidence),c['kind'])
-        if c['kind']!='quote' and meaning['risks']:raise ClaimRejected('meaning:'+','.join(meaning['risks']))
+        if meaning['risks']:raise ClaimRejected('meaning:'+','.join(meaning['risks']))
         accepted.append(dict(c,evidence=evidence,quotation_verified=True,meaning_audit=meaning,
-            claim_support='literal' if c['kind']=='quote' else 'source-linked-proposal',
+            claim_support=meaning['support_kind'],
             semantic_entailment_verified=False,halachic_verified=False))
     return accepted,sources

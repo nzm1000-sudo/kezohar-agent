@@ -111,6 +111,23 @@ def test_meaning_audit_does_not_certify_word_similarity_or_change_of_actor():
     assert not result['risks'] and result['status']=='unverified-paraphrase'
     assert not result['semantic_entailment_verified']
 
+@pytest.mark.parametrize('statement,context,reason',[
+    ('אלפא וביתא היו כהנים.','אלפא וביתא נזכרים באותו זמן.','unsupported-role'),
+    ('יש מחלוקת האם אלפא היה מנהיג.','פלוני מפרש שאלפא היה מנהיג.','disagreement-not-established'),
+    ('העם חטא בימי אלפא.','שחטאו לפני בימי אלפא.','fragment-actor-context')])
+def test_meaning_audit_rejects_added_roles_disputes_and_fragment_actors(statement,context,reason):
+    from kezohar.meaning_audit import audit
+    result=audit(statement,context,context,'paraphrase')
+    assert result['status']=='rejected' and any(reason in r for r in result['risks'])
+
+def test_quote_cannot_hide_opinion_attribution_in_preceding_source_line():
+    from kezohar.knowledge_claims import validate,ClaimRejected
+    s=source(text='יש אומרים:\nאלפא היה מנהיג הקבוצה.')
+    claim={'claim_id':'C1','kind':'quote','statement':'אלפא היה מנהיג הקבוצה.',
+        'evidence':[{'source_id':'s1','quote':'אלפא היה מנהיג הקבוצה.'}]}
+    with pytest.raises(ClaimRejected,match='opinion-or-uncertainty-scope-omitted'):
+        validate({'claims':[claim]},[s],lambda sid:s)
+
 def test_claim_evidence_itself_must_answer_comparison_not_only_parent_source():
     from kezohar.question_intent import QuestionIntentRouter
     from kezohar.knowledge_claims import validate,ClaimRejected

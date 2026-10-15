@@ -97,6 +97,7 @@ def ask(question, sources, base_url, model, timeout=60, temperature=0.2, max_tok
     else:messages=build_messages(question,sources)
     if task=='knowledge':
         messages[0]['content']+=' בשאלת הגדרה או השוואה בסיסית, העדף הסבר ישיר בלבד. אל תוסיף מסקנה היסטורית או רעיונית חדשה שלא נתבקשה. היסק נוסף מתאים לבקשת מחקר או הסקה מפורשת, ולא למילוי תשובה קצרה.'
+        messages[0]['content']+=' בדוק כל רכיב בטענה: זהות האדם, תפקידו, הפעולה, שלילה וייחוס הדעה. אזכור כמה אנשים יחד אינו מוכיח שתפקיד או פעולה חלים על כולם. פירוש אחד אינו מוכיח שיש מחלוקת. אל תשלים את נושא המשפט מתוך קטע קצר שתלוי בהקשר חסר; בחר ראיות נוספות או הימנע מהטענה.'
     body = {"model": model, "messages": messages,
             "temperature": temperature, "max_tokens": max_tokens,
             "reasoning_effort": "none", "stream": False}

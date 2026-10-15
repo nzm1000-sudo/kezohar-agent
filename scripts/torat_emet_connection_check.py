@@ -37,8 +37,11 @@ def main():
     question='הסבר על משה בספר שמות מתוך תורת אמת'
     adapter=ToratEmetAdapter(PublicApiTransport(max_requests=8))
     hits=adapter.search(question,QuestionIntentRouter().route(question),RequestBudget(seconds=40))
-    result['search']={'question':question,'urls':hits,'attempts':adapter.attempts,'errors':adapter.errors}
+    result['search']={'question':question,'urls':hits,'attempts':adapter.attempts,'errors':adapter.errors,
+        'requests':adapter.transport.calls}
     if not hits:raise ValueError('published book search did not return anchored units')
+    result['total_requests']=transport.calls+adapter.transport.calls
+    result['total_elapsed_s']=round(time.monotonic()-started,3)
     output=Path('data/store/torat-emet-connection-2026-10-15.json')
     output.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
     output.chmod(0o600)
