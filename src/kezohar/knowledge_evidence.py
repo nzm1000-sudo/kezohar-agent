@@ -14,6 +14,9 @@ def expected_kind(question,route):
     return 'source-reading'
 
 def issue(question,route,source):
+    from .question_senses import relevance_issue
+    mismatch=relevance_issue(question,source.get('text',''))
+    if mismatch:return mismatch
     kind=expected_kind(question,route);t=normalize(source.get('text',''));q=normalize(question)
     if kind=='traditional-narrative' and (len(source.get('text',''))<80 or len(t.split())<12):
         return 'a short title is not a narrative excerpt'

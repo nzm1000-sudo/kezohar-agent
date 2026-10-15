@@ -35,6 +35,11 @@ class HalachicOrchestrator:
         if study_mode=='deep':kwargs['top_k']=max(kwargs.get('top_k',5),8)
         trace = ['question-understanding']
         analysis = analyze(question, circumstances)
+        from .question_senses import clarification,classify,INSUFFICIENT
+        clarification_result=clarification(question,(circumstances or {}).get('fertility_procedure'))
+        if clarification_result:
+            clarification_result['orchestration']={'stages':trace+['meaning-ambiguity-stop'],'budget':budget.report()}
+            return clarification_result
         confirmation=conflict_confirmation(question,analysis)
         confirmation_value=rule_answers.get(confirmation['condition_id']) if confirmation else None
         source_answers={k:v for k,v in rule_answers.items() if not confirmation or k!=confirmation['condition_id']}
@@ -54,6 +59,11 @@ class HalachicOrchestrator:
         # No default circumstance is created to manufacture a case ruling.
         analysis_s=time.perf_counter()-started
         effective = effective_question(question, analysis)
+        # A selected procedure disambiguates the root retrieval query too; an
+        # appended circumstance alone must not leave the lexical root ambiguous.
+        if classify(question)['domain']=='fertility-treatment' and classify(question)['ambiguous']:
+            from .question_understanding import SLOTS
+            effective=question+' — '+SLOTS['fertility_procedure'][1][analysis['circumstances']['fertility_procedure']]+effective[len(question):]
         try:
             budget.check('source discovery')
             discovery = self.discovery.discover(effective, kwargs.get('top_k',5), kwargs.pop('retrieved_sources',None),budget,cache_namespace=cache_namespace)
@@ -93,7 +103,7 @@ class HalachicOrchestrator:
                           verdict='budget_exhausted',mode='sources-only')
         trace += ['independent-source-verifier', 'verified-answer-composer']
         composing=time.perf_counter()
-        result = self.composer.compose(result, reasoning, question=question, rule_answers=source_answers, conditional_first=True)
+        result = self.composer.compose(result, reasoning, question=question, rule_answers=source_answers, conditional_first=True,relevance_question=effective)
         compose_s=time.perf_counter()-composing
         if budget.remaining()<=0:
             budget.reason=budget.reason or result.get('technical_error',{}).get('code') or 'answer composition exceeded request deadline'

@@ -30,6 +30,8 @@ def verification_layers(verification, sources):
         'source_identity': {'existence': checks.get('source_exists', 'not-checked'),
                             'locator': checks.get('reference_identity', 'not-checked')},
         'quotation_integrity': 'passed-exact-extract' if literal and valid else 'not-proved',
+        'source_relevance':checks.get('source_relevance','not-established'),
+        'halachic_conclusion':'not-established',
         'permissions': 'passed-current-snapshot' if valid else 'not-proved',
         'overall': 'passed-software-checks' if valid else 'not-approved',
         'claim_support': {'status':'supported-bounded' if support=='supported-bounded' else 'not-proved-as-answer-to-case',
@@ -40,7 +42,7 @@ def verification_layers(verification, sources):
 
 
 class VerifiedAnswerComposer:
-    def compose(self, result, reasoning=None, question=None, rule_answers=None, conditional_first=False):
+    def compose(self, result, reasoning=None, question=None, rule_answers=None, conditional_first=False,relevance_question=None):
         result = dict(result)
         # Rebuild derived case data; never trust an old presentation payload.
         result.pop('known_rule_context',None)
@@ -48,6 +50,12 @@ class VerifiedAnswerComposer:
         if result.get('clarifications'):
             result['clarifications']=[c for c in result['clarifications'] if c.get('kind')!='source-condition']
         verification = result.get('verification', {})
+        if question and verification.get('verdict')=='ok':
+            from .question_senses import relevance_issue
+            if any(relevance_issue(relevance_question or question,e.get('quote','')) for e in verification.get('evidence',[])):
+                verification=dict(verification,verdict='irrelevant',support='question sense does not match cited evidence',
+                    checks=dict(verification.get('checks',{}),source_relevance='failed',claim_support='not-proved'))
+                result.update(verification=verification,verdict='irrelevant')
         layers = verification_layers(verification,result.get('sources',[]))
         if result.get('mode')=='web-sources-only' and verification.get('verdict')!='ok':
             result['answer']='מצב חיפוש: המקורות זמינים לבדיקה; לא הופקה תשובה מאומתת.'
@@ -168,5 +176,11 @@ class VerifiedAnswerComposer:
             result['answer']=status['message']
             result['structured_answer']['short_answer']=result['answer']
         result['human_review'] = 'required'
+        if question:
+            from .question_senses import classify,relevance_issue,INSUFFICIENT
+            if classify(question)['domain']=='fertility-treatment' and verification.get('verdict')!='ok':
+                result['answer']=INSUFFICIENT
+                result['structured_answer']['short_answer']=INSUFFICIENT
+                result['sources']=[s for s in result.get('sources',[]) if not relevance_issue(question,s.get('text',''))]
         result['halachic_verified'] = False
         return result

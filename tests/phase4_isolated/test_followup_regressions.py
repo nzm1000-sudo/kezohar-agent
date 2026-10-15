@@ -13,6 +13,99 @@ from kezohar.source_snapshot import fingerprint
 from kezohar.conversation_state import ConversationConflict
 from kezohar.fastpath import handle as REAL_FASTPATH_HANDLE
 
+@pytest.mark.parametrize('q,procedures,ambiguous',[
+    ('האם מותר לעשות הפריה?',[],True),
+    ('האם מותר לעשות הפריה חוץ־גופית?',['ivf'],False),
+    ('האם מותר לעשות IVF?',['ivf'],False),
+    ('האם יש היתר להפריה?',[],True),
+    ('האם מותרת הזרעה?',[],True),
+    ('האם מותר להיעזר בהפריית מבחנה?',['ivf'],False),
+    ('האם מותר לעשות הפריה מהזרע והביצית של בני הזוג?',[],True),
+    ('האם מותר להשתמש בתרומת ביצית?',['egg-donation'],False),
+    ('האם מותר לעשות הזרעה מלאכותית?',['insemination'],False),
+    ('האם מותר IVF עם תרומת זרע?',['ivf','sperm-donation'],False)])
+def test_procedure_senses_do_not_assume_equivalence_or_gamete_identity(q,procedures,ambiguous):
+    from kezohar.question_senses import classify
+    result=classify(q)
+    assert result['domain']=='fertility-treatment' and result['procedures']==procedures
+    assert result['ambiguous'] is ambiguous
+
+@pytest.mark.parametrize('q', ['מהי מצוות פרייה ורבייה?','מה מברכים על פירות הארץ?'])
+def test_nonprocedural_homonyms_do_not_become_fertility_treatment(q):
+    from kezohar.question_senses import classify
+    assert classify(q)['domain']!='fertility-treatment'
+
+def test_procedure_guard_rejects_wrong_sense_despite_exact_quote_and_valid_identity():
+    from kezohar.verification import ExtractiveSourceVerifier
+    from kezohar.question_senses import relevance_issue
+    q='האם מותר לעשות הפריה חוץ־גופית?'
+    wrong=source(text='בדיקה סינתטית על פריה ורביה ופירות הארץ בלבד.')
+    v=ExtractiveSourceVerifier()
+    assert not v.eligible_sources(q,[wrong])
+    result=v.verify(q,json.dumps({'selected_sources':['s1']}),[wrong])
+    assert result['verdict']!='ok'
+    assert result['checks']['quotation_integrity']=='passed'
+    assert result['checks']['source_relevance']!='passed-necessary-checks'
+    assert relevance_issue(q,'דיון סינתטי על הזרעה מלאכותית.')
+    assert not relevance_issue(q,'דיון סינתטי על הפריית מבחנה.')
+    assert relevance_issue('IVF עם תרומת ביצית','דיון סינתטי על IVF בלבד.')
+
+def test_procedure_synonyms_do_not_expand_into_fruits_or_other_procedures():
+    from kezohar.ranking import retrieval_query
+    from kezohar.hebrew import normalize
+    q=str(retrieval_query('האם מותר לעשות IVF?'))
+    assert 'IVF'.lower() in q.lower() and 'מבחנה' in q
+    assert 'הזרעה' not in q and 'פירות' not in q and 'תרומת' not in q
+
+def test_ambiguous_procedure_asks_once_without_search_or_model():
+    from kezohar.agent import Agent
+    class Forbidden:
+        def source_by_id(self,*a,**kw):raise AssertionError('no source lookup')
+    a=Agent(knowledge=Forbidden(),answer_model=object())
+    result=a.converse('האם מותר לעשות הפריה?')
+    assert result['verdict']=='needs_clarification' and len(result['clarifications'])==1
+    assert not result['sources'] and not result['halachic_verified']
+    result=a.converse('האם מותר לעשות הפריה?',circumstances={'fertility_procedure':'unknown'})
+    assert not result['clarifications'] and result['verdict']=='insufficient_context'
+
+def test_procedure_clarification_updates_effective_root_and_preserves_explicit_case():
+    from kezohar.question_understanding import analyze
+    from kezohar.question_senses import classify
+    q='האם מותר לעשות הפריה מהזרע והביצית של בני הזוג?'
+    assert analyze(q,{'fertility_procedure':'ivf'})['question_sense']['procedures']==['ivf']
+    assert classify('האם מותר לעשות הזרעה מלאכותית?','ivf')['conflict']
+
+@pytest.mark.parametrize('stream',[False,True])
+def test_ambiguous_fertility_http_and_sse_return_only_one_meaning_question(monkeypatch,stream):
+    a=agent([])
+    monkeypatch.setattr(api,'get_agent',lambda:a)
+    response=request('/ask',{'question':'האם מותר לעשות הפריה?','stream':stream})
+    assert response.status_code==200
+    stream_events=events(response.text) if stream else []
+    result=stream_events[-1][1] if stream else response.json()
+    sources=next(payload['sources'] for kind,payload in stream_events if kind=='sources') if stream else result['sources']
+    assert result['verdict']=='needs_clarification' and not sources
+    clarifications=next(payload['clarifications'] for kind,payload in stream_events if kind=='clarification') if stream else result['clarifications']
+    assert len(clarifications)==1 and not result['halachic_verified']
+
+def test_old_literal_verification_cannot_bypass_new_sense_at_display_boundary():
+    from kezohar.verification import ExtractiveSourceVerifier
+    from kezohar.answer_composition import VerifiedAnswerComposer
+    from kezohar.question_senses import INSUFFICIENT
+    s=source(text='אלפא עוסק בפריה ורביה ופירות הארץ בלבד.')
+    old=ExtractiveSourceVerifier().verify('אלפא',quote(s),[s])
+    assert old['verdict']=='ok'
+    result=VerifiedAnswerComposer().compose({'answer':s['text'],'verdict':'ok','verification':old,'sources':[s]},
+        question='האם מותר לעשות הפריה חוץ־גופית?')
+    assert result['verdict']=='irrelevant' and result['answer']==INSUFFICIENT
+    assert not result['sources'] and result['verification_layers']['source_relevance']=='failed'
+
+def test_first_blessing_cannot_be_replaced_by_after_blessing_only_source():
+    from kezohar.source_quality import applicability_issue
+    q='מה מברכים על פירות הארץ?'
+    assert applicability_issue(q,'פירות האדמה ברכה אחרונה שלהם בורא נפשות רבות.')
+    assert not applicability_issue(q,'על פירות האדמה מברך בורא פרי האדמה.')
+
 @pytest.mark.parametrize('url',[
     'http://www.toratemetfreeware.com/online/f_001.html',
     'https://www.toratemetfreeware.com.evil/online/f_001.html',

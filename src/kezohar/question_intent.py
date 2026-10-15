@@ -62,6 +62,8 @@ class QuestionIntentRouter:
         from .knowledge_catalog import catalog_matches
         catalog=catalog_matches(q)
         if catalog and not domains:domains.append('people-and-books')
+        from .question_senses import classify
+        if classify(question)['domain'] in ('fertility-treatment','procreation-commandment'):hal=True
         knowledge=not hal and bool(kind=='interpretation' or relation or identity or domains or entities or catalog or any(t in q for t in PUBLIC_TOPICS+TOPICS))
         from .fastpath import is_out_of_scope,is_fast_question
         if is_out_of_scope(question):knowledge=False

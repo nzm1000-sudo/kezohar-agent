@@ -58,6 +58,8 @@ class ExtractiveSourceVerifier:
                                 'reference_identity':'passed' if stored_ref or verified.get('evidence') else 'not-checked',
                                 'claim_support':'exact-quote-only' if verified['verdict']=='ok' else 'not-proved'}
         result = evidence.verify_context(question, verified)
+        result.setdefault('checks',{}).update(quotation_integrity='passed' if verified.get('verdict')=='ok' and not claim_packet else 'not-proved',
+            source_relevance='not-established',halachic_conclusion='not-established')
         if result['verdict'] == 'ok':
             from .blessing_context import context_issue
             issue=context_issue(question,result.get('evidence',[]))
@@ -99,4 +101,5 @@ class ExtractiveSourceVerifier:
             # also invalidates this proof at the independent display boundary.
             result['catalog_revision']=initial_catalog_revision
             result['checks']['source_applicability']='passed-necessary-checks'
+            result['checks']['source_relevance']='passed-necessary-checks'
         return result

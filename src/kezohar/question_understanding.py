@@ -3,6 +3,7 @@ from .hebrew import normalize
 from .semantic_claims import question_intent
 
 SLOTS = {
+    'fertility_procedure': ('לאיזה סוג טיפול פוריות התכוונת?', {'ivf':'הפריה חוץ־גופית (IVF)','insemination':'הזרעה מלאכותית','sperm-donation':'תרומת זרע','egg-donation':'תרומת ביצית','unknown':'סוג הטיפול אינו ידוע'}),
     'immersion_purpose': ('לאיזו טבילה התכוונת?', {'woman_purity':'טבילת אישה לטהרה','vessels':'טבילת כלים','custom':'טבילה של גבר כמנהג','unknown':'סוג הטבילה אינו ידוע'}),
     'rice_form': ('באיזה אופן האורז נאכל?', {'raw':'אורז לא מבושל', 'cooked':'אורז מבושל', 'mixed':'אורז בתערובת', 'bread':'פת מאורז'}),
     'prayer_stage': ('באיזה שלב נזכרת שלא אמרת יעלה ויבוא?', {'during':'עדיין באמצע התפילה', 'finished':'סיימתי ועקרתי רגליים', 'after_musaf':'לאחר תפילת מוסף'}),
@@ -55,6 +56,11 @@ def analyze(question, circumstances=None):
     if 'מיחמ' in q and any(t in q for t in ('להוסיפ','להכניס')):intent='water-urn'
     if any(t in q for t in ('לטבול','טבילה','טובל')) and any(t in q for t in ('ביומ','בלילה')):intent='immersion-time'
     facts = {}
+    from .question_senses import classify
+    sense=classify(question,supplied.get('fertility_procedure'))
+    if sense['domain']=='fertility-treatment':
+        intent='fertility-treatment'
+        if len(sense['procedures'])==1:facts['fertility_procedure']=sense['procedures'][0]
     if intent=='immersion-time':
         if any(w in q for w in ('כלימ','כלי')):facts['immersion_purpose']='vessels'
         elif (any(w in q for w in ('נדה','נידה','טבילת אישה','טבילת אשה'))
@@ -130,7 +136,7 @@ def analyze(question, circumstances=None):
     clarification = [{'field':k, 'question':SLOTS[k][0],
                       'options':[{'value':v,'label':label} for v,label in SLOTS[k][1].items()]}
                      for k in list(dict.fromkeys(conflicts+missing))[:2]]
-    return {'intent':intent or 'general-halacha', 'circumstances':facts,
+    return {'intent':intent or 'general-halacha', 'circumstances':facts,'question_sense':sense,
             'structure':structure,
             'fact_origins':origins,
             'missing_fields':missing, 'conflicting_fields':conflicts,

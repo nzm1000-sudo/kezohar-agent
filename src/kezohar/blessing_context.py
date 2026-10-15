@@ -52,6 +52,15 @@ def context_issue(question, evidence):
         return 'a table row does not prove after-blessing quantity, timing and case applicability'
     return None
 
+def source_stage_issue(question,text):
+    """A first-blessing question cannot be answered by an after-blessing text."""
+    q=normalize(question.split('\n')[0]);t=normalize(text)
+    if not food_subject(question) or 'אחרונה' in q:return None
+    after=any(marker in t for marker in ('ברכה אחרונה','מעינ שלש','מעינ שלוש','מברכ לאחר','לאחריה','בחתימת','חותמ'))
+    first=bool(re.search(r'בורא פרי (?:העצ|האדמה)|בפהע|בפהא|ברכה ראשונה|מברכ.{0,30}(?:העצ|האדמה|שהכל|מזונות)',t))
+    if after and not first:return 'after-blessing-only source cannot answer a first-blessing query'
+    return None
+
 
 def reading(evidence, sources):
     index={s['source_id']:s for s in sources}

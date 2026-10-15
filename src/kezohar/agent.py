@@ -123,6 +123,9 @@ class Agent:
     def ask(self, question, top_k=5, lat=None, lon=None, location=None, timeout=4.5, cache_ttl=300, retrieved_sources=None, answer_model=None):
         t0 = time.time()
         q = (question or "").strip()
+        from .question_senses import clarification,classify,INSUFFICIENT
+        ambiguous=clarification(q)
+        if ambiguous:return ambiguous
         cacheable = answer_model is None and retrieved_sources is None and lat is None and lon is None and location is None
         if not q:
             return {"answer": "נא לשאול שאלה.", "sources": [], "verdict": "empty",
@@ -169,12 +172,18 @@ class Agent:
                     'sources':retrieved,'search_status':search_status,'verdict':'partial_search',
                     'mode':'sources-only','human_review':'required','halachic_verified':False}
         if not retrieved:
-            res = {"answer": evidence.INSUFFICIENT if evidence.shared_oil_waiting(q) else "אין לי מקור לכך.", "sources": [],
+            res = {"answer": INSUFFICIENT if classify(q)['domain']=='fertility-treatment' else evidence.INSUFFICIENT if evidence.shared_oil_waiting(q) else "אין לי מקור לכך.", "sources": [],
                    "verdict": "no_source", "mode": "sources-only",
                    "elapsed_s": round(time.time() - t0, 3)}
             if cacheable:self._cache[q] = (now, res)
             return dict(res)
         searchable = retrieved
+        if classify(q)['domain']=='fertility-treatment':
+            from .question_senses import relevance_issue
+            retrieved=[s for s in retrieved if not relevance_issue(q,s.get('text',''))]
+            if not retrieved:
+                return {'answer':INSUFFICIENT,'sources':[],'verdict':'insufficient_context','mode':'sources-only',
+                    'halachic_verified':False,'verification':{'verdict':'insufficient_context','checks':{'source_relevance':'failed','halachic_conclusion':'not-established'}}}
         retrieved = [s for s in retrieved if rag_eligible(s)]
         if not retrieved:
             return {'answer':'מצב חיפוש: המקורות מותרים לחיפוש; היקף השימוש בהם להפקת תשובה עדיין בבירור.',

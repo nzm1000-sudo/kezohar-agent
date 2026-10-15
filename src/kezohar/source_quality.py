@@ -66,6 +66,12 @@ def classify(source):
 
 def applicability_issue(question, text):
     """Necessary scenario facets, not proof of entailment or a reference answer."""
+    from .question_senses import relevance_issue
+    issue=relevance_issue(question,text)
+    if issue:return issue
+    from .blessing_context import source_stage_issue
+    stage=source_stage_issue(question,text)
+    if stage:return stage
     q, t = normalize(question), normalize(text)
     if 'בשרי' in q and 'שמנ' in q and ('שניצל' in q or 'ציפס' in q):
         if not ('שמנ' in t and any(w in t for w in ('טיג','טוג','שומנ','שניצל')) and 'בשר' in t):
@@ -146,6 +152,12 @@ def applicability_issue(question, text):
 
 
 def exclusion_reason(question, source, web=False):
+    from .blessing_context import source_stage_issue
+    stage=source_stage_issue(question,source.get('text',''))
+    if stage:return stage
+    from .question_senses import relevance_issue
+    issue=relevance_issue(question,source.get('text',''))
+    if issue:return issue
     from .ranking import intent_issue
     from .semantic_claims import units_for
     from .blessing_context import food_subject, table_row

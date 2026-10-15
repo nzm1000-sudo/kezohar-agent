@@ -79,6 +79,14 @@ def topic_tokens(question):
     return [canonical_query_token(t) for t in hebrew.tokens(question.split('\n')[0]) if t not in STOP and len(t)>1]
 
 def retrieval_query(question):
+    from .question_senses import classify,PROCEDURES
+    sense=classify(question)
+    if sense['domain']=='procreation-commandment':
+        return RetrievalQuery('פריה ורביה פרייה ורבייה פרו ורבו',[{'פריה ורביה','פרייה ורבייה','פרו ורבו'}])
+    if sense['domain']=='fertility-treatment':
+        # No פרי/פריה stemming or cross-procedure synonym expansion.
+        groups=[set(hebrew.normalize(t) for t in PROCEDURES[k]) for k in sense['procedures']]
+        return RetrievalQuery(' '.join(t for k in sense['procedures'] for t in PROCEDURES[k]) or 'טיפולי פוריות',groups)
     terms = topic_tokens(question)
     groups=concept_groups(question)
     from .blessing_context import food_subject
