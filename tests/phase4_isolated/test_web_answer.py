@@ -88,8 +88,21 @@ def test_cloud_model_falls_back_to_lite_then_local(monkeypatch):
 
 def test_only_approved_torah_sites_are_read():
     from kezohar.torah_sites import allowed
-    assert allowed('https://www.hidabroot.org/question/288650')
+    assert not allowed('https://www.hidabroot.org/question/288650')  # not on the owner's list
     assert allowed('https://din.org.il/2026/04/15/x')
+    assert allowed('https://www.yalkutyosef.co.il/x') and allowed('https://hebrew.yoatzot.org/x')
+    assert not allowed('https://www.kipa.co.il/x')  # not on the owner's list
     assert not allowed('https://www.youtube.com/watch?v=x')
     assert not allowed('http://din.org.il/x')  # https only
     assert not allowed('https://din.org.il.evil.com/x')
+
+
+def test_site_pages_and_searches_are_cached(tmp_path, monkeypatch):
+    import kezohar.torah_sites as t
+    monkeypatch.setenv('TORAH_SITES_CACHE', str(tmp_path / 'c.sqlite3'))
+    downloads = []
+    monkeypatch.setattr(t, '_download', lambda url, timeout=8: downloads.append(url) or ('כותרת', ['פסקה']))
+    assert t._fetch('https://din.org.il/a') == ('כותרת', ['פסקה'])
+    assert t._fetch('https://din.org.il/a') == ('כותרת', ['פסקה'])
+    assert downloads == ['https://din.org.il/a']
+    assert t._clean_title('הדלקת מזגן - ישיבת כסא רחמיםכלי נגישותהגדל טקסט') == 'הדלקת מזגן - ישיבת כסא רחמים'

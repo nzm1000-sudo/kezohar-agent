@@ -130,6 +130,11 @@ def answer(question, route, budget=None, discovered=(), timeout=35, ask=None):
     if not found:
         return None
     text, quote, source, reply = found
+    # Second, independent check by the relevance gate: the passage must be about the very act asked. A Kisse
+    # Rachamim answer on switching an air conditioner on by hand "supported" a ruling on Shabbat timers.
+    practical = 'halacha' in (route.get('domains') or []) or re.search(r'(?<![א-ת])(?:מותר|אסור|חייב|צריך|מה הדין)(?![א-ת])', question)
+    if ask is None and practical and not same_act(question, source):
+        return None  # the act check fits practical halacha; identity/knowledge answers keep the quote check
     return {'verdict': 'fact_supported', 'mode': 'web-quote-answer',
             'answer': text + '\n״' + quote + '״ (' + source.get('reference', '') + ').',
             'sources': [source], 'internet_used': True, 'halachic_verified': False,
@@ -215,3 +220,11 @@ def is_jewish_topic(question, timeout=15):
         return bool(json.loads(resp['choices'][0]['message']['content'])['jewish'])
     except Exception:
         return None
+
+
+def same_act(question, source):
+    """True only when the relevance gate judges this passage to be about the asked act (unknown counts as no)."""
+    from .answer_gate import gate
+    probe = gate(question, {'verdict': 'ok', 'answer': '', 'sources': [source],
+                            'known_rule_context': {'rules': [{'source_id': source.get('source_id')}]}})
+    return (probe.get('answer_gate') or {}).get('status') == 'confirmed'
