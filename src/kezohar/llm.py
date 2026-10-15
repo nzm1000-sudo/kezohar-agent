@@ -30,6 +30,37 @@ class LocalModelBusy(LLMUnavailable):
     pass
 
 def _post(base_url, path, body, timeout=60, stream=False):
+    """Chat calls go to the configured cloud model when GEMINI_API_KEY is set (owner decision 2026-10-16), falling
+    back through GEMINI_FALLBACK_MODELS and finally to the local LM Studio model; other calls are unchanged."""
+    from . import config
+    key = config.get('GEMINI_API_KEY', '')
+    if key and path == '/chat/completions' and not stream and config.get('CLOUD_LLM', '1') != '0':
+        cloud = 'https://generativelanguage.googleapis.com/v1beta/openai'
+        # Measured 2026-10-16: 3.5-flash-lite ~0.8s and stable; 3.8-flash 2-9s with frequent 503 under demand.
+        models = [config.get('GEMINI_MODEL', 'gemini-3.5-flash-lite')] + [
+            m for m in config.get('GEMINI_FALLBACK_MODELS', 'gemini-3.8-flash').split(',') if m]
+        deadline = time.time() + timeout
+        for model in models:
+            remaining = deadline - time.time()
+            if remaining <= 2:
+                break
+            # Gemini rejects reasoning_effort 'none'; 'low' gives no thought tokens on these models.
+            cloud_body = dict(body, model=model, reasoning_effort='low')
+            try:
+                resp = _send(cloud + path, cloud_body, remaining, {'Authorization': 'Bearer ' + key})
+                if isinstance(resp, list):
+                    resp = resp[0]
+                if resp.get('choices'):
+                    return resp
+            except LLMUnavailable as exc:
+                import sys
+                print(f'[cloud-llm] {model} failed: {exc}', file=sys.stderr, flush=True)  # status only, never content
+                continue
+        timeout = max(1, deadline - time.time())
+        base_url = config.get('LOCAL_LLM_BASE_URL', 'http://127.0.0.1:1234/v1')  # last resort: local Qwen
+        body = dict(body, model=config.get('LOCAL_LLM_MODEL', 'qwen/qwen3.5-35b-a3b'))
+    if not stream:
+        return _send(base_url.rstrip("/") + path, body, timeout)
     url = base_url.rstrip("/") + path
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data, {"Content-Type": "application/json"})
@@ -44,6 +75,24 @@ def _post(base_url, path, body, timeout=60, stream=False):
     except urllib.error.HTTPError as e:
         raise LLMUnavailable(f"LLM HTTP {e.code}")
     except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise LLMUnavailable(f"LLM unreachable: {type(e).__name__}")
+
+
+def _send(url, body, timeout, headers=None):
+    req = urllib.request.Request(url, json.dumps(body).encode("utf-8"), {"Content-Type": "application/json", **(headers or {})})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        detail = ''
+        try:
+            payload = json.loads(e.read().decode('utf-8', 'replace'))
+            payload = payload[0] if isinstance(payload, list) else payload
+            detail = ': ' + str(payload.get('error', {}).get('message', ''))[:160]
+        except Exception:
+            pass
+        raise LLMUnavailable(f"LLM HTTP {e.code}{detail}")
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
         raise LLMUnavailable(f"LLM unreachable: {type(e).__name__}")
 
 def build_messages(question, sources):

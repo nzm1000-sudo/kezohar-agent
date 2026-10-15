@@ -68,3 +68,19 @@ def test_summary_reads_only_the_cited_passage():
     w.summarize('מתי?', {'verdict': 'ok', 'answer': 'x', 'sources': [other, cited], 'answer_gate': {'cited': ['yy']}},
                 ask=lambda q, l, t: seen.append(l) or {'source_index': None})
     assert 'שבעה בחשון' in seen[0] and 'ששים' not in seen[0]
+
+
+def test_cloud_model_falls_back_to_lite_then_local(monkeypatch):
+    import kezohar.llm as llm
+    monkeypatch.setenv('GEMINI_API_KEY', 'k'); monkeypatch.setenv('CLOUD_LLM', '1')
+    monkeypatch.setenv('GEMINI_MODEL', 'big'); monkeypatch.setenv('GEMINI_FALLBACK_MODELS', 'lite')
+    calls = []
+    def send(url, body, timeout, headers=None):
+        calls.append((url.split('/')[2], body['model'], body.get('reasoning_effort')))
+        if 'googleapis' in url:
+            raise llm.LLMUnavailable('503')
+        return {'choices': [{'message': {'content': '{}'}}]}
+    monkeypatch.setattr(llm, '_send', send)
+    llm._post('http://127.0.0.1:1234/v1', '/chat/completions', {'model': 'qwen', 'reasoning_effort': 'none'}, timeout=30)
+    assert [c[1] for c in calls] == ['big', 'lite', 'qwen/qwen3.5-35b-a3b']
+    assert calls[0][2] == 'low' and calls[2][0] == '127.0.0.1:1234'
