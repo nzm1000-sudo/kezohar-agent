@@ -98,3 +98,25 @@ def test_dense_embeds_original_question_not_expanded_route(tmp_path):
     backend = DenseLibrarySearch(SQLiteLibrarySearch(path), DenseIndex(path, model, root=root))
     for r in routes: backend.search(r['query'], top_k=3)
     assert seen == ['האם אפשר לשוחח באמצע הנחת תפילין?']  # embedded once, cached across routes
+
+
+def test_semantic_rerank_promotes_meaning_over_word_overlap():
+    from types import SimpleNamespace
+    from kezohar.agent import semantic_rerank
+    model = FakeModel()
+    search = SimpleNamespace(backends=[SimpleNamespace(index=SimpleNamespace(model=model))])
+    eligible = {'rag_answers_allowed': True}
+    lexical_first = {'source_id': 'a', 'text': 'הפסק בברכה בשבת', 'metadata': eligible}
+    on_topic = {'source_id': 'b', 'text': 'דיבור בין תפילין', 'metadata': eligible}
+    import kezohar.agent as agent_module
+    original = agent_module.rag_eligible
+    agent_module.rag_eligible = lambda s: True
+    try:
+        out = semantic_rerank([lexical_first, on_topic], 'מה הדין בתפילין', search)
+        assert [s['source_id'] for s in out] == ['b', 'a']
+        assert out[0]['semantic_similarity'] > out[1]['semantic_similarity']
+        model.down = True  # embeddings unavailable: lexical order is kept untouched
+        assert [s['source_id'] for s in semantic_rerank([lexical_first, on_topic], 'תפילין', search)] == ['a', 'b']
+        assert semantic_rerank([lexical_first, on_topic], 'תפילין', SimpleNamespace(backends=[])) == [lexical_first, on_topic]
+    finally:
+        agent_module.rag_eligible = original

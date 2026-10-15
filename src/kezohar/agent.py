@@ -28,7 +28,12 @@ def diverse_sources(ordered, limit):
         # Do not crowd its prompt with laws about toppings, mixtures or order.
         return tables[:limit]
     # Diversity must not promote a tangential work over a complete case match.
-    complete=[s for s in ordered if s.get('concept_coverage',{}).get('complete')]
+    sims=[s['semantic_similarity'] for s in ordered if isinstance(s.get('semantic_similarity'),float)]
+    best=max(sims) if sims else None
+    # A unit in the top meaning band is a direct match even when its wording
+    # differs from the question (לשוחח vs להפסיק בדיבור).
+    complete=[s for s in ordered if s.get('concept_coverage',{}).get('complete')
+              or (best is not None and s.get('semantic_similarity',-1)>=best-RERANK_TIER)]
     if complete and len(complete)<len(ordered):
         # Do not fill unused prompt slots with partial-topic matches when a
         # directly matching unit exists. A smaller context is preferable here;
@@ -89,6 +94,39 @@ def order_sources(sources, question=""):
         not s['opening_subject_match'],
         -s['opening_topic_coverage'],
         s['_selection_key']))
+
+
+RERANK_DEPTH=30
+RERANK_TIER=0.05  # ponytail: fixed similarity bands; calibrate on the held-out set
+
+
+def semantic_rerank(ordered, question, search, request_budget=None):
+    """Order eligible candidates by meaning, keeping lexical order within a band.
+
+    Lexical concept coverage alone promoted passages sharing every word but
+    another subject (interrupting a blessing vs. talking between tefillin).
+    Similarity reorders retrieval only; it never establishes claim support.
+    """
+    dense=next((b for b in getattr(search,'backends',[]) if hasattr(b,'index')),None)
+    head=ordered[:RERANK_DEPTH]
+    if dense is None or len(head)<2:return ordered
+    from .local_embeddings import EmbeddingUnavailable
+    from .vector import cosine
+    model=dense.index.model
+    try:
+        if request_budget:request_budget.check('semantic rerank')
+        qv=model.embed_query(str(getattr(question,'semantic_text',None) or question))
+        vectors=[]
+        for i in range(0,len(head),16):
+            if request_budget:request_budget.check('semantic rerank batch')
+            vectors+=model.embed_many([(s.get('text') or '').strip()[:2000] or '-' for s in head[i:i+16]])
+    except EmbeddingUnavailable:
+        return ordered  # lexical order stays; never fail the answer for reranking
+    for source,vector in zip(head,vectors):source['semantic_similarity']=round(cosine(qv,vector),4)
+    position={id(s):n for n,s in enumerate(head)}
+    head=sorted(head,key=lambda s:(not rag_eligible(s),not s.get('explicit_food_table'),
+                                   -int(s['semantic_similarity']/RERANK_TIER),position[id(s)]))
+    return head+ordered[RERANK_DEPTH:]
 
 
 class Agent:
@@ -354,6 +392,7 @@ class Agent:
         errors=[e for run in runs for e in getattr(run,'errors',[])]+getattr(results,'errors',[])
         results=SearchResults(results,errors)
         ordered=order_sources(results,query)
+        if not parse(query):ordered=semantic_rerank(ordered,query,self.search,request_budget)
         # Pending locators must not be promoted by diversity over usable passages.
         usable=[s for s in ordered if rag_eligible(s)]
         pending=[s for s in ordered if not rag_eligible(s)]
