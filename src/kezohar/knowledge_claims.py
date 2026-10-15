@@ -85,9 +85,17 @@ def validate(packet,candidates,resolve,question=None,route=None):
             # Necessary guards, not a positive similarity/entailment test.
             if set(re.findall(r'\d+',statement))-set(re.findall(r'\d+',context)):raise ClaimRejected('unsupported-number')
             conditions=re.findall(r'(?:אם|אלא אם|ובלבד|בתנאי|רק אם)\s+[^.;\n]{2,100}',plain)
-            if any(condition not in out for condition in conditions):raise ClaimRejected('omitted-explicit-condition')
+            # A term's meaning is not a ruling: a definition may omit the
+            # passage's case conditions unless the statement itself rules.
+            # Normative words are allowed in a definition only when the evidence
+            # itself uses them: the meaning is reported, never a new ruling.
+            normative=re.findall(r'(?<![א-ת])[ושהבלמכ]{0,2}(מותר|אסור|חייב|פטור|צריך|צריכה|כשר|פסול|מברכים|חוזר)(?![א-ת])',out)
+            definitional=bool(route and route.get('definition_request')) and all(
+                re.search(r'(?<![א-ת])[ושהבלמכ]{0,2}'+w+r'(?![א-ת])',plain) for w in normative)
+            if not definitional and any(condition not in out for condition in conditions):raise ClaimRejected('omitted-explicit-condition')
             if re.search(r'(?<![א-ת])לא\s+(?:היה|היו|נכנס|אמר|עשה|כתב)',plain) and not re.search(r'(?<![א-ת])לא\s+',out):raise ClaimRejected('negation-omitted')
-            if re.search(r'חייב|אסור|מותר|הלכה למעשה|צריך לברך|צריך להמתין',out):raise ClaimRejected('ruling-in-knowledge-explanation')
+            if re.search(r'הלכה למעשה|צריך לברך|צריך להמתין',out) or (
+                    not definitional and re.search(r'חייב|אסור|מותר',out)):raise ClaimRejected('ruling-in-knowledge-explanation')
         from .meaning_audit import audit
         # Context includes the entire sent source, not merely a favorable quote.
         meaning=audit(statement,context,' '.join(sent[e['source_id']]['text'] for e in evidence),c['kind'])

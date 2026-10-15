@@ -2589,3 +2589,28 @@ def test_pair_parser_does_not_present_prefix_of_long_family_list_as_complete_chi
     graph=TorahEntityGraph();graph.ingest(s)
     assert graph.find('בטא','parent',lambda sid:s)
     assert not graph.find('אלפא','children',lambda sid:s)
+
+
+def test_may_i_phrasing_routes_to_halacha_but_explanations_do_not():
+    from kezohar.question_intent import QuestionIntentRouter
+    router = QuestionIntentRouter()
+    assert 'halacha' in router.route('האם אפשר לשוחח באמצע הנחת תפילין?')['domains']
+    assert 'halacha' in router.route('האם ניתן לאכול לפני קידוש?')['domains']
+    assert 'halacha' not in router.route('האם אפשר להסביר מה זה אסמכתא?')['domains']
+
+
+def test_definition_reports_source_norms_but_cannot_add_rulings():
+    from kezohar.knowledge_claims import validate,ClaimRejected
+    s=source(text='מוקצה הוא חפץ שאסור לטלטלו בשבת אם אינו ראוי לשימוש.')
+    route={'definition_request':{'target':'מוקצה'}}
+    claim={'claim_id':'C1','kind':'paraphrase','statement':'מוקצה: חפץ שאסור לטלטלו בשבת.',
+           'evidence':[{'source_id':'s1','quote':s['text']}]}
+    rows,_=validate({'claims':[claim]},[s],lambda sid:s,route=route)
+    assert not rows[0]['halachic_verified']
+    # Without a definition request the same statement is still a ruling.
+    with pytest.raises(ClaimRejected):
+        validate({'claims':[claim]},[s],lambda sid:s)
+    # A norm absent from the evidence stays a rejected ruling, even in a definition.
+    claim['statement']='מוקצה: חפץ שמותר לטלטלו בשבת.'
+    with pytest.raises(ClaimRejected):
+        validate({'claims':[claim]},[s],lambda sid:s,route=route)

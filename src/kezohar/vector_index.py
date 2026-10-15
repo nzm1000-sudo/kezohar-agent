@@ -29,8 +29,12 @@ def _write_json(path, value):
     os.replace(tmp, path)
 
 
-def build(library_path, model, root='data/store/vectors', batch=16, limit=None, log=print):
-    """Embed library records in rowid order, resuming after the last commit."""
+def build(library_path, model, root='data/store/vectors', batch=16, limit=None, log=print, works=None):
+    """Embed library records in rowid order, resuming after the last commit.
+
+    works: optional title list for a priority pass with its own cursor; any
+    later pass skips units already embedded, so nothing is indexed twice.
+    """
     import numpy as np
     out = index_dir(root, model.spec, library_path)
     out.mkdir(parents=True, exist_ok=True)
@@ -50,19 +54,29 @@ def build(library_path, model, root='data/store/vectors', batch=16, limit=None, 
     ids = ids_path.read_text().splitlines()[:progress['count']] if ids_path.exists() else []
     ids_path.write_text(''.join(i + '\n' for i in ids))
     db = sqlite3.connect(Path(library_path).resolve().as_uri() + '?mode=ro', uri=True)
+    seen = set(ids)
+    cursor, where, params = 'last_rowid', '', ()
+    if works:
+        import hashlib
+        works = sorted(set(works))
+        cursor = 'priority-' + hashlib.sha256('|'.join(works).encode()).hexdigest()[:12]
+        where = " AND json_extract(payload,'$.work_title') IN (" + ','.join('?' * len(works)) + ')'
+        params = tuple(works)
     done = 0
     while limit is None or done < limit:
         n = batch if limit is None else min(batch, limit - done)
-        rows = db.execute("SELECT rowid,id,json_extract(payload,'$.text') FROM records WHERE rowid>? ORDER BY rowid LIMIT ?",
-                          (progress['last_rowid'], n)).fetchall()
+        rows = db.execute("SELECT rowid,id,json_extract(payload,'$.text') FROM records WHERE rowid>?" + where
+                          + " ORDER BY rowid LIMIT ?", (progress.get(cursor, 0),) + params + (n,)).fetchall()
         if not rows:
             break
-        keep = [(sid, text.strip()[:MAX_CHARS]) for _, sid, text in rows if isinstance(text, str) and text.strip()]
+        keep = [(sid, text.strip()[:MAX_CHARS]) for _, sid, text in rows
+                if sid not in seen and isinstance(text, str) and text.strip()]
+        seen.update(sid for sid, _ in keep)
         if keep:
             vectors = np.asarray(model.embed_many([t for _, t in keep], timeout=120), dtype=np.float16)
             with open(vec_path, 'ab') as f: f.write(vectors.tobytes())
             with open(ids_path, 'a') as f: f.write(''.join(sid + '\n' for sid, _ in keep))
-        progress = {'count': progress['count'] + len(keep), 'last_rowid': rows[-1][0]}
+        progress = {**progress, 'count': progress['count'] + len(keep), cursor: rows[-1][0]}
         _write_json(ppath, progress)
         done += len(rows)
         if log and progress['count'] % 1600 < len(keep):

@@ -13,7 +13,9 @@ class QuestionIntentRouter:
         q=strip_niqqud(question.split('\n')[0]).replace('רבינו','רבנו').replace('אבא','אב').replace('אמא','אם')
         q=q.replace('רמב"ם','הרמב״ם').replace('החיד"א','החיד״א')
         q=re.sub(r'\bה?חידא\b','החיד״א',q)
-        hal=bool(re.search(r'מותר|אסור|חייב|צריך להמתין|מברכ|לברך|מה הדין|מה עושים|הלכה למעשה|שכחתי|יעלה ויבוא',q))
+        hal=bool(re.search(r'מותר|אסור|חייב|צריך להמתין|מברכ|לברך|מה הדין|מה עושים|הלכה למעשה|שכחתי|יעלה ויבוא',q)
+                 # "may I…" phrasings; explanation requests ("אפשר להסביר") stay knowledge.
+                 or re.search(r'האם (?:אפשר|ניתן|רשאי|רשאית|רשאים) (?!להסביר|לפרש|להבין|לדעת|להגיד)\S+',q))
         from .concept_questions import definition_request
         definition=definition_request(question) if not hal else None
         domains=[]

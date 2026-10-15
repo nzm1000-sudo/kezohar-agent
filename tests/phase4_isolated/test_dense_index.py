@@ -120,3 +120,15 @@ def test_semantic_rerank_promotes_meaning_over_word_overlap():
         assert semantic_rerank([lexical_first, on_topic], 'תפילין', SimpleNamespace(backends=[])) == [lexical_first, on_topic]
     finally:
         agent_module.rag_eligible = original
+
+
+def test_priority_pass_then_full_pass_never_duplicates(tmp_path):
+    path, root = library(tmp_path), tmp_path / 'vectors'
+    db = sqlite3.connect(path)
+    db.execute("UPDATE records SET payload=json_set(payload,'$.work_title','שופטים') WHERE id IN ('s7','s9')")
+    db.commit()
+    first = build(path, FakeModel(), root=root, batch=4, works=['שופטים'], log=None)
+    assert first['count'] == 2
+    final = build(path, FakeModel(), root=root, batch=4, log=None)
+    index = DenseIndex(path, FakeModel(), root=root)
+    assert final['count'] == 9 and len(set(index.ids)) == 9 and index.ids[:2] == ['s7', 's9']
