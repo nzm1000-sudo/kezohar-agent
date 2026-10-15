@@ -428,6 +428,10 @@ class Agent:
         if config.get('ANSWER_GATE','1')!='0' and isinstance(result,dict):
             from .answer_gate import gate
             result=gate(question,result)
+            # A confirmed source quotation is read and answered directly, the supporting sentence kept below.
+            if result.get('verdict')=='ok' and config.get('SUMMARIZE','1')!='0':
+                from .web_answer import summarize
+                result=summarize(question,result)
         # Owner decision 2026-10-15: whatever the local library cannot answer (knowledge or halacha, including an
         # answer the relevance gate declined) is looked up on the web: Wikipedia and Sefaria full text.
         if (config.get('WEB_ANSWER','1')!='0' and isinstance(result,dict) and not circumstances

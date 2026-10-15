@@ -45,3 +45,26 @@ def test_unanswered_halacha_question_falls_back_to_the_web(monkeypatch):
         'verdict': 'fact_supported', 'answer': 'מהאינטרנט', 'sources': []})
     result = Agent(sources=[]).converse('מותר לשחק בברידג׳ בשבת?')
     assert result['answer'] == 'מהאינטרנט' and asked and asked[0]['normalized_question']
+
+
+def test_summary_puts_a_direct_answer_above_its_verified_sentence():
+    source = {'source_id': 's', 'reference': 'רמב״ם מאכלות אסורות ט ד',
+              'text': 'בשר עוף בחלב אינו אסור באכילה מן התורה. ואסור באכילה מדברי סופרים כדי שלא יפשעו העם.'}
+    result = {'verdict': 'ok', 'answer': 'לפי המקור, על תנאיו: ...', 'sources': [source]}
+    out = w.summarize('למה אסור עוף וחלב?', dict(result), ask=lambda q, l, t: {
+        'asked': 'הטעם', 'source_index': 0, 'quote_states_the_answer': True,
+        'quote': 'ואסור באכילה מדברי סופרים כדי שלא יפשעו העם', 'answer': 'עוף בחלב אסור מדרבנן, כדי שלא יבואו לאיסור תורה.'})
+    assert out['answer'].startswith('עוף בחלב אסור מדרבנן') and 'מקור: ״ואסור באכילה' in out['answer']
+    assert out['source_answer'] == 'לפי המקור, על תנאיו: ...' and out['mode'] == 'summary-with-quote'
+    kept = w.summarize('q', dict(result), ask=lambda q, l, t: {'asked': 'a', 'source_index': 0,
+        'quote_states_the_answer': True, 'quote': 'משפט שלא קיים במקור בכלל', 'answer': 'x'})
+    assert kept['answer'] == 'לפי המקור, על תנאיו: ...'  # unverifiable summary: the source answer stays
+
+
+def test_summary_reads_only_the_cited_passage():
+    cited = {'source_id': 'yy', 'reference': 'ילקוט יוסף', 'text': 'בארץ ישראל שואלים טל ומטר מליל שבעה בחשון.'}
+    other = {'source_id': 'ks', 'reference': 'קיצור שו״ע', 'text': 'מתחילין לומר טל ומטר ביום ששים לתקופה.'}
+    seen = []
+    w.summarize('מתי?', {'verdict': 'ok', 'answer': 'x', 'sources': [other, cited], 'answer_gate': {'cited': ['yy']}},
+                ask=lambda q, l, t: seen.append(l) or {'source_index': None})
+    assert 'שבעה בחשון' in seen[0] and 'ששים' not in seen[0]

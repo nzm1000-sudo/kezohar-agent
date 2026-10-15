@@ -25,6 +25,7 @@ tempfile.tempdir = str(RUN)
 sys.path.insert(0, str(ROOT/'src'))
 os.environ['PHASE4_ISOLATED_RUN'] = str(RUN)
 os.environ['WEB_ANSWER'] = '0'
+os.environ['SUMMARIZE'] = '0'
 os.environ['ANSWER_GATE'] = '0'  # the relevance gate calls the local model; its own tests inject the model
 os.environ['JEWISH_KNOWLEDGE_ROOT']=str(RUN/'jewish-knowledge')
 for key in ('STORE_PATH', 'APP_LIBRARY_STORE_PATH', 'WEB_STORE_PATH', 'APP_LIBRARY_DB_PATH',
