@@ -60,3 +60,18 @@ def issue(question,route,source):
         if not any(w in t for w in ('יענ','מפני','משומ','לכנ','כי','סיבה','טעמ')):
             return 'a mention of the event is not an explanation'
     return None
+
+def selection_key(question,route,source):
+    """Rank a focused evidence passage, never mention frequency in a book."""
+    from .jewish_web import knowledge_queries
+    from .knowledge_units import units
+    queries=knowledge_queries(question,route)
+    tokens=set(normalize(' '.join(queries)).split())
+    passages=[u['text'] for u in units(source)]
+    relevant=[p for p in passages if not issue(question,route,dict(source,text=p))]
+    coverage=max((len(tokens.intersection(normalize(p).split())) for p in relevant),default=0)
+    primary=source.get('metadata',{}).get('knowledge_primary_kind')
+    return (not bool(relevant),-coverage,
+        'tanakh' in route['domains'] and primary!='biblical-text',
+        expected_kind(question,route) in ('biography','definition') and primary!='secondary-encyclopedia',
+        len(source.get('text','')))

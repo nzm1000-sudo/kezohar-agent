@@ -323,10 +323,8 @@ class TorahFactAnswerEngine:
         from .knowledge_catalog import catalog_matches
         candidates=[s for s in self.current.values() if not issue(question,route,s)];keywords=knowledge_queries(question,route)
         tokens=hebrew.tokens(' '.join(keywords))
-        candidates=sorted(candidates,key=lambda s:(
-            'tanakh' in route['domains'] and s.get('metadata',{}).get('knowledge_primary_kind')!='biblical-text',
-            expected_kind(question,route) in ('biography','definition') and s.get('metadata',{}).get('knowledge_primary_kind')!='secondary-encyclopedia',
-            -sum(t in hebrew.normalize(s['text']) for t in tokens)))[:6]
+        from .knowledge_evidence import selection_key
+        candidates=sorted(candidates,key=lambda s:selection_key(question,route,s))[:6]
         excerpt=self.render_excerpt(question,route,budget,candidates)
         if excerpt:return excerpt
         if candidates and not route['relation']:
@@ -355,7 +353,7 @@ class TorahFactAnswerEngine:
                 if isinstance(packet,dict) and 'claims' in packet:
                     from .knowledge_claims import validate,answer_packet
                     packet,removed=answer_packet(packet,allow_inference=route['complexity']=='deep')
-                    claims,sources=validate(packet,candidates,lambda sid:self.resolve(sid,budget,force=True))
+                    claims,sources=validate(packet,candidates,lambda sid:self.resolve(sid,budget,force=True),question,route)
                     quotes=[e for c in claims for e in c['evidence']]
                     lines=[]
                     for c in claims:
@@ -411,7 +409,13 @@ class TorahFactAnswerEngine:
                     if narrative:result['verification_layers']['historical_event_verified']=False
                     return result
             except (ValueError,TypeError,LLMUnavailable) as exc:self.errors.append({'stage':'knowledge-generation','error':type(exc).__name__,
+                'category':'technical-generation-error' if isinstance(exc,(json.JSONDecodeError,TypeError,LLMUnavailable)) else 'unsupported-model-claim',
                 'reason':str(exc)[:160] if isinstance(exc,ValueError) else 'local-model-unavailable'})
+        generation_errors=[e for e in self.errors if e.get('stage')=='knowledge-generation']
+        if generation_errors:
+            result=self.result('נמצאו מקורות, אך התשובה שנוצרה לא עברה את בדיקות התמיכה או שהפקתה נכשלה. לא מוצגת מסקנה שלא אומתה.',[],route,budget)
+            result['failure_details']={'category':generation_errors[-1]['category'],'errors':generation_errors}
+            return result
         return self.result('לא נמצא מקור ישיר שמוכיח את הפרט המבוקש. נעשה חיפוש ממוקד נוסף; אין להשלים את העובדה מזיכרון המודל.',[],route,budget)
 
 FastJewishQA=TorahFactAnswerEngine

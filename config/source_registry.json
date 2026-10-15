@@ -3,7 +3,7 @@
   "project_use": "noncommercial",
   "sources": {
     "sefaria": {"host": "www.sefaria.org", "authorization": "owner_confirmed", "authorization_basis": "docs/library-upgrade-inputs/request-2.txt sections 4-5", "document_reviewed": false, "scope": "library text retrieval, local indexing and RAG for this noncommercial project", "connection": "enabled", "access": "official-api", "library_only": true},
-    "torat-emet": {"host": "www.toratemetfreeware.com", "authorization": "owner_confirmed", "authorization_basis": "docs/library-upgrade-inputs/request-2.txt sections 4-6", "document_reviewed": false, "scope": "public Torah library retrieval, local indexing and RAG for this noncommercial project", "connection": "docs_verified", "access": "public-html"},
+    "torat-emet": {"host": "www.toratemetfreeware.com", "authorization": "owner_confirmed", "authorization_basis": "docs/library-upgrade-inputs/request-2.txt sections 4-6", "document_reviewed": false, "scope": "public Torah library retrieval, local indexing and RAG for this noncommercial project", "connection": "enabled", "access": "public-html", "connection_evidence": "docs/MEANING_SELECTION_TORAT_EMET_2026-10-15.md", "coverage": "bounded published catalog discovery and named-anchor reading; no full mirror"},
     "otzaria": {"host": "github.com", "authorization": "not-specified", "connection": "docs_verified", "access": "repository-files", "scope": "technical discovery only; no project authorization inferred"}
   }
 }

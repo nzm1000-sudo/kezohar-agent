@@ -18,6 +18,9 @@ from . import hebrew
 from .web_research import ResearchError, USER_AGENT, MAX_PAGE_BYTES, PageParser
 
 SITES = {
+    'www.toratemetfreeware.com': {'name':'תורת אמת','access':'public-html',
+        'policy_url':'https://www.toratemetfreeware.com/online/a_wellcome.html',
+        'reliability':'text-library','tradition':'','authority':''},
     'www.hebcal.com': {'name':'Hebcal','access':'official-api',
         'policy_url':'https://www.hebcal.com/home/1663/zmanim-halachic-times-api',
         'tradition':'multiple calculation methods','reliability':'calculated-calendar-data','authority':''},
@@ -109,19 +112,22 @@ class PublicApiTransport:
         # A larger, fixed bound for the documented title-only catalog endpoint.
         # Text pages and every other endpoint retain the original bound.
         return 8*1024*1024 if self.catalog_metadata and url=='https://www.sefaria.org/api/index' and payload is None else MAX_PAGE_BYTES
-    def json(self,url,payload=None,request_budget=None):
+    def json(self,url,payload=None,request_budget=None,_html=False):
         host=urllib.parse.urlsplit(canonical_url(url)).hostname
-        if SITES[host]['access']!='official-api':raise ResearchError('access policy pending')
+        if SITES[host]['access']!=('public-html' if _html else 'official-api'):raise ResearchError('access policy pending')
         lock=self.host_locks[host]
         if request_budget:request_budget.check('public API queue')
         if not lock.acquire(timeout=min(self.timeout,request_budget.remaining()) if request_budget else self.timeout):
             raise ResearchError('site request queue timed out')
-        try:return self._json(url,payload,request_budget)
+        try:return self._json(url,payload,request_budget,_html=_html) if _html else self._json(url,payload,request_budget)
         finally:lock.release()
-    def _json(self,url,payload=None,request_budget=None):
+    def html(self,url,request_budget=None):
+        from .torat_emet import checked_url
+        return self.json(checked_url(url),request_budget=request_budget,_html=True)
+    def _json(self,url,payload=None,request_budget=None,_html=False):
         url=canonical_url(url);p=urllib.parse.urlsplit(url)
         if self.host_cooldown.get(p.hostname,0)>time.monotonic():raise ResearchError('site rate limit cooldown active')
-        if SITES[p.hostname]['access']!='official-api':raise ResearchError('access policy pending')
+        if SITES[p.hostname]['access']!=('public-html' if _html else 'official-api'):raise ResearchError('access policy pending')
         if self.calls>=self.max_requests:raise ResearchError('web request limit reached')
         if request_budget:request_budget.check('public API DNS')
         addresses=socket.getaddrinfo(p.hostname,443,type=socket.SOCK_STREAM)
@@ -142,7 +148,7 @@ class PublicApiTransport:
         try:
             body=json.dumps(payload,ensure_ascii=False).encode() if payload is not None else None
             conn.request('POST' if body is not None else 'GET',p.path+('?' + p.query if p.query else ''),body,
-                {'User-Agent':USER_AGENT,'Accept':'application/json','Content-Type':'application/json; charset=utf-8'})
+                {'User-Agent':USER_AGENT,'Accept':'text/html' if _html else 'application/json','Content-Type':'application/json; charset=utf-8'})
             response=conn.getresponse()
             if response.status==429:
                 retry=response.getheader('Retry-After','60')
@@ -150,7 +156,7 @@ class PublicApiTransport:
                 self.host_cooldown[p.hostname]=time.monotonic()+max(60,min(delay,3600))
                 raise ResearchError('site rate limited; no further requests during cooldown')
             if response.status!=200:raise ResearchError('public API HTTP '+str(response.status))
-            if response.getheader('Content-Type','').split(';')[0] not in ('application/json','application/problem+json'):
+            if response.getheader('Content-Type','').split(';')[0] not in (('text/html',) if _html else ('application/json','application/problem+json')):
                 raise ResearchError('API did not return JSON')
             deadline=time.monotonic()+timeout;chunks=[];size=0
             limit=self.response_limit(url,payload)
@@ -165,6 +171,11 @@ class PublicApiTransport:
             raw=b''.join(chunks)
             if request_budget:request_budget.check('public API return')
             if len(raw)>limit:raise ResearchError('API response too large')
+            if _html:
+                charset=re.search(r'charset\s*=\s*["\']?([\w-]+)',response.getheader('Content-Type','')+' '+raw[:1024].decode('ascii','ignore'),re.I)
+                encoding=charset[1].lower() if charset else 'utf-8'
+                if encoding not in ('windows-1255','cp1255','utf-8'):raise ResearchError('unsupported HTML encoding')
+                return raw.decode(encoding)
             data=json.loads(raw)
             if self.catalog_metadata and url=='https://www.sefaria.org/api/index' and payload is None and isinstance(data,list):return data
             if not isinstance(data,dict) or data.get('error'):raise ResearchError('API error')
@@ -260,6 +271,9 @@ class ArticleParser(PageParser):
 class TorahWebReader:
     def __init__(self,transport=None):self.transport=transport or PublicApiTransport()
     def read(self,url,request_budget=None):
+        if urllib.parse.urlsplit(url).hostname=='www.toratemetfreeware.com':
+            from .torat_emet import ToratEmetAdapter
+            return ToratEmetAdapter(self.transport).read(url,request_budget)
         url=canonical_url(url);p=urllib.parse.urlsplit(url)
         if SITES[p.hostname]['access']!='official-api':raise ResearchError('site access scope requires review')
         if p.hostname not in ('he.wikisource.org','www.sefaria.org'):raise ResearchError('not a registered Torah text reader')

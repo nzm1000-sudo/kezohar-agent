@@ -36,11 +36,13 @@ def source_from_doc(doc,licenses=None):
     declared=owner_authorization(doc['source_url'])
     if declared:allowed,permission=True,declared
     if not allowed or not doc.get('version') or len(doc.get('text','').encode())>32000:return None
-    meta={'rag_answers_allowed':True,'source_unit_complete':True,'permission':permission,
+    meta={'rag_answers_allowed':True,'source_unit_complete':doc.get('source_unit_complete',True),'permission':permission,
         'page_sha256':doc['page_sha256'],'knowledge_primary_kind':doc.get('primary_kind','text'),
         'site_name':doc.get('site_name',''),'locator_status':doc.get('locator_status'),
-        'source_reliability':'official API; meaning separately checked','instruction_policy':'untrusted-data',
+        'source_reliability':('public HTML library' if doc.get('site_name')=='תורת אמת' else 'official API')+'; meaning separately checked','instruction_policy':'untrusted-data',
         'source_api_url':doc.get('source_api_url','')}
+    if doc.get('license_url'):meta['license_url']=doc['license_url']
+    if doc.get('attribution'):meta['original_attribution']=doc['attribution']
     from .knowledge_catalog import source_catalog_entry
     from .torah_domains import source_genre
     entry=source_catalog_entry(doc['source_url'])
@@ -50,7 +52,7 @@ def source_from_doc(doc,licenses=None):
     return Source(source_id=stable_id('jewish-knowledge',doc['source_url'],doc['text']),work_title=doc['title'],
         reference=doc.get('reference',doc['title']),text=doc['text'],normalized_text=hebrew.normalize(doc['text']),
         version=doc['version'],license=license_id,source_url=doc['source_url'],source_project='jewish-knowledge-web',
-        attribution=doc['title']+' · '+doc['source_url']+' · '+doc['version'],
+        attribution=doc.get('attribution',doc['title'])+' · '+doc['source_url']+' · '+doc['version'],
         ingested_at=utcnow_iso(),metadata=meta).to_dict()
 
 class JewishKnowledgeWebSearch:
@@ -83,6 +85,16 @@ class JewishKnowledgeWebSearch:
                     for h in hits if h.get('_source',{}).get('ref'))
                 self.attempts.append({'query':query,'backend':'sefaria-official','count':len(hits)})
             except (OSError,ValueError,ResearchError) as exc:self.errors.append({'stage':'search','reason':str(exc)[:120]})
+        # Torat Emet supplies additional candidates when the API returned no
+        # candidates, or the requested book was explicitly named. It shares the
+        # same root request budget and cannot turn a failed search into success.
+        if not urls or 'תורת אמת' in question:
+            from .torat_emet import ToratEmetAdapter
+            adapter=ToratEmetAdapter(self.transport)
+            try:urls=adapter.search(question,route,budget,limit=2)+urls
+            except (OSError,ValueError,ResearchError) as exc:self.errors.append({'stage':'torat-emet-search','reason':str(exc)[:120]})
+            self.attempts.extend(adapter.attempts)
+            self.errors.extend(adapter.errors)
         return list(dict.fromkeys(urls))[:limit]
     def read(self,url,budget):
         doc=self.reader.read(url,budget)

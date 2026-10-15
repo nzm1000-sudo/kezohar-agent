@@ -13,6 +13,122 @@ from kezohar.source_snapshot import fingerprint
 from kezohar.conversation_state import ConversationConflict
 from kezohar.fastpath import handle as REAL_FASTPATH_HANDLE
 
+@pytest.mark.parametrize('url',[
+    'http://www.toratemetfreeware.com/online/f_001.html',
+    'https://www.toratemetfreeware.com.evil/online/f_001.html',
+    'https://user@www.toratemetfreeware.com/online/f_001.html',
+    'https://www.toratemetfreeware.com/online/../secret',
+    'https://www.toratemetfreeware.com/online/f_001.html?redirect=evil',
+    'https://www.toratemetfreeware.com/online/%2e%2e/secret'])
+def test_torat_emet_locator_rejects_host_path_or_query_confusion(url):
+    from kezohar.torat_emet import checked_url
+    from kezohar.web_research import ResearchError
+    with pytest.raises(ResearchError):checked_url(url)
+
+EMET_HTML='''<title>ספר סינתטי</title><script>throw Error("never execute")</script>
+<!--BODY_START--><a name="ספרBסימן-א-{א}"></a>כלל סינתטי, אם דגל אלפא פעיל.
+<a name="ספרBסימן-א-{ב}"></a>כלל ביתא מלא בלי קשר לאלפא.
+<!--BODY_END-->THIS IS NOT BOOK TEXT'''
+
+def test_torat_emet_preserves_anchor_conditions_and_excludes_footer():
+    from kezohar.torat_emet import documents,ToratEmetAdapter
+    from kezohar.web_research import ResearchError
+    from kezohar.jewish_web import source_from_doc
+    url='https://www.toratemetfreeware.com/online/f_001.html'
+    docs=documents(EMET_HTML,url)
+    assert len(docs)==2 and docs[0]['reference']=='ספר סימן-א-{א}'
+    assert 'אם דגל אלפא פעיל' in docs[0]['text']
+    assert all('THIS IS NOT' not in d['text'] for d in docs)
+    class Transport:
+        def html(self,u,budget=None):return EMET_HTML
+    adapter=ToratEmetAdapter(Transport());doc=adapter.read(docs[0]['source_url'])
+    s=source_from_doc(doc,licenses={})
+    assert s and s['metadata']['permission']['status']=='owner_confirmed'
+    assert doc['reference']==docs[0]['reference'] and not doc.get('author')
+    with pytest.raises(ResearchError):adapter.read(url+'#missing')
+    with pytest.raises(ResearchError):documents(EMET_HTML.replace('ספרBסימן-א-{ב}','ספרBסימן-א-{א}'),url)
+    with pytest.raises(ResearchError):documents(EMET_HTML.replace('<!--BODY_END-->',''),url)
+
+def test_torat_emet_index_literals_are_data_not_executable_code():
+    from kezohar.torat_emet import entries
+    rows=entries('AddIndex("ספר", "f_123.html", "book"); evil(); AddIndex(dynamic(), "x", "book");')
+    assert len(rows)==1 and rows[0]['url'].endswith('/f_123.html')
+
+def test_torat_emet_reader_retains_fragment_and_rechecks_whole_book_revision(monkeypatch):
+    from kezohar.torat_emet import documents
+    from kezohar.torah_web import TorahWebReader
+    from kezohar.jewish_web import source_from_doc
+    from kezohar.knowledge_claims import validate,ClaimRejected
+    url='https://www.toratemetfreeware.com/online/f_001.html'
+    class Transport:
+        html_value=EMET_HTML
+        def html(self,u,request_budget=None):
+            assert '#' not in u
+            return self.html_value
+    transport=Transport();reader=TorahWebReader(transport)
+    locator=documents(EMET_HTML,url)[0]['source_url']
+    old=source_from_doc(reader.read(locator),licenses={})
+    transport.html_value=EMET_HTML.replace('כלל ביתא','גרסה חדשה של כלל ביתא')
+    fresh=source_from_doc(reader.read(locator),licenses={})
+    assert old['text']==fresh['text'] and old['version']!=fresh['version']
+    claim={'claim_id':'C1','kind':'quote','statement':old['text'],
+           'evidence':[{'source_id':old['source_id'],'quote':old['text']}]}
+    with pytest.raises(ClaimRejected,match='changed-source'):
+        validate({'claims':[claim]},[old],lambda sid:fresh)
+    monkeypatch.setattr('kezohar.source_registry.owner_authorization',lambda url:None)
+    assert source_from_doc(reader.read(locator),licenses={}) is None
+
+def test_torat_emet_failed_book_does_not_discard_valid_book(monkeypatch):
+    from kezohar.torat_emet import ToratEmetAdapter,BASE
+    from kezohar.request_budget import RequestBudget
+    monkeypatch.setattr('kezohar.jewish_web.knowledge_queries',lambda q,r:['אלפא ספר'])
+    monkeypatch.setattr('kezohar.knowledge_catalog.catalog_matches',lambda q:[{'heTitle':'ספר'}])
+    pages={BASE:'AddIndex("תורה", "d_torah.html", "folder");',
+        BASE+'d_torah.html':'AddIndex("ספר", "d_book.html", "folder");',
+        BASE+'d_book.html':'AddIndex("ספר", "f_001.html", "book"); AddIndex("ספר", "f_002.html", "book");',
+        BASE+'f_001.html':'changed unsupported layout',BASE+'f_002.html':EMET_HTML}
+    class Transport:
+        def html(self,url,budget=None):return pages[url]
+    adapter=ToratEmetAdapter(Transport())
+    urls=adapter.search('synthetic',{'normalized_question':'synthetic','domains':['tanakh'],'public_entities':[]},RequestBudget())
+    assert urls and all('/f_002.html#' in u for u in urls)
+    assert adapter.errors and adapter.attempts[0]['books_read']==2
+
+@pytest.mark.parametrize('statement,quote,full,reason',[
+    ('אלפא חטא בפעולה.','אלפא לא חטא בפעולה.','אלפא לא חטא בפעולה.','polarity'),
+    ('אלפא היה מנהיג הקבוצה.','אלפא היה מנהיג הקבוצה.','יש אומרים: אלפא היה מנהיג הקבוצה.','opinion'),
+    ('הם היו כהנים של אלפא.','כהניו הם ביתא וגמא.','כהניו הם ביתא וגמא.','possessive')])
+def test_meaning_audit_blocks_scope_polarity_and_unresolved_antecedents(statement,quote,full,reason):
+    from kezohar.meaning_audit import audit
+    result=audit(statement,quote,full,'paraphrase')
+    assert result['status']=='rejected' and any(reason in r for r in result['risks'])
+    assert result['semantic_entailment_verified'] is False
+
+def test_meaning_audit_does_not_certify_word_similarity_or_change_of_actor():
+    from kezohar.meaning_audit import audit
+    assert audit('אלפא היה מנהיג.','אלפא היה מנהיג.','אלפא היה מנהיג.','paraphrase')['status']=='literal-restatement'
+    result=audit('אלפא עשה פעולה.','ביתא לא עשה פעולה.','ביתא לא עשה פעולה.','paraphrase')
+    assert not result['risks'] and result['status']=='unverified-paraphrase'
+    assert not result['semantic_entailment_verified']
+
+def test_claim_evidence_itself_must_answer_comparison_not_only_parent_source():
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.knowledge_claims import validate,ClaimRejected
+    q='מה ההבדל בין משנה לגמרא?';route=QuestionIntentRouter().route(q)
+    s=source(text='המשנה היא חיבור והגמרא היא פירוש למשנה.\nתפילה היא ענין נפרד לחלוטין.')
+    claim={'claim_id':'C1','kind':'paraphrase','statement':'תפילה היא ענין נפרד לחלוטין.',
+        'evidence':[{'source_id':'s1','quote':'תפילה היא ענין נפרד לחלוטין.'}]}
+    with pytest.raises(ClaimRejected,match='evidence-does-not-answer-question-kind'):
+        validate({'claims':[claim]},[s],lambda sid:s,q,route)
+
+def test_selection_prefers_focused_relationship_over_repeated_incidental_mentions():
+    from kezohar.question_intent import QuestionIntentRouter
+    from kezohar.knowledge_evidence import selection_key
+    q='מה ההבדל בין משנה לגמרא?';route=QuestionIntentRouter().route(q)
+    focused=source(text='הגמרא היא פירוש למשנה.')
+    incidental=source(text=('משנה היא נושא אחד.\nגמרא היא נושא אחר.\n'*10))
+    assert selection_key(q,route,focused)<selection_key(q,route,incidental)
+
 UNIT = 'בדיקת סמל אלפא: רק כאשר דגל בדיקה פעיל, מציגים אלפא; אם כבוי אין להציג.'
 FULL = 'הקדמה סינתטית נפרדת.\n' + UNIT + '\nפרק נפרד על סמל ביתא: מציגים ביתא רק כשמצב ביתא פעיל.'
 

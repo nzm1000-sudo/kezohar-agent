@@ -28,7 +28,7 @@ def answer_packet(packet,allow_inference):
     if not kept:raise ClaimRejected('no-requested-claim-kind')
     return {'claims':kept},removed
 
-def validate(packet,candidates,resolve):
+def validate(packet,candidates,resolve,question=None,route=None):
     if not isinstance(packet,dict) or set(packet)!={'claims'}:raise ClaimRejected('invalid-claim-envelope')
     claims=packet['claims']
     if not isinstance(claims,list) or not 1<=len(claims)<=4:raise ClaimRejected('invalid-claim-count')
@@ -76,6 +76,10 @@ def validate(packet,candidates,resolve):
                 'span':[start,end],'unit_id':unit['unit_id'] if unit else None})
             if not any(s['source_id']==sid for s in sources):sources.append(fresh)
         context=' '.join(e['quote'] for e in evidence);plain=strip_niqqud(context);out=strip_niqqud(statement)
+        if question is not None and route is not None:
+            from .knowledge_evidence import issue
+            if all(issue(question,route,dict(sent[e['source_id']],text=e['quote'])) for e in evidence):
+                raise ClaimRejected('evidence-does-not-answer-question-kind')
         if c['kind']=='quote' and statement not in context:raise ClaimRejected('statement-not-quotation')
         if c['kind']!='quote':
             # Necessary guards, not a positive similarity/entailment test.
@@ -84,7 +88,11 @@ def validate(packet,candidates,resolve):
             if any(condition not in out for condition in conditions):raise ClaimRejected('omitted-explicit-condition')
             if re.search(r'(?<![א-ת])לא\s+(?:היה|היו|נכנס|אמר|עשה|כתב)',plain) and not re.search(r'(?<![א-ת])לא\s+',out):raise ClaimRejected('negation-omitted')
             if re.search(r'חייב|אסור|מותר|הלכה למעשה|צריך לברך|צריך להמתין',out):raise ClaimRejected('ruling-in-knowledge-explanation')
-        accepted.append(dict(c,evidence=evidence,quotation_verified=True,
+        from .meaning_audit import audit
+        # Context includes the entire sent source, not merely a favorable quote.
+        meaning=audit(statement,context,' '.join(sent[e['source_id']]['text'] for e in evidence),c['kind'])
+        if c['kind']!='quote' and meaning['risks']:raise ClaimRejected('meaning:'+','.join(meaning['risks']))
+        accepted.append(dict(c,evidence=evidence,quotation_verified=True,meaning_audit=meaning,
             claim_support='literal' if c['kind']=='quote' else 'source-linked-proposal',
             semantic_entailment_verified=False,halachic_verified=False))
     return accepted,sources
