@@ -28,12 +28,12 @@ def diverse_sources(ordered, limit):
         # Do not crowd its prompt with laws about toppings, mixtures or order.
         return tables[:limit]
     # Diversity must not promote a tangential work over a complete case match.
-    sims=[s['semantic_similarity'] for s in ordered if isinstance(s.get('semantic_similarity'),float)]
+    sims=[s['relevance_score'] for s in ordered if isinstance(s.get('relevance_score'),float)]
     best=max(sims) if sims else None
     # A unit in the top meaning band is a direct match even when its wording
     # differs from the question (לשוחח vs להפסיק בדיבור).
     complete=[s for s in ordered if s.get('concept_coverage',{}).get('complete')
-              or (best is not None and s.get('semantic_similarity',-1)>=best-RERANK_TIER)]
+              or (best is not None and s.get('relevance_score',-1)>=best-RERANK_TIER)]
     if complete and len(complete)<len(ordered):
         # Do not fill unused prompt slots with partial-topic matches when a
         # directly matching unit exists. A smaller context is preferable here;
@@ -123,10 +123,22 @@ def semantic_rerank(ordered, question, search, request_budget=None):
             vectors+=model.embed_many([embed_text(s.get('text') or '')[:2000] or '-' for s in head[i:i+16]])
     except EmbeddingUnavailable:
         return ordered  # lexical order stays; never fail the answer for reranking
-    for source,vector in zip(head,vectors):source['semantic_similarity']=round(cosine(qv,vector),4)
+    for source,vector in zip(head,vectors):
+        source['semantic_similarity']=source['relevance_score']=round(cosine(qv,vector),4)
+    # Optional cross-encoder: it reads question and passage together ("does this
+    # answer it?"); summed with similarity since neither alone was reliable.
+    from . import reranker
+    try:
+        probs=reranker.scores(str(getattr(question,'semantic_text',None) or question),
+                              [embed_text(s.get('text') or '') or '-' for s in head])
+    except Exception:
+        probs=None
+    if probs:
+        for source,p in zip(head,probs):
+            if p==p:source['rerank_probability']=round(p,4);source['relevance_score']=round(source['semantic_similarity']+p,4)
     position={id(s):n for n,s in enumerate(head)}
     head=sorted(head,key=lambda s:(not rag_eligible(s),not s.get('explicit_food_table'),
-                                   -int(s['semantic_similarity']/RERANK_TIER),position[id(s)]))
+                                   -int(s['relevance_score']/RERANK_TIER),position[id(s)]))
     return head+ordered[RERANK_DEPTH:]
 
 
