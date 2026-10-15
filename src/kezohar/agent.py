@@ -425,16 +425,20 @@ class Agent:
         from .orchestration import HalachicOrchestrator
         result=HalachicOrchestrator(self).answer(question,circumstances,research,**kwargs)
         from . import config
-        if (config.get('WEB_ANSWER','1')!='0' and isinstance(result,dict) and not circumstances
-                and result.get('verdict') in ('knowledge_insufficient','no_source','insufficient','irrelevant')):
-            route=result.get('question_intent') or {}
-            if route.get('engine')=='jewish-knowledge' and route.get('normalized_question'):
-                from .web_answer import answer as web_answer
-                found=web_answer(question,route,discovered=(result.get('knowledge_discovery') or {}).get('sources',[]))
-                if found:found['question_intent']=route;return found
         if config.get('ANSWER_GATE','1')!='0' and isinstance(result,dict):
             from .answer_gate import gate
             result=gate(question,result)
+        # Owner decision 2026-10-15: whatever the local library cannot answer (knowledge or halacha, including an
+        # answer the relevance gate declined) is looked up on the web: Wikipedia and Sefaria full text.
+        if (config.get('WEB_ANSWER','1')!='0' and isinstance(result,dict) and not circumstances
+                and result.get('verdict') in ('knowledge_insufficient','no_source','insufficient','irrelevant','unsupported')):
+            route=result.get('question_intent') or {}
+            if not route.get('normalized_question'):
+                from .question_intent import QuestionIntentRouter
+                route=QuestionIntentRouter().route(question)
+            from .web_answer import answer as web_answer
+            found=web_answer(question,route,discovered=(result.get('knowledge_discovery') or {}).get('sources',[]))
+            if found:found['question_intent']=route;return found
         return result
 
     def conversation_turn(self, store, owner, conversation_id, question, circumstances=None, **kwargs):

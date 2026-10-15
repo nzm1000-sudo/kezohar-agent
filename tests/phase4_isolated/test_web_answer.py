@@ -32,3 +32,16 @@ def test_quote_check_ignores_typographic_quote_styles(monkeypatch):
                           'quote': 'אחות משה מרים הנביאה, מציעה לבת פרעה "למצוא לה מינקת מן העבריות"', 'answer': 'מרים'},
             sources=(source,))
     assert r and r['verdict'] == 'fact_supported'
+
+
+def test_unanswered_halacha_question_falls_back_to_the_web(monkeypatch):
+    import kezohar.orchestration as orchestration
+    from kezohar.agent import Agent
+    monkeypatch.setenv('WEB_ANSWER', '1')
+    monkeypatch.setattr(orchestration.HalachicOrchestrator, 'answer',
+                        lambda self, q, c=None, r=False, **k: {'verdict': 'irrelevant', 'answer': 'אין'})
+    asked = []
+    monkeypatch.setattr(w, 'answer', lambda q, route, discovered=(): asked.append(route) or {
+        'verdict': 'fact_supported', 'answer': 'מהאינטרנט', 'sources': []})
+    result = Agent(sources=[]).converse('מותר לשחק בברידג׳ בשבת?')
+    assert result['answer'] == 'מהאינטרנט' and asked and asked[0]['normalized_question']
