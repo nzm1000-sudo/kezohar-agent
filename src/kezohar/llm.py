@@ -29,38 +29,58 @@ class LLMUnavailable(Exception):
 class LocalModelBusy(LLMUnavailable):
     pass
 
-def _post(base_url, path, body, timeout=60, stream=False):
-    """Chat calls go to the configured cloud model when GEMINI_API_KEY is set (owner decision 2026-10-16), falling
-    back through GEMINI_FALLBACK_MODELS and finally to the local LM Studio model; other calls are unchanged."""
+def _cloud_attempts(body):
+    """(url, key, model, request-body) in order: OpenAI, then Gemini, for each provider whose key is set.
+    CLOUD_ORDER (default 'openai,gemini') sets the provider order."""
     from . import config
-    key = config.get('GEMINI_API_KEY', '')
-    if key and path == '/chat/completions' and not stream and config.get('CLOUD_LLM', '1') != '0':
-        cloud = 'https://generativelanguage.googleapis.com/v1beta/openai'
-        # Measured 2026-10-16: 3.5-flash-lite ~0.8s and stable; 3.8-flash 2-9s with frequent 503 under demand.
-        models = [config.get('GEMINI_MODEL', 'gemini-3.5-flash-lite')] + [
-            m for m in config.get('GEMINI_FALLBACK_MODELS', 'gemini-3.8-flash').split(',') if m]
-        if body.get('_prefer_strong'):
-            models = models[1:] + models[:1]  # stronger model first for reading/judging calls
+    attempts = []
+    for provider in config.get('CLOUD_ORDER', 'openai,gemini').split(','):
+        provider = provider.strip()
+        if provider == 'openai' and config.get('OPENAI_API_KEY', ''):
+            # Owner decision 2026-10-16: gpt-6-luna (~3s, strict JSON schema, $0.10/$0.50 per 1M tokens).
+            out = {k: v for k, v in body.items() if not k.startswith('_') and k != 'max_tokens'}
+            out.update(model=config.get('OPENAI_MODEL', 'gpt-6-luna'), reasoning_effort='none',
+                       max_completion_tokens=body.get('max_tokens', 800))
+            attempts.append(('https://api.openai.com/v1/chat/completions', config.get('OPENAI_API_KEY'), out))
+        if provider == 'gemini' and config.get('GEMINI_API_KEY', ''):
+            # Measured 2026-10-16: 3.5-flash-lite ~0.8s, 500 free requests/day; 3.8-flash 20/day, frequent 503.
+            models = [config.get('GEMINI_MODEL', 'gemini-3.5-flash-lite')] + [
+                m for m in config.get('GEMINI_FALLBACK_MODELS', 'gemini-3.8-flash').split(',') if m]
+            if body.get('_prefer_strong'):
+                models = models[1:] + models[:1]
+            for model in models:
+                # Gemini rejects reasoning_effort 'none'; 'low' gives no thought tokens on these models.
+                out = {k: v for k, v in dict(body, model=model, reasoning_effort='low').items() if not k.startswith('_')}
+                attempts.append(('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+                                 config.get('GEMINI_API_KEY'), out))
+    return attempts
+
+
+def _post(base_url, path, body, timeout=60, stream=False):
+    """Chat calls go to the configured cloud models (owner decisions 2026-10-16), in order, then to the local
+    LM Studio model as a last resort; other calls are unchanged."""
+    from . import config
+    if path == '/chat/completions' and not stream and config.get('CLOUD_LLM', '1') != '0':
+        attempts = _cloud_attempts(body)
         deadline = time.time() + timeout
-        for model in models:
+        for url, key, cloud_body in attempts:
             remaining = deadline - time.time()
             if remaining <= 2:
                 break
-            # Gemini rejects reasoning_effort 'none'; 'low' gives no thought tokens on these models.
-            cloud_body = {k: v for k, v in dict(body, model=model, reasoning_effort='low').items() if not k.startswith('_')}
             try:
-                resp = _send(cloud + path, cloud_body, remaining, {'Authorization': 'Bearer ' + key})
+                resp = _send(url, cloud_body, remaining, {'Authorization': 'Bearer ' + key})
                 if isinstance(resp, list):
                     resp = resp[0]
                 if resp.get('choices'):
                     return resp
             except LLMUnavailable as exc:
                 import sys
-                print(f'[cloud-llm] {model} failed: {exc}', file=sys.stderr, flush=True)  # status only, never content
+                print(f'[cloud-llm] {cloud_body["model"]} failed: {exc}', file=sys.stderr, flush=True)  # status only
                 continue
-        timeout = max(1, deadline - time.time())
-        base_url = config.get('LOCAL_LLM_BASE_URL', 'http://127.0.0.1:1234/v1')  # last resort: local Qwen
-        body = {k: v for k, v in dict(body, model=config.get('LOCAL_LLM_MODEL', 'qwen/qwen3.5-35b-a3b')).items() if not k.startswith('_')}
+        if attempts:
+            timeout = max(1, deadline - time.time())
+            base_url = config.get('LOCAL_LLM_BASE_URL', 'http://127.0.0.1:1234/v1')  # last resort: local Qwen
+            body = dict(body, model=config.get('LOCAL_LLM_MODEL', 'qwen/qwen3.5-35b-a3b'))
     body = {k: v for k, v in body.items() if not k.startswith('_')}  # internal hints never reach a server
     if not stream:
         return _send(base_url.rstrip("/") + path, body, timeout)

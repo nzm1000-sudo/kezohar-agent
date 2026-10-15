@@ -16,9 +16,9 @@ SCHEMA = {'type': 'object', 'properties': {
     'asked_action': {'type': 'string'},
     'per_passage': {'type': 'array', 'items': {'type': 'object', 'properties': {
         'id': {'type': 'string'}, 'topic': {'type': 'string'}, 'same_action': {'type': 'boolean'}},
-        'required': ['id', 'topic', 'same_action']}},
+        'required': ['id', 'topic', 'same_action'], 'additionalProperties': False}},
     'source_id': {'type': ['string', 'null']}},
-    'required': ['asked_action', 'per_passage', 'source_id']}
+    'required': ['asked_action', 'per_passage', 'source_id'], 'additionalProperties': False}
 # Field order makes the model state the asked action and each passage's actual topic before choosing;
 # without it, a shared word ("משחק" vs "שחקי סמנין") was accepted as a match.
 PROMPT = ('אתה בודק רלוונטיות של מקורות תורניים. שלב 1: כתוב ב-asked_action במילים פשוטות איזה מעשה בדיוק נשאל '

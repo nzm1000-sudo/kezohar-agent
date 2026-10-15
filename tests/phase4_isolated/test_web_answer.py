@@ -72,7 +72,7 @@ def test_summary_reads_only_the_cited_passage():
 
 def test_cloud_model_falls_back_to_lite_then_local(monkeypatch):
     import kezohar.llm as llm
-    monkeypatch.setenv('GEMINI_API_KEY', 'k'); monkeypatch.setenv('CLOUD_LLM', '1')
+    monkeypatch.setenv('GEMINI_API_KEY', 'k'); monkeypatch.setenv('CLOUD_LLM', '1'); monkeypatch.delenv('OPENAI_API_KEY', raising=False)
     monkeypatch.setenv('GEMINI_MODEL', 'big'); monkeypatch.setenv('GEMINI_FALLBACK_MODELS', 'lite')
     calls = []
     def send(url, body, timeout, headers=None):
@@ -106,3 +106,20 @@ def test_site_pages_and_searches_are_cached(tmp_path, monkeypatch):
     assert t._fetch('https://din.org.il/a') == ('כותרת', ['פסקה'])
     assert downloads == ['https://din.org.il/a']
     assert t._clean_title('הדלקת מזגן - ישיבת כסא רחמיםכלי נגישותהגדל טקסט') == 'הדלקת מזגן - ישיבת כסא רחמים'
+
+
+
+def test_openai_first_then_gemini_with_translated_params(monkeypatch):
+    import kezohar.llm as llm
+    monkeypatch.setenv('CLOUD_LLM', '1'); monkeypatch.setenv('OPENAI_API_KEY', 'o'); monkeypatch.setenv('GEMINI_API_KEY', 'g')
+    monkeypatch.setenv('GEMINI_MODEL', 'lite'); monkeypatch.setenv('GEMINI_FALLBACK_MODELS', '')
+    calls = []
+    def send(url, body, timeout, headers=None):
+        calls.append((url.split('/')[2], body['model'], body.get('max_tokens'), body.get('max_completion_tokens')))
+        if 'openai.com' in url:
+            raise llm.LLMUnavailable('429')
+        return {'choices': [{'message': {'content': '{}'}}]}
+    monkeypatch.setattr(llm, '_send', send)
+    llm._post('http://127.0.0.1:1234/v1', '/chat/completions', {'model': 'q', 'max_tokens': 300, '_prefer_strong': True}, timeout=30)
+    assert calls[0] == ('api.openai.com', 'gpt-6-luna', None, 300)
+    assert calls[1][:2] == ('generativelanguage.googleapis.com', 'lite')
