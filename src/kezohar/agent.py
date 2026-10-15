@@ -420,7 +420,12 @@ class Agent:
 
     def converse(self, question, circumstances=None, research=False, **kwargs):
         from .orchestration import HalachicOrchestrator
-        return HalachicOrchestrator(self).answer(question,circumstances,research,**kwargs)
+        result=HalachicOrchestrator(self).answer(question,circumstances,research,**kwargs)
+        from . import config
+        if config.get('ANSWER_GATE','1')!='0' and isinstance(result,dict):
+            from .answer_gate import gate
+            result=gate(question,result)
+        return result
 
     def conversation_turn(self, store, owner, conversation_id, question, circumstances=None, **kwargs):
         """Trusted local service caller only; memory never replaces retrieval."""
