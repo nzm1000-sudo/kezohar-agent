@@ -443,6 +443,10 @@ class Agent:
             from .web_answer import answer as web_answer
             found=web_answer(question,route,discovered=(result.get('knowledge_discovery') or {}).get('sources',[]))
             if found:found['question_intent']=route;return found
+            from .web_answer import is_jewish_topic
+            if is_jewish_topic(question) is False:
+                return {'verdict':'out_of_scope','mode':'scope','sources':[],'halachic_verified':False,
+                        'answer':'אני עונה רק על שאלות ביהדות: תורה, הלכה, מנהגים, חגים, תפילה, אישים וספרים.'}
         return result
 
     def conversation_turn(self, store, owner, conversation_id, question, circumstances=None, **kwargs):

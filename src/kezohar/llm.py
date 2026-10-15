@@ -39,13 +39,15 @@ def _post(base_url, path, body, timeout=60, stream=False):
         # Measured 2026-10-16: 3.5-flash-lite ~0.8s and stable; 3.8-flash 2-9s with frequent 503 under demand.
         models = [config.get('GEMINI_MODEL', 'gemini-3.5-flash-lite')] + [
             m for m in config.get('GEMINI_FALLBACK_MODELS', 'gemini-3.8-flash').split(',') if m]
+        if body.get('_prefer_strong'):
+            models = models[1:] + models[:1]  # stronger model first for reading/judging calls
         deadline = time.time() + timeout
         for model in models:
             remaining = deadline - time.time()
             if remaining <= 2:
                 break
             # Gemini rejects reasoning_effort 'none'; 'low' gives no thought tokens on these models.
-            cloud_body = dict(body, model=model, reasoning_effort='low')
+            cloud_body = {k: v for k, v in dict(body, model=model, reasoning_effort='low').items() if not k.startswith('_')}
             try:
                 resp = _send(cloud + path, cloud_body, remaining, {'Authorization': 'Bearer ' + key})
                 if isinstance(resp, list):
@@ -58,7 +60,8 @@ def _post(base_url, path, body, timeout=60, stream=False):
                 continue
         timeout = max(1, deadline - time.time())
         base_url = config.get('LOCAL_LLM_BASE_URL', 'http://127.0.0.1:1234/v1')  # last resort: local Qwen
-        body = dict(body, model=config.get('LOCAL_LLM_MODEL', 'qwen/qwen3.5-35b-a3b'))
+        body = {k: v for k, v in dict(body, model=config.get('LOCAL_LLM_MODEL', 'qwen/qwen3.5-35b-a3b')).items() if not k.startswith('_')}
+    body = {k: v for k, v in body.items() if not k.startswith('_')}  # internal hints never reach a server
     if not stream:
         return _send(base_url.rstrip("/") + path, body, timeout)
     url = base_url.rstrip("/") + path

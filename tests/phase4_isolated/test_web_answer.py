@@ -84,3 +84,12 @@ def test_cloud_model_falls_back_to_lite_then_local(monkeypatch):
     llm._post('http://127.0.0.1:1234/v1', '/chat/completions', {'model': 'qwen', 'reasoning_effort': 'none'}, timeout=30)
     assert [c[1] for c in calls] == ['big', 'lite', 'qwen/qwen3.5-35b-a3b']
     assert calls[0][2] == 'low' and calls[2][0] == '127.0.0.1:1234'
+
+
+def test_only_approved_torah_sites_are_read():
+    from kezohar.torah_sites import allowed
+    assert allowed('https://www.hidabroot.org/question/288650')
+    assert allowed('https://din.org.il/2026/04/15/x')
+    assert not allowed('https://www.youtube.com/watch?v=x')
+    assert not allowed('http://din.org.il/x')  # https only
+    assert not allowed('https://din.org.il.evil.com/x')

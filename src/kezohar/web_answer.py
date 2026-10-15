@@ -22,6 +22,8 @@ SCHEMA = {'type': 'object', 'properties': {
 PROMPT = ('אתה עונה על שאלות ביהדות רק מתוך הקטעים שסופקו. שלב 1: כתוב ב-asked מה בדיוק נשאל (למשל: "שם אביו של שמשון"). '
           'שלב 2: בחר קטע (source_index) והעתק ממנו ב-quote משפט אחד מילה במילה, בדיוק כפי שהוא כתוב, שאומר במפורש את התשובה '
           'לדבר שנשאל. שלב 3: quote_states_the_answer=true רק אם הציטוט עצמו אומר את התשובה במפורש, לא רק מזכיר את הנושא. '
+          'כלל שנאמר בקטע וחל בבירור על המקרה הנשאל נחשב תשובה (למשל "מותר לשחק בשבת בכל משחק שאין בו חילול שבת" '
+          'לשאלה על משחק קלפים); אז אמור בתשובה שזה לפי הכלל וציין את תנאיו. ציטוט על מקרה אחר (למשל מי ששכח) אינו תשובה. '
           'שלב 4: answer = תשובה ישירה וקצרה (משפט אחד או שניים) בלשונך, שעונה על מה שנשאל ונובעת רק מהקטע והציטוט; '
           'אם נשאל "למה", הסבר את הטעם כפי שהוא כתוב בקטע. העדף ערכי אנציקלופדיה לשאלות "מי היה", '
           'ולשאלות הלכה העדף שולחן ערוך, משנה ברורה, ילקוט יוסף ופוסקים על פני אנציקלופדיה. '
@@ -81,6 +83,13 @@ def _article_paragraphs(encyclopedia, title, question, budget, keep=4):
 def _gather(question, route, budget, discovered):
     from .jewish_encyclopedia import JewishEncyclopediaEngine
     sources, errors = [], []
+    # Contemporary poskim on approved Torah sites first: practical questions of today are answered there, and
+    # appended last they were cut by the passage cap or the time budget.
+    try:
+        from .torah_sites import search as torah_sites
+        sources += torah_sites(question)[:6]
+    except Exception as exc:
+        errors.append({'stage': 'web-answer-torah-sites', 'error': type(exc).__name__})
     encyclopedia = JewishEncyclopediaEngine()
     try:
         for title in encyclopedia.search(route, budget, limit=2):
@@ -105,7 +114,7 @@ def _gather(question, route, budget, discovered):
         errors.append({'stage': 'web-answer-sefaria-search', 'error': type(exc).__name__})
     seen = {s['source_id'] for s in sources}
     sources += [s for s in discovered if s.get('source_id') not in seen and s.get('text')][:4]
-    return sources[:10], errors
+    return sources[:14], errors
 
 
 def answer(question, route, budget=None, discovered=(), timeout=35, ask=None):
@@ -178,10 +187,31 @@ def summarize(question, result, timeout=35, ask=None):
 
 def _ask(question, listing, timeout):
     from .model_gate import model_slot
+    # Reading and judging quotes is where the small model erred (a quote about forgetting the timer "supported" a
+    # permission): this call asks for the stronger cloud model first, the fast one as fallback.
     body = {'model': config.llm_model(), 'temperature': 0, 'max_tokens': 500, 'reasoning_effort': 'none', 'stream': False,
+            '_prefer_strong': True,
             'response_format': {'type': 'json_schema', 'json_schema': {'name': 'web_answer', 'schema': SCHEMA, 'strict': True}},
             'messages': [{'role': 'system', 'content': PROMPT},
                          {'role': 'user', 'content': 'שאלה: ' + question + '\n\nקטעים:\n' + listing}]}
     with model_slot(timeout) as slot:
         resp = _post(config.llm_base_url(), '/chat/completions', body, timeout=slot['remaining_s'])
     return json.loads(resp['choices'][0]['message']['content'])
+
+
+def is_jewish_topic(question, timeout=15):
+    """One short model call: is the question about Judaism at all? None when unknown (model unavailable)."""
+    from .model_gate import model_slot
+    body = {'model': config.llm_model(), 'temperature': 0, 'max_tokens': 30, 'stream': False,
+            'response_format': {'type': 'json_schema', 'json_schema': {'name': 'scope', 'strict': True, 'schema': {
+                'type': 'object', 'properties': {'jewish': {'type': 'boolean'}}, 'required': ['jewish'],
+                'additionalProperties': False}}},
+            'messages': [{'role': 'system', 'content': 'האם השאלה עוסקת ביהדות: תורה, הלכה, מנהגים, חגים, תפילה, '
+                          'אישים, ספרים או היסטוריה יהודית? החזר JSON בלבד.'},
+                         {'role': 'user', 'content': question}]}
+    try:
+        with model_slot(timeout) as slot:
+            resp = _post(config.llm_base_url(), '/chat/completions', body, timeout=slot['remaining_s'])
+        return bool(json.loads(resp['choices'][0]['message']['content'])['jewish'])
+    except Exception:
+        return None
