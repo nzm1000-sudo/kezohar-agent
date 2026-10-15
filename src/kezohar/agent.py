@@ -425,6 +425,13 @@ class Agent:
         from .orchestration import HalachicOrchestrator
         result=HalachicOrchestrator(self).answer(question,circumstances,research,**kwargs)
         from . import config
+        if (config.get('WEB_ANSWER','1')!='0' and isinstance(result,dict) and not circumstances
+                and result.get('verdict') in ('knowledge_insufficient','no_source','insufficient','irrelevant')):
+            route=result.get('question_intent') or {}
+            if route.get('engine')=='jewish-knowledge' and route.get('normalized_question'):
+                from .web_answer import answer as web_answer
+                found=web_answer(question,route,discovered=(result.get('knowledge_discovery') or {}).get('sources',[]))
+                if found:found['question_intent']=route;return found
         if config.get('ANSWER_GATE','1')!='0' and isinstance(result,dict):
             from .answer_gate import gate
             result=gate(question,result)

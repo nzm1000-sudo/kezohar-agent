@@ -14,10 +14,22 @@ class JewishEncyclopediaEngine:
         if route.get('export_allowed') is False:return []
         from .knowledge_catalog import catalog_matches
         from .torah_domains import TOPICS
-        q=route['normalized_question'];terms=[t for t in PUBLIC_ENTITIES+PUBLIC_TOPICS+TOPICS if t in q]+[r['heTitle'] for r in catalog_matches(q)]
+        import re
+        from .jewish_web import question_keywords
+        q=route['normalized_question']
+        terms=[t for t in PUBLIC_ENTITIES+PUBLIC_TOPICS+TOPICS
+               if re.search(r'(?<![א-ת])[ובהלמש]?'+re.escape(t)+r'(?![א-ת])',q)]+[r['heTitle'] for r in catalog_matches(q)]
         definition=route.get('definition_request')
         if definition and definition['id']:
             terms=[definition['queries'][0].split(' דהיינו')[0]]
+        elif definition and definition.get('target'):
+            terms=[definition['target']]
+        # Owner decision 2026-10-15: the question's own subject goes to the encyclopedia when nothing is registered.
+        entity=route.get('entity')
+        if entity and not terms:terms=[entity]
+        if not terms:
+            keywords=question_keywords(q)
+            terms=[keywords] if keywords else []
         if not terms:return []
         term=next(iter(sorted(terms,key=len,reverse=True)))
         term=ALIASES.get(term,term)

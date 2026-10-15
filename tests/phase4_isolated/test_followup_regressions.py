@@ -2022,7 +2022,10 @@ def test_public_catalog_matches_new_books_without_trusting_route_or_answer_evide
     assert 'ספר אלפא מחבר' in knowledge_queries(q,r)
     assert not kc.catalog_matches('ספר אלפאית')
     r['normalized_question']='מידע פרטי שאינו רשום';r['public_catalog_matches']=[{'heTitle':'מידע פרטי'}]
-    assert not knowledge_queries('',r)  # Recompute from trusted catalog, not client route fields.
+    # Owner decision 2026-10-15: the question's own words are searched on the web;
+    # client-supplied catalog matches still cannot add registered book terms.
+    assert all('ספר אלפא' not in query for query in knowledge_queries('',r))
+    assert not knowledge_queries('',dict(r,export_allowed=False))
     d=json.loads(p.read_text());d['books'][0]['heTitle']='שם ששונה';p.write_text(json.dumps(d))
     assert not kc.catalog_matches(q)  # Corrupted metadata cannot enable external queries.
 

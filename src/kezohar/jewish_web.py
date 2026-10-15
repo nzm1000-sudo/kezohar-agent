@@ -7,12 +7,26 @@ from .ingest import load_licenses
 from .torah_web import PublicApiTransport,TorahWebReader,ResearchError,canonical_url
 from .question_intent import PUBLIC_ENTITIES,PUBLIC_TOPICS
 
+# Question words carry no subject; everything else in the question is searched.
+STOPWORDS={'מי','מה','מהו','מהי','היה','היתה','הייתה','היו','של','את','האם','איך','למה','מדוע','מתי','איפה','היכן','כמה',
+           'זה','זו','זאת','הוא','היא','הם','על','אל','עם','אמר','כתב','יש','אין','לי','אני','אתה','בבקשה','תסביר',
+           'תגיד','ספר','לפי','או','גם','כל','רק','כי','אם','כן','לא','ב','ל','ה','ו','מ','ש'}
+
+def question_keywords(question):
+    """The user's own subject words, owner-approved for web search (2026-10-15)."""
+    words=re.findall(r'[א-ת"״׳\'A-Za-z0-9]+',question.split('\n')[0])
+    # Domain labels (בברסלב, בחסידות) narrow the topic; as search words they only find passages naming them.
+    modifiers=('חסידות','ברסלב','חב״ד','חב"ד','קבלה','מוסר','גמרא','תלמוד','הלכה')
+    return ' '.join(w for w in words if w not in STOPWORDS and len(w)>1
+                    and not any(re.fullmatch('[ובהלמש]?'+re.escape(m),w) for m in modifiers))
+
 def knowledge_queries(question,route):
+    # Owner decision 2026-10-15: web search comes first and may use the question's own words.
+    # Only an explicit export_allowed=False (e.g. a private personal question) keeps a question local.
     if route.get('export_allowed') is False:return []
-    # Only registered editorial terms may be exported; arbitrary definition
-    # targets, private names and previous conversation text remain local.
+    keywords=question_keywords(route.get('normalized_question') or question)
     definition=route.get('definition_request')
-    if definition and definition['id']:return list(definition['queries'])
+    if definition and definition['id']:return list(dict.fromkeys([keywords]+list(definition['queries'])))[:3] if keywords else list(definition['queries'])
     q=route['normalized_question'];names=[n for n in PUBLIC_ENTITIES if re.search(r'(?<![א-ת])[ובהלמש]?'+re.escape(n)+r'(?![א-ת])',q)]
     from .knowledge_catalog import catalog_matches
     from .torah_domains import TOPICS
@@ -20,7 +34,7 @@ def knowledge_queries(question,route):
     modifiers={'חסידות','ברסלב','חב״ד','קבלה','מוסר'}
     substantive=[t for t in topics if t not in modifiers]
     if substantive:topics=substantive
-    if not names and not topics:return []
+    if not names and not topics:return [keywords] if keywords else []
     terms=list(dict.fromkeys(names+topics))[:4]
     relation={'father':['ותלד','בני'],'mother':['ותהר','אם'],'wife':['אשתו','לאשה'],
               'son':['בן','בני'],'teacher':['תלמיד','למד'],'author':['מחבר'],'child-count':['בני']}
@@ -30,7 +44,7 @@ def knowledge_queries(question,route):
     if 'tanakh' in route['domains'] and 'לא נכנס' in q and names:
         queries=[names[0]+' לא תביאו',queries[0]]
     if 'ברכה' in q:queries+=[' '.join(terms+['ברכה'])]
-    return list(dict.fromkeys(queries))[:2]
+    return list(dict.fromkeys(([keywords] if keywords else [])+queries))[:3]
 
 def source_from_doc(doc,licenses=None):
     licenses=load_licenses() if licenses is None else licenses

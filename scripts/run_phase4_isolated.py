@@ -24,6 +24,7 @@ os.environ['TMPDIR'] = str(RUN)
 tempfile.tempdir = str(RUN)
 sys.path.insert(0, str(ROOT/'src'))
 os.environ['PHASE4_ISOLATED_RUN'] = str(RUN)
+os.environ['WEB_ANSWER'] = '0'
 os.environ['ANSWER_GATE'] = '0'  # the relevance gate calls the local model; its own tests inject the model
 os.environ['JEWISH_KNOWLEDGE_ROOT']=str(RUN/'jewish-knowledge')
 for key in ('STORE_PATH', 'APP_LIBRARY_STORE_PATH', 'WEB_STORE_PATH', 'APP_LIBRARY_DB_PATH',
@@ -95,7 +96,8 @@ results = Results()
 exit_code = pytest.main(['tests/phase4_isolated/test_contracts.py', 'tests/phase4_isolated/test_regressions.py',
                         'tests/phase4_isolated/test_followup_regressions.py',
                         'tests/phase4_isolated/test_dense_index.py',
-                        'tests/phase4_isolated/test_answer_gate.py', '-q', '--tb=short',
+                        'tests/phase4_isolated/test_answer_gate.py',
+                        'tests/phase4_isolated/test_web_answer.py', '-q', '--tb=short',
                         '--log-file='+str(RUN/'pytest.log'),
                         '--basetemp='+str(RUN/'pytest-temp'),
                         '-o', 'cache_dir='+str(RUN/'pytest-cache'),

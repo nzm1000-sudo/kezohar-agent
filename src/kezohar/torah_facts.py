@@ -304,6 +304,18 @@ class TorahFactAnswerEngine:
                         answer=self.render_facts(self.facts(route,budget),route,budget)
                         if answer:return answer
                 except Exception as exc:self.errors.append({'stage':'bibliography','error':type(exc).__name__})
+        # Owner decision 2026-10-15: the encyclopedia comes first for every knowledge question ("מי היה", relations,
+        # concepts); phrase search in primary texts finds every passage that merely contains the words.
+        encyclopedia_tried=False
+        if route.get('export_allowed') is not False and not (local_definition_ready and route['complexity']!='deep'):
+            encyclopedia_tried=True;self.used_web=True
+            try:
+                for title in self.encyclopedia.search(route,budget):self.remember(self.encyclopedia.read(title,budget))
+                identity=resolve_identity(self,route,budget)
+                if identity and not self.unqualified_single_identity(route):return identity
+                answer=self.render_facts(self.facts(route,budget),route,budget)
+                if answer:return answer
+            except Exception as exc:self.errors.append({'stage':'encyclopedia-first','error':type(exc).__name__})
         if knowledge_queries(question,route) and not (local_definition_ready and route['complexity']!='deep' and not route.get('explicit_web_requested')):
             self.used_web=True
             for url in self.web.search(question,route,budget,limit=6):
@@ -313,7 +325,7 @@ class TorahFactAnswerEngine:
                 if identity and not self.unqualified_single_identity(route):return identity
                 answer=self.render_facts(self.facts(route,budget),route,budget)
                 if answer:return answer
-            if route['relation'] not in ('father','mother','wife','child-count'):
+            if not encyclopedia_tried:
                 try:
                     for title in self.encyclopedia.search(route,budget):self.remember(self.encyclopedia.read(title,budget))
                     answer=self.render_facts(self.facts(route,budget),route,budget)
