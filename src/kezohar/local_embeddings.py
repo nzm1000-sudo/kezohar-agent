@@ -40,13 +40,14 @@ class LocalEmbeddingModel:
         if settings.normalization!=expected:raise VectorIndexMismatch('embedding preprocessing identity does not match provider')
         if type(settings.dimensions) is not int or settings.dimensions<=0:raise ValueError('positive embedding dimension required')
         self.spec=VectorIndexSpec.from_settings(settings)
+        self.slot_path=None  # bulk indexing sets its own lock so it never starves answers
     def embed_many(self,texts,task='document',timeout=30):
         if task not in ('document','query'):raise ValueError('unknown embedding task')
         if (not isinstance(texts,list) or not 1<=len(texts)<=16 or any(not isinstance(t,str) or not t.strip() or len(t)>12000 for t in texts)
                 or sum(len(t.encode()) for t in texts)>60000):raise ValueError('bounded nonempty text batch required')
         prefix=('search_document: ' if task=='document' else 'search_query: ') if self.nomic else ''
         try:
-            with model_slot(timeout) as slot:
+            with model_slot(timeout,path=self.slot_path) as slot:
                 response=request_embeddings(self.base_url.rstrip('/')+'/embeddings',
                     {'model':self.settings.model,'input':[prefix+t for t in texts]},slot['remaining_s'])
         except VectorIndexMismatch:raise

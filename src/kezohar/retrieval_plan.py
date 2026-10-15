@@ -1,5 +1,5 @@
 """Bounded complementary search routes using existing indexes, no new corpus."""
-from .ranking import retrieval_query,topic_tokens
+from .ranking import retrieval_query,topic_tokens,RetrievalQuery
 from .understanding import understand
 
 ACTION_TERMS={
@@ -25,5 +25,10 @@ def plan(question,deep=False):
     hints=interpret(core)
     if hints['reference_hints'] or hints['work_hints']:
         routes.append({'kind':'locator-probe','query':core,'reason':'literal locator/work hints; no inferred numbering'})
+    for route in routes:
+        # Lexical routes carry expanded vocabulary; dense retrieval embeds the
+        # user's own question instead (a word bag drifts, e.g. tefillin->tefilla).
+        query=route['query'] if isinstance(route['query'],RetrievalQuery) else RetrievalQuery(route['query'],[])
+        query.semantic_text=core;route['query']=query
     return {'routes':routes[:3],'max_routes':3,'deep':deep,'run_fallback_if':'no complete eligible topic match',
             'semantic':'not-activated-without-quality-evidence','original_case':core}

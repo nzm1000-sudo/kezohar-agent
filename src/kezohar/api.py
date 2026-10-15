@@ -34,6 +34,11 @@ def get_agent():
         from .locator_resolution import resolved_source
         backends = [SQLiteLibrarySearch(path,locator_overlay=resolved_source if path==user_db else None) for path in dict.fromkeys((app_db, user_db))
                     if Path(path).exists()]
+        from .vector_index import configured_index, DenseLibrarySearch
+        for library in list(backends):
+            dense = configured_index(library.path)
+            if dense is not None and len(dense):
+                backends.append(DenseLibrarySearch(library, dense))
         if backends:
             _agent.search = FederatedSearch(_agent.search, backends)
         if os.environ.get('SOURCE_GRAPH_ENABLED','').lower() in ('1','true'):

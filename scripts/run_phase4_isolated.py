@@ -92,7 +92,8 @@ class Results:
 
 results = Results()
 exit_code = pytest.main(['tests/phase4_isolated/test_contracts.py', 'tests/phase4_isolated/test_regressions.py',
-                        'tests/phase4_isolated/test_followup_regressions.py', '-q', '--tb=short',
+                        'tests/phase4_isolated/test_followup_regressions.py',
+                        'tests/phase4_isolated/test_dense_index.py', '-q', '--tb=short',
                         '--log-file='+str(RUN/'pytest.log'),
                         '--basetemp='+str(RUN/'pytest-temp'),
                         '-o', 'cache_dir='+str(RUN/'pytest-cache'),
