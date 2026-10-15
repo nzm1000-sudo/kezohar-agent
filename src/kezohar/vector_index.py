@@ -7,12 +7,19 @@ read back from the library itself, so permissions/locators stay authoritative.
 """
 import json
 import os
+import re
 import sqlite3
 from pathlib import Path
 from . import config
 from .embeddings import VectorIndexSpec, VectorIndexMismatch
 
 MAX_CHARS = 2000  # ponytail: head of each unit only; split long units if recall suffers
+TEXT_FORM = 'strip-niqqud-teamim-v1'  # part of the index identity
+
+
+def embed_text(text):
+    """Questions arrive unvocalized; vocalized verses embedded as-is matched worse."""
+    return re.sub(r'[\u0591-\u05C7]', '', text.replace('\u05be', ' ')).strip()
 
 
 def index_dir(root, spec, library_path):
@@ -20,7 +27,7 @@ def index_dir(root, spec, library_path):
 
 
 def _manifest(spec, library_path):
-    return {**spec.manifest(), 'library': str(Path(library_path).resolve()), 'max_chars': MAX_CHARS}
+    return {**spec.manifest(), 'library': str(Path(library_path).resolve()), 'max_chars': MAX_CHARS, 'text_form': TEXT_FORM}
 
 
 def _write_json(path, value):
@@ -69,8 +76,8 @@ def build(library_path, model, root='data/store/vectors', batch=16, limit=None, 
                           + " ORDER BY rowid LIMIT ?", (progress.get(cursor, 0),) + params + (n,)).fetchall()
         if not rows:
             break
-        keep = [(sid, text.strip()[:MAX_CHARS]) for _, sid, text in rows
-                if sid not in seen and isinstance(text, str) and text.strip()]
+        keep = [(sid, embed_text(text)[:MAX_CHARS]) for _, sid, text in rows
+                if sid not in seen and isinstance(text, str) and embed_text(text)]
         seen.update(sid for sid, _ in keep)
         if keep:
             vectors = np.asarray(model.embed_many([t for _, t in keep], timeout=120), dtype=np.float16)
@@ -103,7 +110,7 @@ class DenseIndex:
         import numpy as np
         if not self.ids:
             return []
-        q = np.asarray(self.model.embed_query(str(query)), dtype=np.float16)
+        q = np.asarray(self.model.embed_query(embed_text(str(query))), dtype=np.float16)
         scores = self.matrix @ q
         k = min(top_k, len(scores))
         top = np.argpartition(-scores, k - 1)[:k]
@@ -154,4 +161,7 @@ def configured_index(library_path, root=None):
     model = create_embedding_model(settings)
     if not (index_dir(root, model.spec, library_path) / 'progress.json').exists():
         return None
-    return DenseIndex(library_path, model, root)
+    try:
+        return DenseIndex(library_path, model, root)
+    except VectorIndexMismatch:
+        return None  # stale index: lexical retrieval continues; rebuild separately

@@ -112,6 +112,7 @@ def semantic_rerank(ordered, question, search, request_budget=None):
     if dense is None or len(head)<2:return ordered
     from .local_embeddings import EmbeddingUnavailable
     from .vector import cosine
+    from .vector_index import embed_text
     model=dense.index.model
     try:
         if request_budget:request_budget.check('semantic rerank')
@@ -119,7 +120,7 @@ def semantic_rerank(ordered, question, search, request_budget=None):
         vectors=[]
         for i in range(0,len(head),16):
             if request_budget:request_budget.check('semantic rerank batch')
-            vectors+=model.embed_many([(s.get('text') or '').strip()[:2000] or '-' for s in head[i:i+16]])
+            vectors+=model.embed_many([embed_text(s.get('text') or '')[:2000] or '-' for s in head[i:i+16]])
     except EmbeddingUnavailable:
         return ordered  # lexical order stays; never fail the answer for reranking
     for source,vector in zip(head,vectors):source['semantic_similarity']=round(cosine(qv,vector),4)

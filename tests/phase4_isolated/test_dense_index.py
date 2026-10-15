@@ -132,3 +132,17 @@ def test_priority_pass_then_full_pass_never_duplicates(tmp_path):
     final = build(path, FakeModel(), root=root, batch=4, log=None)
     index = DenseIndex(path, FakeModel(), root=root)
     assert final['count'] == 9 and len(set(index.ids)) == 9 and index.ids[:2] == ['s7', 's9']
+
+
+def test_embed_text_strips_niqqud_and_cantillation_and_stale_index_is_ignored(tmp_path, monkeypatch):
+    from kezohar.vector_index import embed_text, configured_index, index_dir
+    assert embed_text('וַיְהִ֗י אַחֲרֵי־מ֣וֹת') == 'ויהי אחרי מות'
+    path, root = library(tmp_path), tmp_path / 'vectors'
+    model = FakeModel()
+    build(path, model, root=root, log=None)
+    manifest = index_dir(root, model.spec, path) / 'manifest.json'
+    data = json.loads(manifest.read_text()); data['text_form'] = 'old'; manifest.write_text(json.dumps(data))
+    import kezohar.embeddings as emb
+    monkeypatch.setattr(emb, 'create_embedding_model', lambda settings=None: model)
+    monkeypatch.setenv('EMBEDDINGS_PROVIDER', 'openai-compatible-local')
+    assert configured_index(path, root=root) is None
