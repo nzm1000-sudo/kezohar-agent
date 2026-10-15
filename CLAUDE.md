@@ -32,7 +32,8 @@ ranking, source verifier and composer. Calendar/zmanim use deterministic code.
 
 ## Answer and source policy
 Answer first when evidence permits; ask one focused question only for a materially
-missing detail. Preserve explicit circumstances and follow-up focus. Conversation
+missing detail. Owner rule 2026-10-16: a source is shown when found; when none is
+found, the cloud model may answer from its own knowledge, labelled "ללא מקור". Preserve explicit circumstances and follow-up focus. Conversation
 history is never source evidence. Definitions need meaning, supported acronym
 expansion and a short faithful example. Quotation requests need original text.
 Prefer Maran, Rav Ovadia and Yalkut Yosef for Sephardic practical halacha, without

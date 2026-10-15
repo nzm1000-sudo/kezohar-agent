@@ -443,10 +443,15 @@ class Agent:
             from .web_answer import answer as web_answer
             found=web_answer(question,route,discovered=(result.get('knowledge_discovery') or {}).get('sources',[]))
             if found:found['question_intent']=route;return found
-            from .web_answer import is_jewish_topic
-            if is_jewish_topic(question) is False:
+            from .web_answer import model_answer
+            jewish,known=model_answer(question)
+            if jewish is False:
                 return {'verdict':'out_of_scope','mode':'scope','sources':[],'halachic_verified':False,
                         'answer':'אני עונה רק על שאלות ביהדות: תורה, הלכה, מנהגים, חגים, תפילה, אישים וספרים.'}
+            if known:
+                # Owner rule 2026-10-16: an answer without a source is acceptable, labelled as such.
+                return {'verdict':'model_knowledge','mode':'model-knowledge','sources':[],'halachic_verified':False,
+                        'answer':known,'question_intent':route,'source_status':'no-source: model knowledge'}
         return result
 
     def conversation_turn(self, store, owner, conversation_id, question, circumstances=None, **kwargs):

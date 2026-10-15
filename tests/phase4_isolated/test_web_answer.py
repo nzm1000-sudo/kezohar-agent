@@ -123,3 +123,17 @@ def test_openai_first_then_gemini_with_translated_params(monkeypatch):
     llm._post('http://127.0.0.1:1234/v1', '/chat/completions', {'model': 'q', 'max_tokens': 300, '_prefer_strong': True}, timeout=30)
     assert calls[0] == ('api.openai.com', 'gpt-6-luna', None, 300)
     assert calls[1][:2] == ('generativelanguage.googleapis.com', 'lite')
+
+
+def test_no_source_falls_back_to_labelled_model_knowledge(monkeypatch):
+    import kezohar.orchestration as orchestration
+    from kezohar.agent import Agent
+    monkeypatch.setenv('WEB_ANSWER', '1')
+    monkeypatch.setattr(orchestration.HalachicOrchestrator, 'answer',
+                        lambda self, q, c=None, r=False, **k: {'verdict': 'knowledge_insufficient', 'answer': 'אין'})
+    monkeypatch.setattr(w, 'answer', lambda q, route, discovered=(): None)
+    monkeypatch.setattr(w, 'model_answer', lambda q: (True, 'רבקה'))
+    r = Agent(sources=[]).converse('מי הייתה אשתו של יצחק?')
+    assert r['verdict'] == 'model_knowledge' and r['answer'] == 'רבקה' and r['sources'] == []
+    monkeypatch.setattr(w, 'model_answer', lambda q: (False, None))
+    assert Agent(sources=[]).converse('כמה עולה כרטיס?')['verdict'] == 'out_of_scope'

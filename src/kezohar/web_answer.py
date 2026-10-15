@@ -228,3 +228,27 @@ def same_act(question, source):
     probe = gate(question, {'verdict': 'ok', 'answer': '', 'sources': [source],
                             'known_rule_context': {'rules': [{'source_id': source.get('source_id')}]}})
     return (probe.get('answer_gate') or {}).get('status') == 'confirmed'
+
+
+def model_answer(question, timeout=30):
+    """Owner rule 2026-10-16: no source is fine. One call checks the question is about Judaism and, if so,
+    answers from the model's own knowledge. Returns (jewish: bool|None, answer: str|None)."""
+    from .model_gate import model_slot
+    schema = {'type': 'object', 'properties': {'jewish': {'type': 'boolean'}, 'confident': {'type': 'boolean'},
+              'answer': {'type': 'string'}}, 'required': ['jewish', 'confident', 'answer'], 'additionalProperties': False}
+    body = {'model': config.llm_model(), 'temperature': 0, 'max_tokens': 500, 'stream': False, '_prefer_strong': True,
+            'response_format': {'type': 'json_schema', 'json_schema': {'name': 'model_answer', 'strict': True, 'schema': schema}},
+            'messages': [{'role': 'system', 'content':
+                'אתה עוזר בקי ביהדות. jewish=true אם השאלה עוסקת ביהדות: תורה, הלכה, מנהגים, חגים, תפילה, אישים, ספרים '
+                'או היסטוריה יהודית. אם כן, כתוב ב-answer תשובה ישירה, נכונה וקצרה בעברית (עד 4 משפטים), לפי ההלכה '
+                'הספרדית ומנהג ארץ ישראל כברירת מחדל, וציין מחלוקת או מנהג אחר כשיש. אל תמציא מראי מקומות. '
+                'confident=false אם אינך בטוח בתשובה. אם השאלה אינה ביהדות, answer ריק. החזר JSON בלבד.'},
+                {'role': 'user', 'content': question}]}
+    try:
+        with model_slot(timeout) as slot:
+            resp = _post(config.llm_base_url(), '/chat/completions', body, timeout=slot['remaining_s'])
+        reply = json.loads(resp['choices'][0]['message']['content'])
+    except Exception:
+        return None, None
+    answer = _plain(reply.get('answer')) if reply.get('jewish') and reply.get('confident') else None
+    return bool(reply.get('jewish')), (answer or None)
