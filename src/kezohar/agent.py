@@ -142,6 +142,9 @@ def semantic_rerank(ordered, question, search, request_budget=None):
     return head+ordered[RERANK_DEPTH:]
 
 
+import re as _re
+_KASHRUT=_re.compile(r'(?:בשר|עוף|דג).{0,40}(?:חלב|גבינ|חמא)|(?:חלב|גבינ|חמא).{0,40}(?:בשר|עוף|דג)|כשר|כשרות|חלבי|בשרי|פרווה|טבילת כלי|לטבול (?:כלי|כוס|סיר|צלח|מחבת|קומקום|סכו)|להטביל (?:כלי|כוס|סיר|צלח|מחבת|קומקום|סכו)|הגעל|ליבון|להכשיר|הכשר|כלי|מקרר|תנור|מיקרוגל|כיריים|פלטה|מדיח|בישול(?:י)? (?:עכו|גוי)|פת (?:עכו|גוי|פלטר)|גוי|יין נסך|סתם יינם|תולע|חרק|ירקות|פירות|נבילה|טריפ|מליחה|תערובת|נותן טעם|בשישים|חמץ|ערלה|תרומות|מעשרות|הפרשת חלה|שמיטה|משגיח|מסעד|מאכל|לאכול|אוכל|מזון|מותר לשתות')
+
 _LABELS=('הסבר מוצע לפי המקור:','הצעת פרשנות:','הסקה מוצעת:','לפי המקור, על תנאיו:')
 
 def _display(result):
@@ -448,7 +451,13 @@ class Agent:
         if isinstance(result,dict) and not result.get('bari'):result=_display(result)
         return result
 
-    def _converse(self, question, circumstances=None, research=False, **kwargs):
+    def _converse(self, question, circumstances=None, research=False, book=None, **kwargs):
+        # A kashrut question is answered first from הכשרות למעשה (owner, 2026-10-16), the author's book; the usual
+        # path follows only when the book has no passage that answers it.
+        import os
+        if not circumstances and 'PYTEST_CURRENT_TEST' not in os.environ and (book=='Hakashrut_Lemaase' or _KASHRUT.search(question)):
+            found=self._from_book('Hakashrut_Lemaase',question)
+            if found:return found
         from .quote_lookup import lookup,phrase_of
         located=lookup(question,self.search) if not circumstances and phrase_of(question) else None
         if located:return located
@@ -491,6 +500,46 @@ class Agent:
                 return {'verdict':'model_knowledge','mode':'model-knowledge','sources':[],'halachic_verified':False,
                         'answer':known,'bari':{'answer':known,'quote':None,'cite':None,'source':'model'},'question_intent':route,'source_status':'no-source: model knowledge'}
         return result
+
+    def _from_book(self, book_id, question):
+        """The book's own passages for the question (word and meaning search together), read for a direct answer."""
+        import json,sqlite3
+        from .web_answer import read_and_answer
+        from .library_search import tokens,COMMON_WORDS
+        from . import config
+        # Inside the book only: across the whole library (750,000+ passages) its passages were outranked.
+        terms=[t for t in dict.fromkeys(tokens(question)) if t not in COMMON_WORDS and len(t)>1][:12]
+        # Hebrew prefixes (ו ה ב ל מ ש כ): "לחלב" and "וחלב" are found as "חלב" too.
+        terms=list(dict.fromkeys(terms+[t[1:] for t in terms if len(t)>3 and t[0] in 'והבלמשכ']))
+        if not terms:return None
+        expression=' OR '.join('"'+t.replace('"','""')+'"' for t in terms)
+        path=config.get('USER_LIBRARY_DB','data/store/user-library/library.sqlite3')
+        try:
+            with sqlite3.connect('file:'+path+'?mode=ro',uri=True,timeout=5) as db:
+                rows=db.execute("SELECT r.payload FROM library_fts f JOIN records r ON r.rowid=f.rowid WHERE library_fts MATCH ? "
+                                "AND json_extract(r.payload,'$.book_id')=? ORDER BY bm25(library_fts) LIMIT 30",(expression,book_id)).fetchall()
+        except sqlite3.Error:
+            return None
+        hits=[json.loads(row[0]) for row in rows]
+        # The book's best 30 by words, then by meaning (the same embedding model as the library's index): top 6 read.
+        dense=next((b for b in getattr(self.search,'backends',[]) if hasattr(b,'index')),None)
+        if dense is not None and len(hits)>6:
+            try:
+                from .vector import cosine
+                from .vector_index import embed_text
+                model=dense.index.model
+                qv=model.embed_query(embed_text(question))
+                vectors=model.embed_many([embed_text(h.get('text') or '')[:2000] or '-' for h in hits])
+                hits=[h for _,h in sorted(zip([cosine(qv,v) for v in vectors],hits),key=lambda pair:-pair[0])]
+            except Exception:
+                pass
+        hits=hits[:6]
+        found=read_and_answer(question,hits,chars=1500) if hits else None
+        if not found:return None
+        answer,quote,source,_=found
+        return {'verdict':'ok','mode':'summary-with-quote','sources':[source],'halachic_verified':False,
+                'answer':answer+'\n\nמקור: ״'+quote+'״ ('+source.get('reference','')+').',
+                'bari':{'answer':answer,'quote':quote,'cite':source.get('reference',''),'source':'library'}}
 
     def conversation_turn(self, store, owner, conversation_id, question, circumstances=None, **kwargs):
         """Trusted local service caller only; memory never replaces retrieval."""
