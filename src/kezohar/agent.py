@@ -418,7 +418,18 @@ class Agent:
             self.retrieval_cache.put(key,selected)
         return out
 
-    def converse(self, question, circumstances=None, research=False, **kwargs):
+    def converse(self, question, circumstances=None, research=False, history=None, **kwargs):
+        """Every answer, whatever path produced it, passes the one final check (final_check.finish)."""
+        asked=question
+        if history:
+            from .followup import standalone
+            question=standalone(question,history)
+        from .final_check import finish
+        result=finish(question,self._converse(question,circumstances,research,**kwargs)) if not circumstances else self._converse(question,circumstances,research,**kwargs)
+        if isinstance(result,dict) and question!=asked:result['understood_as']=question
+        return result
+
+    def _converse(self, question, circumstances=None, research=False, **kwargs):
         from .quote_lookup import lookup,phrase_of
         located=lookup(question,self.search) if not circumstances and phrase_of(question) else None
         if located:return located

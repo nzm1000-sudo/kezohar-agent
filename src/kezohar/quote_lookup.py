@@ -23,6 +23,11 @@ def phrase_of(question, display=False):
         return None
     phrase = m.group(1).strip().strip('"״\'׳').strip()
     words = hebrew.normalize(phrase).split()
+    # "מי כתב את (ספר) משלי" asks who wrote a book, not where a phrase appears.
+    if re.match(r'^\s*מי\s+(?:כתב|חיבר)', question):
+        work = re.sub(r'^(?:את\s+)?(?:ה?ספר\s+)?', '', phrase).strip('?').strip()
+        if work in TANAKH or len(work.split()) <= 2:
+            return None
     if not 2 <= len(words) <= 12:
         return None
     return phrase if display else ' '.join(words)
@@ -115,6 +120,8 @@ def lookup(question, search):
     if others:
         lines.append('מופיע גם ב: ' + '; '.join(s['reference'] for s in others))
         sources += others
-    return {'verdict': 'fact_supported', 'mode': 'quote-lookup', 'answer': '\n'.join(lines), 'sources': sources,
+    bari = {'answer': lines[0].rstrip(':'), 'quote': best['text'].strip(), 'cite': best['reference'], 'source': 'library',
+            'context': {'quote': context['text'].strip(), 'cite': context['reference']} if context else None}
+    return {'verdict': 'fact_supported', 'mode': 'quote-lookup', 'answer': '\n'.join(lines), 'sources': sources, 'bari': bari,
             'quote_lookup': {'phrase': phrase, 'hits': len(found), 'method': 'exact phrase in local library FTS'},
             'halachic_verified': False, 'human_review': 'not-required-for-location', 'internet_used': False}

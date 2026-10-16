@@ -56,12 +56,13 @@ def limited(client):
     return False
 
 
-def forward(question):
-    req = urllib.request.Request(UPSTREAM + '/demo/ask', data=json.dumps({'question': question, 'top_k': 5}).encode(),
+def forward(question, history=None):
+    req = urllib.request.Request(UPSTREAM + '/demo/ask', data=json.dumps({'question': question, 'top_k': 5, 'turns': history or []}).encode(),
                                  headers={'Content-Type': 'application/json'})
     with urllib.request.urlopen(req, timeout=120) as r:
         result = json.load(r)
     return {'verdict': result.get('verdict'), 'answer': result.get('answer'), 'mode': result.get('mode'), 'bari': result.get('bari'),
+            'understood_as': result.get('understood_as'),
             'halachic_verified': result.get('halachic_verified', False),
             'sources': [{'reference': s.get('reference'), 'attribution': s.get('attribution')}
                         for s in (result.get('sources') or [])[:5] if isinstance(s, dict)]}
@@ -85,9 +86,12 @@ async def ask(request: Request):
         return JSONResponse({'error': 'too many questions, try again soon'}, 429, headers=headers)
     raw = await request.body()
     try:
-        question = json.loads(raw[:4096]).get('question', '') if len(raw) <= 4096 else ''
+        body = json.loads(raw) if len(raw) <= 12288 else {}
     except ValueError:
-        question = ''
+        body = {}
+    question = body.get('question', '') if isinstance(body, dict) else ''
+    history = body.get('history') if isinstance(body, dict) and isinstance(body.get('history'), list) else []
+    history = [{'q': str(t.get('q', ''))[:300], 'a': str(t.get('a', ''))[:600]} for t in history[-4:] if isinstance(t, dict)]
     if not isinstance(question, str) or not question.strip() or len(question) > 500:
         return JSONResponse({'error': 'question required (up to 500 characters)'}, 400, headers=headers)
     if waiting >= QUEUE:
@@ -95,7 +99,7 @@ async def ask(request: Request):
     waiting += 1
     try:
         async with slot:
-            result = await asyncio.get_running_loop().run_in_executor(None, forward, question.strip())
+            result = await asyncio.get_running_loop().run_in_executor(None, forward, question.strip(), history)
     except Exception:
         return JSONResponse({'error': 'agent unavailable'}, 502, headers=headers)
     finally:

@@ -152,6 +152,9 @@ async def ask(request: Request):
         return JSONResponse(api._error('חיפוש אינטרנטי דורש בחירה מפורשת במצב משולב והסכמה לשליחת מונחי נושא בלבד.'),status_code=400)
     # No persistent conversation memory. Web discovery sends closed vocabulary
     # only; the full question/history never leaves for a search service.
+    # Follow-up questions: the recent turns, used only to understand the new question (followup.py).
+    from .followup import clean_history
+    opts['history']=clean_history(body.get('turns') if isinstance(body,dict) else None)
     import asyncio
     event=threading.Event()
     import secrets
