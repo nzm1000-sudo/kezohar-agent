@@ -1,7 +1,7 @@
 """Public gateway: the only door from the internet (via Cloudflare Tunnel) to the local agent.
 
 Listens on 127.0.0.1:8720. Exposes POST /demo/ask and /demo/speak (an answer read aloud) only, requires the app key, limits size and rate per client,
-allows one answer at a time with a short queue, forwards to the loopback agent (127.0.0.1:8711) and returns only
+allows three answers at a time with a short queue, forwards to the loopback agent (127.0.0.1:8711) and returns only
 the answer fields the app shows. Question text is never written to disk or logs.
 """
 import asyncio
@@ -34,7 +34,7 @@ def app_key():
 KEY = app_key()
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 hits = defaultdict(deque)
-slot = asyncio.Semaphore(1)
+slot = asyncio.Semaphore(3)  # cloud models answer in parallel; the agent itself admits at most 4
 waiting = 0
 
 
