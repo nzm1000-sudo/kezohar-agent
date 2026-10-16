@@ -116,6 +116,7 @@ class _Text(HTMLParser):
 
 
 CACHE_DAYS = 30
+BRAVE_MONTHLY_CAP = 900  # free credit is 1,000/month; keep a margin
 
 
 def _cache():
@@ -164,9 +165,10 @@ def _download(url, timeout=8):
 
 def search(question, limit=4, keep=3):
     """Paragraph sources from allowed Torah sites, most relevant first. Empty when no key or nothing allowed."""
-    key = config.get('SERPER_API_KEY', '')
-    # Off by default (owner, 2026-10-16): Serper's 2,500 searches are one-time, not monthly. TORAH_SITES=1 enables it.
-    if not key or config.get('TORAH_SITES', '0') != '1':
+    brave = config.get('BRAVE_API_KEY', '')
+    serper = config.get('SERPER_API_KEY', '') if config.get('TORAH_SITES', '0') == '1' else ''
+    # Brave first (owner, 2026-10-16: $5 free credit monthly = 1,000 searches). Serper's quota is one-time: opt-in only.
+    if not brave and not serper:
         return []
     import time
     db = _cache()
@@ -175,11 +177,22 @@ def search(question, limit=4, keep=3):
     if row and time.time() - row[0] < CACHE_DAYS * 86400:
         results = json.loads(row[1])  # the same question does not spend another search
     else:
-        req = urllib.request.Request('https://google.serper.dev/search', method='POST',
-                                     data=json.dumps({'q': question, 'gl': 'il', 'hl': 'iw', 'num': 10}).encode(),
-                                     headers={'X-API-KEY': key, 'Content-Type': 'application/json'})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            results = json.load(r).get('organic', [])
+        if brave:
+            month = time.strftime('%Y-%m')
+            used = db.execute('SELECT COUNT(*) FROM searches WHERE strftime("%Y-%m", fetched, "unixepoch")=?', (month,)).fetchone()[0]
+            if used >= BRAVE_MONTHLY_CAP:
+                return []  # stay inside the free monthly credit; never billed
+            req = urllib.request.Request('https://api.search.brave.com/res/v1/web/search?' + urllib.parse.urlencode(
+                {'q': question, 'count': 20}),
+                headers={'X-Subscription-Token': brave, 'Accept': 'application/json'})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                results = [{'link': o.get('url')} for o in json.load(r).get('web', {}).get('results', [])]
+        else:
+            req = urllib.request.Request('https://google.serper.dev/search', method='POST',
+                                         data=json.dumps({'q': question, 'gl': 'il', 'hl': 'iw', 'num': 10}).encode(),
+                                         headers={'X-API-KEY': serper, 'Content-Type': 'application/json'})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                results = json.load(r).get('organic', [])
         with db:
             db.execute('INSERT OR REPLACE INTO searches VALUES (?,?,?)', (query, time.time(), json.dumps(results, ensure_ascii=False)))
     # Google's order within the owner's priority groups: Sephardi psak first.
