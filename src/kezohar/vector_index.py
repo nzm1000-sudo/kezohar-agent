@@ -110,11 +110,29 @@ class DenseIndex:
         import numpy as np
         if not self.ids:
             return []
-        q = np.asarray(self.model.embed_query(embed_text(str(query))), dtype=np.float16)
-        scores = self.matrix @ q
+        q = np.asarray(self.model.embed_query(embed_text(str(query))), dtype=np.float32)
+        scores = _scores(self.matrix, q)
         k = min(top_k, len(scores))
         top = np.argpartition(-scores, k - 1)[:k]
         return [(self.ids[i], float(scores[i])) for i in top[np.argsort(-scores[top])]]
+
+
+_POOL = None
+
+
+def _scores(matrix, q, chunk=32768):
+    """matrix @ q for a float16 matrix, in float32 chunks across cores: numpy has no fast float16 path
+    (746k x 1024 measured 1.64 s whole, 0.15 s chunked on 6 threads, identical scores)."""
+    import numpy as np
+    from concurrent.futures import ThreadPoolExecutor
+    global _POOL
+    _POOL = _POOL or ThreadPoolExecutor(6)
+    out = np.empty(len(matrix), dtype=np.float32)
+
+    def part(i):
+        out[i:i + chunk] = matrix[i:i + chunk].astype(np.float32) @ q
+    list(_POOL.map(part, range(0, len(matrix), chunk)))
+    return out
 
 
 class DenseLibrarySearch:

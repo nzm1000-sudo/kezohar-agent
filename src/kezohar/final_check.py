@@ -40,16 +40,22 @@ def finish(question, result):
     text = ((result.get('bari') or {}).get('answer') or result.get('answer') or '').strip()
     if not text or answers(question, text) is not False:
         return result
+    from concurrent.futures import ThreadPoolExecutor
     from .web_answer import read_and_answer, model_answer
     sources = [s for s in result.get('sources', []) if isinstance(s, dict) and s.get('text')][:3]
-    found = read_and_answer(question, sources, chars=1500) if sources else None
+    # Re-reading the sources and the model's own answer run at the same time (they were 2 s + 4 s in a row); the
+    # sourced answer wins when it holds.
+    with ThreadPoolExecutor(2) as pool:
+        reread = pool.submit(read_and_answer, question, sources, chars=1500) if sources else None
+        known_future = pool.submit(model_answer, question)
+        found = reread.result() if reread else None
+        jewish, known = known_future.result()
     if found:
         answer, quote, source, _ = found
         result.update(answer=answer + '\n\nמקור: ״' + quote + '״ (' + source.get('reference', '') + ').',
                       mode='summary-with-quote', final_check='reread',
                       bari={'answer': answer, 'quote': quote, 'cite': source.get('reference', ''), 'source': 'library'})
         return result
-    jewish, known = model_answer(question)
     if known:
         return {'verdict': 'model_knowledge', 'mode': 'model-knowledge', 'sources': [], 'halachic_verified': False,
                 'answer': known, 'bari': {'answer': known, 'quote': None, 'cite': None, 'source': 'model'},

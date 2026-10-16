@@ -101,7 +101,8 @@ class _PinnedHTTPS(http.client.HTTPSConnection):
 
 class PublicApiTransport:
     """No proxies/cookies/redirects/JS; DNS rebinding cannot change target IP."""
-    host_locks={host:threading.Lock() for host in SITES}
+    # Up to three requests at a time to one site (owner, 2026-10-16: speed); each site still sees a gentle rate.
+    host_locks={host:threading.BoundedSemaphore(3) for host in SITES}
     host_last={}
     host_cooldown={}
     def __init__(self,timeout=8,max_requests=18,catalog_metadata=False):
@@ -115,12 +116,20 @@ class PublicApiTransport:
     def json(self,url,payload=None,request_budget=None,_html=False):
         host=urllib.parse.urlsplit(canonical_url(url)).hostname
         if SITES[host]['access']!=('public-html' if _html else 'official-api'):raise ResearchError('access policy pending')
+        # A repeated public lookup is answered from the local cache (web_cache.py: 7 days, 300 MB cap).
+        from . import web_cache
+        cache_key=web_cache.key(canonical_url(url),payload,_html)
+        cached=web_cache.get(cache_key)
+        if cached is not None:return cached
         lock=self.host_locks[host]
         if request_budget:request_budget.check('public API queue')
         if not lock.acquire(timeout=min(self.timeout,request_budget.remaining()) if request_budget else self.timeout):
             raise ResearchError('site request queue timed out')
-        try:return self._json(url,payload,request_budget,_html=_html) if _html else self._json(url,payload,request_budget)
+        try:result=self._json(url,payload,request_budget,_html=_html) if _html else self._json(url,payload,request_budget)
         finally:lock.release()
+        try:web_cache.put(cache_key,result)
+        except Exception:pass  # a full or locked cache never fails a lookup
+        return result
     def html(self,url,request_budget=None):
         from .torat_emet import checked_url
         return self.json(checked_url(url),request_budget=request_budget,_html=True)
@@ -134,7 +143,7 @@ class PublicApiTransport:
         ips=list(dict.fromkeys(a[4][0] for a in addresses))
         if not ips or any(not ipaddress.ip_address(ip).is_global for ip in ips):
             raise ResearchError('non-public DNS target blocked')
-        delay=max(0,1-(time.monotonic()-self.last.get(p.hostname,0)))
+        delay=max(0,0.2-(time.monotonic()-self.last.get(p.hostname,0)))  # was 1 s: 5 requests/s per site at most
         if request_budget and delay>=request_budget.remaining():raise ResearchError('rate limit exceeds budget')
         if delay:time.sleep(delay)
         if request_budget:request_budget.check('public API request')

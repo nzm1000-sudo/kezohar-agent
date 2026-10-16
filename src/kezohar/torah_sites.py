@@ -136,7 +136,7 @@ def _clean_title(title):
     return re.sub(r'\s+', ' ', title).strip(' -|·')
 
 
-def _fetch(url, timeout=8):
+def _fetch(url, timeout=3):
     """Page text, from the local store when read in the last CACHE_DAYS (no repeated downloads)."""
     import time
     db = _cache()
@@ -155,7 +155,7 @@ def _fetch(url, timeout=8):
     return page
 
 
-def _jina(url, timeout=20):
+def _jina(url, timeout=6):
     """Clean page text via Jina Reader (free key); only for allowed sites."""
     key = config.get('JINA_API_KEY', '')
     if not key or not allowed(url):
@@ -170,7 +170,7 @@ def _jina(url, timeout=20):
     return _clean_title(data.get('title', '')), [clean_web_text(re.sub(r'\s+', ' ', p)) for p in (data.get('content') or '').split('\n')]
 
 
-def _download(url, timeout=8):
+def _download(url, timeout=3):
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (KezoharAgent; Torah study)'})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         if not allowed(r.geturl()) or 'html' not in (r.headers.get('Content-Type') or ''):
