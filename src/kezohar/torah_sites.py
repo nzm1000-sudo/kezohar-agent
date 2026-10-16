@@ -155,7 +155,7 @@ def _fetch(url, timeout=3):
     return page
 
 
-def _jina(url, timeout=6):
+def _jina(url, timeout=3):
     """Clean page text via Jina Reader (free key); only for allowed sites."""
     key = config.get('JINA_API_KEY', '')
     if not key or not allowed(url):
@@ -222,11 +222,17 @@ def search(question, limit=4, keep=3):
     urls = sorted(urls, key=lambda u: SITES[site_of(u)][1])[:limit]
     words = [w for w in hebrew.normalize(question).split() if len(w) > 2]
     sources = []
-    for url in urls:
+    # The pages are read at the same time (each has its own 3 s limit), then used in their ranked order.
+    from concurrent.futures import ThreadPoolExecutor
+
+    def fetch(url):
         try:
-            page = _fetch(url)
+            return _fetch(url)
         except Exception:
-            continue
+            return None
+    with ThreadPoolExecutor(4) as pool:
+        pages = list(pool.map(fetch, urls))
+    for url, page in zip(urls, pages):
         if not page:
             continue
         title, paragraphs = page

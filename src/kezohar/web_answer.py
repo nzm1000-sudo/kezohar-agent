@@ -107,37 +107,50 @@ def _article_paragraphs(encyclopedia, title, question, budget, keep=4):
 
 
 def _gather(question, route, budget, discovered):
+    """Torah sites, the encyclopedia and Sefaria are independent: they are searched at the same time, and each one's
+    pages are read at the same time (owner, 2026-10-16: ~15 s of one-after-another lookups). The order of the
+    sources is kept: Torah sites first, then the encyclopedia, then Sefaria."""
+    from concurrent.futures import ThreadPoolExecutor
     from .jewish_encyclopedia import JewishEncyclopediaEngine
-    sources, errors = [], []
-    # Contemporary poskim on approved Torah sites first: practical questions of today are answered there, and
-    # appended last they were cut by the passage cap or the time budget.
-    try:
-        from .torah_sites import search as torah_sites
-        sources += torah_sites(question)[:6]
-    except Exception as exc:
-        errors.append({'stage': 'web-answer-torah-sites', 'error': type(exc).__name__})
-    encyclopedia = JewishEncyclopediaEngine()
-    try:
-        for title in encyclopedia.search(route, budget, limit=2):
-            try:
-                sources += _article_paragraphs(encyclopedia, title, question, budget)
-            except Exception as exc:
-                errors.append({'stage': 'web-answer-read', 'error': type(exc).__name__})
-    except Exception as exc:
-        errors.append({'stage': 'web-answer-search', 'error': type(exc).__name__})
-    # Sefaria full text: halachic and textual questions are answered from primary works, not the encyclopedia.
     from .jewish_web import JewishKnowledgeWebSearch
-    web = JewishKnowledgeWebSearch()
-    try:
-        for url in web.search(question, route, budget, limit=4):
+    errors = []
+
+    def each(items, read, stage):
+        with ThreadPoolExecutor(4) as pool:
+            futures = [pool.submit(read, item) for item in items]
+        out = []
+        for future in futures:
             try:
-                source = web.read(url, budget)
-                if source:
-                    sources.append(source)
+                got = future.result()
+                out += got if isinstance(got, list) else [got] if got else []
             except Exception as exc:
-                errors.append({'stage': 'web-answer-sefaria-read', 'error': type(exc).__name__})
-    except Exception as exc:
-        errors.append({'stage': 'web-answer-sefaria-search', 'error': type(exc).__name__})
+                errors.append({'stage': stage, 'error': type(exc).__name__})
+        return out
+
+    def sites():
+        # Contemporary poskim on approved Torah sites first: practical questions of today are answered there.
+        from .torah_sites import search as torah_sites
+        return torah_sites(question)[:6]
+
+    def encyclopedia():
+        engine = JewishEncyclopediaEngine()
+        return each(engine.search(route, budget, limit=2),
+                    lambda title: _article_paragraphs(engine, title, question, budget), 'web-answer-read')
+
+    def sefaria():
+        # Sefaria full text: halachic and textual questions are answered from primary works.
+        web = JewishKnowledgeWebSearch()
+        return each(web.search(question, route, budget, limit=4), lambda url: web.read(url, budget), 'web-answer-sefaria-read')
+
+    with ThreadPoolExecutor(3) as pool:
+        groups = [(pool.submit(fn), stage) for fn, stage in
+                  ((sites, 'web-answer-torah-sites'), (encyclopedia, 'web-answer-search'), (sefaria, 'web-answer-sefaria-search'))]
+    sources = []
+    for future, stage in groups:
+        try:
+            sources += future.result()
+        except Exception as exc:
+            errors.append({'stage': stage, 'error': type(exc).__name__})
     seen = {s['source_id'] for s in sources}
     sources += [s for s in discovered if s.get('source_id') not in seen and s.get('text')][:4]
     return sources[:14], errors

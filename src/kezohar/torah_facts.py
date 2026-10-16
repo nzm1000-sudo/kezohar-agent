@@ -94,6 +94,22 @@ class TorahFactAnswerEngine:
         if root.resolve()!=project and project not in root.resolve().parents:raise ValueError('knowledge storage must remain inside agent project')
         self.store=FactSourceStore(root/'source-units.sqlite3');self.graph=TorahEntityGraph(root/'entities.sqlite3')
         self.current={};self.fresh=set();self.conflicted=set();self.web=None;self.encyclopedia=None;self.used_web=False;self.errors=[]
+    @staticmethod
+    def _read_all(items,read):
+        """[(item, document or the exception)] in the items' order; the reads run at the same time (owner, 2026-10-16:
+        these lookups ran one after another)."""
+        from concurrent.futures import ThreadPoolExecutor
+        items=list(items)
+        def safe(item):
+            try:return read(item)
+            except Exception as exc:return exc
+        with ThreadPoolExecutor(4) as pool:return list(zip(items,pool.map(safe,items)))
+
+    def _remember_all(self,items,read):
+        for _,doc in self._read_all(items,read):
+            if isinstance(doc,Exception):raise doc
+            self.remember(doc)
+
     def remember(self,s):
         if s is None or not admissible(s):return
         meta=s.get('metadata',{})
@@ -276,7 +292,7 @@ class TorahFactAnswerEngine:
         if (route.get('definition_request') or {}).get('id') and not local_definition_ready and route.get('export_allowed') is not False:
             self.used_web=True
             try:
-                for title in self.encyclopedia.search(route,budget):self.remember(self.encyclopedia.read(title,budget))
+                self._remember_all(self.encyclopedia.search(route,budget),lambda title:self.encyclopedia.read(title,budget))
                 local_definition_ready=has_definition()
             except (OSError,ValueError,ResearchError) as exc:self.errors.append({'stage':'definition-discovery','error':type(exc).__name__})
         from .identity_answers import resolve_identity
@@ -310,7 +326,7 @@ class TorahFactAnswerEngine:
         if route.get('export_allowed') is not False and not (local_definition_ready and route['complexity']!='deep'):
             encyclopedia_tried=True;self.used_web=True
             try:
-                for title in self.encyclopedia.search(route,budget):self.remember(self.encyclopedia.read(title,budget))
+                self._remember_all(self.encyclopedia.search(route,budget),lambda title:self.encyclopedia.read(title,budget))
                 identity=resolve_identity(self,route,budget)
                 if identity and not self.unqualified_single_identity(route):return identity
                 answer=self.render_facts(self.facts(route,budget),route,budget)
@@ -318,16 +334,17 @@ class TorahFactAnswerEngine:
             except Exception as exc:self.errors.append({'stage':'encyclopedia-first','error':type(exc).__name__})
         if knowledge_queries(question,route) and not (local_definition_ready and route['complexity']!='deep' and not route.get('explicit_web_requested')):
             self.used_web=True
-            for url in self.web.search(question,route,budget,limit=6):
-                try:self.remember(self.web.read(url,budget))
-                except Exception as exc:self.errors.append({'stage':'knowledge-web-read','error':type(exc).__name__})
+            # The pages are read at the same time; they are then taken in order, with the same early answer check.
+            for url,doc in self._read_all(self.web.search(question,route,budget,limit=6),lambda url:self.web.read(url,budget)):
+                if isinstance(doc,Exception):self.errors.append({'stage':'knowledge-web-read','error':type(doc).__name__})
+                else:self.remember(doc)
                 identity=resolve_identity(self,route,budget)
                 if identity and not self.unqualified_single_identity(route):return identity
                 answer=self.render_facts(self.facts(route,budget),route,budget)
                 if answer:return answer
             if not encyclopedia_tried:
                 try:
-                    for title in self.encyclopedia.search(route,budget):self.remember(self.encyclopedia.read(title,budget))
+                    self._remember_all(self.encyclopedia.search(route,budget),lambda title:self.encyclopedia.read(title,budget))
                     answer=self.render_facts(self.facts(route,budget),route,budget)
                     if answer:return answer
                 except Exception as exc:self.errors.append({'stage':'encyclopedia','error':type(exc).__name__})

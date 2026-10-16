@@ -11,7 +11,7 @@ from . import config
 from .llm import _post, LLMUnavailable
 
 GATED_VERDICTS = {'ok'}
-MAX_CANDIDATES = 6
+MAX_CANDIDATES = 4  # each passage costs output tokens (a topic line per passage); 6 made the call ~5.6 s
 SCHEMA = {'type': 'object', 'properties': {
     'asked_action': {'type': 'string'},
     'per_passage': {'type': 'array', 'items': {'type': 'object', 'properties': {
@@ -26,7 +26,7 @@ SCHEMA = {'type': 'object', 'properties': {
 # Field order makes the model state the asked action and each passage's actual topic before choosing;
 # without it, a shared word ("משחק" vs "שחקי סמנין") was accepted as a match.
 PROMPT = ('אתה בודק רלוונטיות של מקורות תורניים. שלב 1: כתוב ב-asked_action במילים פשוטות איזה מעשה בדיוק נשאל '
-          '(למשל: משחק קלפים בשבת). שלב 2: לכל קטע כתוב ב-topic במה הוא עוסק בפועל, ו-same_action=true רק אם הוא עוסק '
+          '(למשל: משחק קלפים בשבת). שלב 2: לכל קטע כתוב ב-topic בשלוש-ארבע מילים במה הוא עוסק בפועל, ו-same_action=true רק אם הוא עוסק '
           'באותו מעשה בדיוק. מילה זהה במשמעות אחרת אינה אותו מעשה. שלב 3: source_id = מזהה הקטע שעוסק באותו מעשה ועונה '
           'הכי ישירות, או null. '
           'שלב 4 (רק אם בחרת קטע): העתק ממנו ב-quote משפט אחד מילה במילה שאומר את התשובה; quote_states_the_answer=true רק '

@@ -24,6 +24,10 @@ def rebuild_fts(connection):
             INSERT INTO library_fts(rowid,source_id,normalized_text) VALUES(new.rowid,new.id, json_extract(new.payload, '$.normalized_text')); END""")
 
 
+COMMON_WORDS = frozenset('את של על מה זה זו זאת הוא היא הם הן לא כי אם גם או עם אל כל יש אין אשר כמו מן עד רק כן אך אבל '
+                          'לו לה בו בה ממנו אותו אותה הזה הזאת היה היתה היו להיות שם לי לך'.split())
+
+
 class SQLiteLibrarySearch:
     def __init__(self, path, locator_overlay=None):
         self.path = Path(path).resolve()
@@ -64,6 +68,9 @@ class SQLiteLibrarySearch:
     def search(self, query, top_k=5, request_budget=None):
         if request_budget:request_budget.check('SQLite retrieval')
         terms = list(dict.fromkeys(tokens(query)))
+        # Words in almost every passage ("את" is in 121,011 of 746,218) find nothing and made one search rank them
+        # all: 1.14 s with "את", 0.05 s without, 8 of the same top 10. Kept when the question has nothing else.
+        terms = [t for t in terms if t not in COMMON_WORDS] or terms
         if not terms or not self.path.exists() or top_k<1:
             return []
         # MATCH expression is constructed from quoted tokens; SQL values are bound.
