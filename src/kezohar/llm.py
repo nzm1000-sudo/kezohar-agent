@@ -65,6 +65,7 @@ def _post(base_url, path, body, timeout=60, stream=False):
     """Chat calls go to the configured cloud models (owner decisions 2026-10-16), in order, then to the local
     LM Studio model as a last resort; other calls are unchanged."""
     from . import config
+    attempts = []
     if path == '/chat/completions' and not stream and config.get('CLOUD_LLM', '1') != '0':
         attempts = _cloud_attempts(body)
         deadline = time.time() + timeout
@@ -89,6 +90,11 @@ def _post(base_url, path, body, timeout=60, stream=False):
     clean = {k: v for k, v in body.items() if not k.startswith('_')}  # internal hints never reach a server
     if not stream:
         try:
+            if attempts:
+                # The local model (last resort after the cloud) keeps its single slot across threads and processes.
+                from .model_gate import local_slot
+                with local_slot(timeout) as slot:
+                    return _send(base_url.rstrip("/") + path, clean, slot['remaining_s'])
             return _send(base_url.rstrip("/") + path, clean, timeout)
         except LLMUnavailable:
             groq = _cloud_attempts(body, 'groq') if path == '/chat/completions' else []
