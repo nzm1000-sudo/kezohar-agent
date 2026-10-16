@@ -29,12 +29,12 @@ class LLMUnavailable(Exception):
 class LocalModelBusy(LLMUnavailable):
     pass
 
-def _cloud_attempts(body):
+def _cloud_attempts(body, order=None):
     """(url, key, model, request-body) in order: OpenAI, then Gemini, for each provider whose key is set.
     CLOUD_ORDER (default 'openai,gemini') sets the provider order."""
     from . import config
     attempts = []
-    for provider in config.get('CLOUD_ORDER', 'openai,gemini').split(','):
+    for provider in (order or config.get('CLOUD_ORDER', 'openai,gemini')).split(','):
         provider = provider.strip()
         if provider == 'openai' and config.get('OPENAI_API_KEY', ''):
             # Owner decision 2026-10-16: gpt-6-luna (~3s, strict JSON schema, $0.10/$0.50 per 1M tokens).
@@ -53,6 +53,11 @@ def _cloud_attempts(body):
                 out = {k: v for k, v in dict(body, model=model, reasoning_effort='low').items() if not k.startswith('_')}
                 attempts.append(('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
                                  config.get('GEMINI_API_KEY'), out))
+        if provider == 'groq' and config.get('GROQ_API_KEY', ''):
+            # Free tier, 0.3s, but weak Jewish knowledge (tested 2026-10-16): used only after local Qwen fails.
+            out = {k: v for k, v in body.items() if not k.startswith('_')}
+            out.update(model=config.get('GROQ_MODEL', 'openai/gpt-oss-120b'), reasoning_effort='low')
+            attempts.append(('https://api.groq.com/openai/v1/chat/completions', config.get('GROQ_API_KEY'), out))
     return attempts
 
 
@@ -81,9 +86,17 @@ def _post(base_url, path, body, timeout=60, stream=False):
             timeout = max(1, deadline - time.time())
             base_url = config.get('LOCAL_LLM_BASE_URL', 'http://127.0.0.1:1234/v1')  # last resort: local Qwen
             body = dict(body, model=config.get('LOCAL_LLM_MODEL', 'qwen/qwen3.5-35b-a3b'))
-    body = {k: v for k, v in body.items() if not k.startswith('_')}  # internal hints never reach a server
+    clean = {k: v for k, v in body.items() if not k.startswith('_')}  # internal hints never reach a server
     if not stream:
-        return _send(base_url.rstrip("/") + path, body, timeout)
+        try:
+            return _send(base_url.rstrip("/") + path, clean, timeout)
+        except LLMUnavailable:
+            groq = _cloud_attempts(body, 'groq') if path == '/chat/completions' else []
+            if not groq:
+                raise
+            url, key, groq_body = groq[0]
+            return _send(url, groq_body, 30, {'Authorization': 'Bearer ' + key})
+    body = clean
     url = base_url.rstrip("/") + path
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data, {"Content-Type": "application/json"})
@@ -102,7 +115,7 @@ def _post(base_url, path, body, timeout=60, stream=False):
 
 
 def _send(url, body, timeout, headers=None):
-    req = urllib.request.Request(url, json.dumps(body).encode("utf-8"), {"Content-Type": "application/json", **(headers or {})})
+    req = urllib.request.Request(url, json.dumps(body).encode("utf-8"), {"Content-Type": "application/json", "User-Agent": "kezohar-agent/1.0", **(headers or {})})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode("utf-8"))

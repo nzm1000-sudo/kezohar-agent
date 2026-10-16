@@ -143,11 +143,30 @@ def _fetch(url, timeout=8):
     row = db.execute('SELECT fetched, title, paragraphs FROM pages WHERE url=?', (url,)).fetchone()
     if row and time.time() - row[0] < CACHE_DAYS * 86400:
         return row[1], json.loads(row[2])
-    page = _download(url, timeout)
+    try:
+        page = _download(url, timeout)
+    except Exception:
+        page = None
+    if not page or sum(len(p) for p in page[1]) < 300:
+        page = _jina(url) or page  # pages built by JavaScript come back empty from a plain download
     if page:
         with db:
             db.execute('INSERT OR REPLACE INTO pages VALUES (?,?,?,?)', (url, time.time(), page[0], json.dumps(page[1], ensure_ascii=False)))
     return page
+
+
+def _jina(url, timeout=20):
+    """Clean page text via Jina Reader (free key); only for allowed sites."""
+    key = config.get('JINA_API_KEY', '')
+    if not key or not allowed(url):
+        return None
+    req = urllib.request.Request('https://r.jina.ai/' + url, headers={'Authorization': 'Bearer ' + key, 'Accept': 'application/json'})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.load(r).get('data', {})
+    except Exception:
+        return None
+    return _clean_title(data.get('title', '')), [re.sub(r'\s+', ' ', p).strip() for p in (data.get('content') or '').split('\n')]
 
 
 def _download(url, timeout=8):
