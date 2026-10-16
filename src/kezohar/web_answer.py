@@ -210,9 +210,15 @@ def summarize(question, result, timeout=35, ask=None):
     """
     # Only the passage the pipeline and the relevance gate chose: given three, the model once preferred a diaspora
     # source over the cited Yalkut Yosef for Israel (טל ומטר). Summarizing must not re-select.
-    cited = ((result.get('answer_gate') or {}).get('cited') or [])
+    gate = result.get('answer_gate') or {}
+    cited = ([gate['chosen']] if gate.get('chosen') else []) + (gate.get('cited') or [])
     by_id = {s.get('source_id'): s for s in result.get('sources', []) if s.get('text')}
     sources = [by_id[i] for i in cited if i in by_id][:1] or [s for s in result.get('sources', []) if s.get('text')][:1]
+    # The relevance gate already read the chosen passage in its own call: reuse that reading (one call, not two).
+    # It passes through read_and_answer's checks all the same (verbatim quote, length, completeness).
+    reading = (result.get('answer_gate') or {}).get('reading')
+    if ask is None and reading and sources and reading.get('quote'):
+        ask = lambda *_: dict(reading, source_index=0, asked='')
     found = read_and_answer(question, sources, timeout=timeout, ask=ask, chars=1500)
     if not found:
         return result
