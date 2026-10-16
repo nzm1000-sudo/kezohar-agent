@@ -23,6 +23,18 @@ ORIGINS = {'https://nzm1000-sudo.github.io', 'capacitor://localhost', 'https://l
 PER_MINUTE, PER_DAY, QUEUE = 6, 150, 3
 
 
+TIMING = ROOT / 'data/store/gateway-timing.log'
+
+
+def timing(kind, status, started, turns=0):
+    """Duration only, to see where waiting goes — never the question, the answer or the client."""
+    try:
+        with open(TIMING, 'a') as log:
+            log.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {kind} {status} {round((time.time() - started) * 1000)}ms turns={turns}\n")
+    except OSError:
+        pass
+
+
 def app_key():
     if not KEY_FILE.exists():
         KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -95,15 +107,19 @@ async def ask(request: Request):
     if not isinstance(question, str) or not question.strip() or len(question) > 500:
         return JSONResponse({'error': 'question required (up to 500 characters)'}, 400, headers=headers)
     if waiting >= QUEUE:
+        timing('ask', 503, time.time(), len(history))
         return JSONResponse({'error': 'busy, try again in a minute'}, 503, headers=headers)
     waiting += 1
+    started = time.time()
     try:
         async with slot:
             result = await asyncio.get_running_loop().run_in_executor(None, forward, question.strip(), history)
     except Exception:
+        timing('ask', 502, started, len(history))
         return JSONResponse({'error': 'agent unavailable'}, 502, headers=headers)
     finally:
         waiting -= 1
+    timing('ask', 200, started, len(history))
     return JSONResponse(result, headers=headers)
 
 

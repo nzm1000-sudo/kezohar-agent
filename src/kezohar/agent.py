@@ -142,6 +142,24 @@ def semantic_rerank(ordered, question, search, request_budget=None):
     return head+ordered[RERANK_DEPTH:]
 
 
+_LABELS=('הסבר מוצע לפי המקור:','הצעת פרשנות:','הסקה מוצעת:','לפי המקור, על תנאיו:')
+
+def _display(result):
+    """What the app shows (owner, 2026-10-16): the answer alone, without technical labels or a trailing "(reference)."
+    — the reference moves to the source box. The full answer stays in result['answer']."""
+    import re
+    text=(result.get('answer') or '').strip()
+    if not text or result.get('verdict') in ('out_of_scope','clarify'):return result
+    for label in _LABELS:text=text.replace(label,'').strip()
+    cite=None
+    m=re.match(r'^(.*?[^\s])\s*\(([^()]{3,200})\)\.?\s*$',text,re.S)
+    if m and ('·' in m.group(2) or re.search(r'פרק|סימן|דף|פסוק|סעיף|ויקיפדיה|מדרש|משנה|תלמוד|הלכות|[א-ת]״[א-ת]|[א-ת]׳?:[א-ת]',m.group(2))):
+        text,cite=m.group(1).rstrip(' .')+'.',m.group(2).strip()
+    if text!=(result.get('answer') or '').strip():
+        result['bari']={'answer':text,'quote':None,'cite':cite,'source':'library' if cite else 'model'}
+    return result
+
+
 class Agent:
     def __init__(self, sources=None, store_path=None, base_url=None, model=None, research_engine=None,
                  knowledge=None, search_engine=None, answer_model=None, source_verifier=None, source_graph=None):
@@ -427,6 +445,7 @@ class Agent:
         from .final_check import finish
         result=finish(question,self._converse(question,circumstances,research,**kwargs)) if not circumstances else self._converse(question,circumstances,research,**kwargs)
         if isinstance(result,dict) and question!=asked:result['understood_as']=question
+        if isinstance(result,dict) and not result.get('bari'):result=_display(result)
         return result
 
     def _converse(self, question, circumstances=None, research=False, **kwargs):

@@ -412,6 +412,13 @@ class TorahFactAnswerEngine:
                     if route.get('definition_request'):
                         lines.append('מקור: '+'; '.join(dict.fromkeys(e['reference'] for c in claims for e in c['evidence'])))
                     result=self.result('\n'.join(lines),sources,route,budget,kind='source-linked-explanation',quotes=quotes)
+                    # What the app shows (owner, 2026-10-16): the statements alone — no "הסבר מוצע לפי המקור:" label and
+                    # no references in parentheses; the quotation and its reference go in the source box below.
+                    first=next((e for c in claims for e in c['evidence'] if e.get('quote')),None)
+                    result['bari']={'answer':' '.join(c['statement'].strip() for c in claims),
+                                    'quote':first['quote'] if first else None,
+                                    'cite':'; '.join(dict.fromkeys(e['reference'] for c in claims for e in c['evidence'])) or None,
+                                    'source':'library'}
                     result.update(verdict='knowledge_explanation',answer_complete=False,claims=claims,
                         claim_generation={'model':generated.get('model'),'finish_reason':generated.get('finish_reason')})
                     result['claim_status']={'removed':removed,'partial':bool(removed),
