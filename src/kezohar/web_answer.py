@@ -136,6 +136,7 @@ def answer(question, route, budget=None, discovered=(), timeout=35, ask=None):
     if ask is None and practical and not same_act(question, source):
         return None  # the act check fits practical halacha; identity/knowledge answers keep the quote check
     return {'verdict': 'fact_supported', 'mode': 'web-quote-answer',
+            'bari': {'answer': text, 'quote': quote, 'cite': source.get('reference', ''), 'source': 'web'},
             'answer': text + '\n״' + quote + '״ (' + source.get('reference', '') + ').',
             'sources': [source], 'internet_used': True, 'halachic_verified': False,
             'web_answer': {'asked': str(reply.get('asked', ''))[:200], 'quote_verified': True, 'semantic_entailment_verified': False, 'errors': errors,
@@ -182,6 +183,7 @@ def summarize(question, result, timeout=35, ask=None):
     text, quote, source, reply = found
     result['source_answer'] = result.get('answer')
     result['answer'] = text + '\n\nמקור: ״' + quote + '״ (' + source.get('reference', '') + ').'
+    result['bari'] = {'answer': text, 'quote': quote, 'cite': source.get('reference', ''), 'source': 'library'}
     result['mode'] = 'summary-with-quote'
     result['summary'] = {'asked': str(reply.get('asked', ''))[:200], 'quote_verified': True,
                          'semantic_entailment_verified': False, 'source_id': source.get('source_id')}
@@ -242,7 +244,7 @@ def model_answer(question, timeout=30):
                 'אתה עוזר בקי ביהדות. jewish=true אם השאלה עוסקת ביהדות: תורה, הלכה, מנהגים, חגים, תפילה, אישים, ספרים '
                 'או היסטוריה יהודית. אם כן, כתוב ב-answer תשובה ישירה, נכונה וקצרה בעברית (עד 4 משפטים), לפי ההלכה '
                 'הספרדית ומנהג ארץ ישראל כברירת מחדל, וציין מחלוקת או מנהג אחר כשיש. אל תמציא מראי מקומות. '
-                'confident=false אם אינך בטוח בתשובה. אם השאלה אינה ביהדות, answer ריק. החזר JSON בלבד.'},
+                'שאלה עם שגיאת כתיב או ניסוח לא מדויק: הבן את הכוונה הסבירה וענה עליה. confident=false רק אם אינך יודע את התשובה. אם השאלה אינה ביהדות, answer ריק. החזר JSON בלבד.'},
                 {'role': 'user', 'content': question}]}
     try:
         with model_slot(timeout) as slot:
