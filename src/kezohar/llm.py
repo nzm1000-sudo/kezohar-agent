@@ -31,10 +31,10 @@ class LocalModelBusy(LLMUnavailable):
 
 def _cloud_attempts(body, order=None):
     """(url, key, model, request-body) in order: OpenAI, then Gemini, for each provider whose key is set.
-    CLOUD_ORDER (default 'openai,gemini') sets the provider order."""
+    CLOUD_ORDER (default 'openai,gemini,anthropic') sets the provider order."""
     from . import config
     attempts = []
-    for provider in (order or config.get('CLOUD_ORDER', 'openai,gemini')).split(','):
+    for provider in (order or config.get('CLOUD_ORDER', 'openai,gemini,anthropic')).split(','):
         provider = provider.strip()
         if provider == 'openai' and config.get('OPENAI_API_KEY', ''):
             # Owner decision 2026-10-16: gpt-6-luna (~3s, strict JSON schema, $0.10/$0.50 per 1M tokens).
