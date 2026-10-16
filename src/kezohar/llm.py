@@ -53,12 +53,38 @@ def _cloud_attempts(body, order=None):
                 out = {k: v for k, v in dict(body, model=model, reasoning_effort='low').items() if not k.startswith('_')}
                 attempts.append(('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
                                  config.get('GEMINI_API_KEY'), out))
+        if provider == 'anthropic' and config.get('ANTHROPIC_API_KEY', ''):
+            # Claude (owner's Anthropic credit, 2026-10-16); translated to the Messages API in _post.
+            out = {k: v for k, v in body.items() if not k.startswith('_')}
+            out['model'] = config.get('ANTHROPIC_MODEL', 'claude-haiku-5-5')
+            attempts.append(('https://api.anthropic.com/v1/messages', config.get('ANTHROPIC_API_KEY'), out))
         if provider == 'groq' and config.get('GROQ_API_KEY', ''):
             # Free tier, 0.3s, but weak Jewish knowledge (tested 2026-10-16): used only after local Qwen fails.
             out = {k: v for k, v in body.items() if not k.startswith('_')}
             out.update(model=config.get('GROQ_MODEL', 'openai/gpt-oss-120b'), reasoning_effort='low')
             attempts.append(('https://api.groq.com/openai/v1/chat/completions', config.get('GROQ_API_KEY'), out))
     return attempts
+
+
+def _anthropic(body, key, timeout):
+    """An OpenAI-style chat request through Claude's Messages API; the reply is returned in OpenAI's shape.
+    A JSON-schema answer is asked for as one forced tool call, whose input is the JSON."""
+    system = '\n'.join(m['content'] for m in body.get('messages', []) if m.get('role') == 'system')
+    messages = [{'role': m['role'], 'content': m['content']} for m in body.get('messages', []) if m.get('role') in ('user', 'assistant')]
+    req = {'model': body['model'], 'max_tokens': min(int(body.get('max_tokens') or 1024), 8000), 'messages': messages,
+           'temperature': body.get('temperature', 0)}
+    if system:
+        req['system'] = system
+    schema = ((body.get('response_format') or {}).get('json_schema') or {}).get('schema')
+    if schema:
+        req['tools'] = [{'name': 'answer', 'description': 'Return the answer in this exact structure.', 'input_schema': schema}]
+        req['tool_choice'] = {'type': 'tool', 'name': 'answer'}
+    resp = _send('https://api.anthropic.com/v1/messages', req, timeout, {'x-api-key': key, 'anthropic-version': '2023-06-01'})
+    blocks = resp.get('content') or []
+    tool = next((b for b in blocks if b.get('type') == 'tool_use'), None)
+    text = json.dumps(tool['input'], ensure_ascii=False) if tool else ''.join(b.get('text', '') for b in blocks if b.get('type') == 'text')
+    return {'model': resp.get('model'), 'choices': [{'message': {'role': 'assistant', 'content': text}, 'finish_reason': resp.get('stop_reason')}],
+            'usage': {'prompt_tokens': (resp.get('usage') or {}).get('input_tokens'), 'completion_tokens': (resp.get('usage') or {}).get('output_tokens')}}
 
 
 def _post(base_url, path, body, timeout=60, stream=False):
@@ -74,7 +100,8 @@ def _post(base_url, path, body, timeout=60, stream=False):
             if remaining <= 2:
                 break
             try:
-                resp = _send(url, cloud_body, remaining, {'Authorization': 'Bearer ' + key})
+                resp = (_anthropic(cloud_body, key, remaining) if 'api.anthropic.com' in url
+                        else _send(url, cloud_body, remaining, {'Authorization': 'Bearer ' + key}))
                 if isinstance(resp, list):
                     resp = resp[0]
                 if resp.get('choices'):
