@@ -90,7 +90,7 @@ async def ask(request: Request):
     except ValueError:
         body = {}
     question = body.get('question', '') if isinstance(body, dict) else ''
-    history = body.get('history') if isinstance(body, dict) and isinstance(body.get('history'), list) else []
+    history = body.get('turns') if isinstance(body, dict) and isinstance(body.get('turns'), list) else []
     history = [{'q': str(t.get('q', ''))[:300], 'a': str(t.get('a', ''))[:600]} for t in history[-4:] if isinstance(t, dict)]
     if not isinstance(question, str) or not question.strip() or len(question) > 500:
         return JSONResponse({'error': 'question required (up to 500 characters)'}, 400, headers=headers)
