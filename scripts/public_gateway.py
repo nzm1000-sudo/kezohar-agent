@@ -1,6 +1,6 @@
 """Public gateway: the only door from the internet (via Cloudflare Tunnel) to the local agent.
 
-Listens on 127.0.0.1:8720. Exposes POST /demo/ask only, requires the app key, limits size and rate per client,
+Listens on 127.0.0.1:8720. Exposes POST /demo/ask and /demo/speak (an answer read aloud) only, requires the app key, limits size and rate per client,
 allows one answer at a time with a short queue, forwards to the loopback agent (127.0.0.1:8711) and returns only
 the answer fields the app shows. Question text is never written to disk or logs.
 """
@@ -61,12 +61,13 @@ def forward(question):
                                  headers={'Content-Type': 'application/json'})
     with urllib.request.urlopen(req, timeout=120) as r:
         result = json.load(r)
-    return {'verdict': result.get('verdict'), 'answer': result.get('answer'), 'mode': result.get('mode'),
+    return {'verdict': result.get('verdict'), 'answer': result.get('answer'), 'mode': result.get('mode'), 'bari': result.get('bari'),
             'halachic_verified': result.get('halachic_verified', False),
             'sources': [{'reference': s.get('reference'), 'attribution': s.get('attribution')}
                         for s in (result.get('sources') or [])[:5] if isinstance(s, dict)]}
 
 
+@app.options('/demo/speak')
 @app.options('/demo/ask')
 async def preflight(request: Request):
     headers = cors(request.headers.get('origin'))
@@ -100,6 +101,34 @@ async def ask(request: Request):
     finally:
         waiting -= 1
     return JSONResponse(result, headers=headers)
+
+
+@app.post('/demo/speak')
+async def speak(request: Request):
+    headers = cors(request.headers.get('origin'))
+    if not secrets.compare_digest(request.headers.get('x-kezohar-key', ''), KEY):
+        return JSONResponse({'error': 'unauthorized'}, 401, headers=headers)
+    client = (request.headers.get('cf-connecting-ip') or request.client.host) + ':voice'
+    if limited(client):
+        return JSONResponse({'error': 'too many requests, try again soon'}, 429, headers=headers)
+    raw = await request.body()
+    try:
+        text = json.loads(raw).get('text', '') if len(raw) <= 8192 else ''
+    except ValueError:
+        text = ''
+    if not isinstance(text, str) or not text.strip() or len(text) > 1200:
+        return JSONResponse({'error': 'text required (up to 1200 characters)'}, 400, headers=headers)
+
+    def fetch():
+        req = urllib.request.Request(UPSTREAM + '/demo/speak', data=json.dumps({'text': text}).encode(),
+                                     headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=90) as r:
+            return r.read()
+    try:
+        audio = await asyncio.get_running_loop().run_in_executor(None, fetch)
+    except Exception:
+        return JSONResponse({'error': 'voice unavailable'}, 502, headers=headers)
+    return Response(audio, media_type='audio/wav', headers={**headers, 'Cache-Control': 'private, max-age=86400'})
 
 
 @app.api_route('/{path:path}', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])

@@ -111,6 +111,20 @@ def calendar_reference(date: str):
     except (ResearchError,BudgetExceeded,OSError,ValueError):
         return JSONResponse({'error':'ההשוואה החיצונית לא הושלמה; החישוב המקומי אינו מוצג כאימות חיצוני.'},status_code=502)
 
+@app.post('/demo/speak')
+async def speak_route(request: Request):
+    import asyncio
+    from fastapi.responses import Response
+    from .speech import speak
+    try:
+        text=json.loads((await request.body())[:8192]).get('text','')
+    except ValueError:
+        text=''
+    if not isinstance(text,str) or not text.strip():
+        return JSONResponse({'error':'text required'},status_code=400)
+    audio=await asyncio.get_running_loop().run_in_executor(None,speak,text)
+    return Response(audio,media_type='audio/wav') if audio else JSONResponse({'error':'voice unavailable'},status_code=503)
+
 @app.post('/demo/ask')
 async def ask(request: Request):
     try:
