@@ -39,7 +39,7 @@ def resolve_identity(engine,route,budget):
         relation=(' היו בני ' if len(individuals)>1 else ' נזכר כבן ') if explicit_sons else (' היו מילדיו של ' if len(individuals)>1 else ' נזכר כאחד מילדיו של ')
         answer=subjects+relation+parent+'.'
         if len(individuals)==1 and not people[0]['father_qualifier']:
-            answer='במקור שנמצא מופיע '+subjects+(' בן ' if explicit_sons else ' בקשר הורות עם ')+parent+'. אין בכך הוכחה שאין אדם נוסף בשם זה.'
+            answer=subjects+(' היה בנו של ' if explicit_sons else ' נזכר בקשר הורות עם ')+parent+'.'
     else:answer=' '.join('במקור '+parent+' מופיע כאביו של '+subject+'.' for subject,parent in individuals)
     roles=[];places=[]
     for subject,parent in individuals:

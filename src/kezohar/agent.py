@@ -432,6 +432,14 @@ class Agent:
             if result.get('verdict')=='ok' and config.get('SUMMARIZE','1')!='0':
                 from .web_answer import summarize
                 result=summarize(question,result)
+                # The passage could not be read into a direct answer: a long raw quotation is not an answer
+                # (CLAUDE.md); the model answers instead and the passage stays listed as a source.
+                if result.get('mode')!='summary-with-quote' and not circumstances:
+                    from .web_answer import model_answer
+                    jewish,known=model_answer(question)
+                    if known:
+                        result.update(verdict='model_knowledge',mode='model-knowledge',answer=known,source_status='no-source: model knowledge',
+                                      bari={'answer':known,'quote':None,'cite':None,'source':'model'})
         # Owner decision 2026-10-15: whatever the local library cannot answer (knowledge or halacha, including an
         # answer the relevance gate declined) is looked up on the web: Wikipedia and Sefaria full text.
         if (config.get('WEB_ANSWER','1')!='0' and isinstance(result,dict) and not circumstances
@@ -451,7 +459,7 @@ class Agent:
             if known:
                 # Owner rule 2026-10-16: an answer without a source is acceptable, labelled as such.
                 return {'verdict':'model_knowledge','mode':'model-knowledge','sources':[],'halachic_verified':False,
-                        'answer':known,'question_intent':route,'source_status':'no-source: model knowledge'}
+                        'answer':known,'bari':{'answer':known,'quote':None,'cite':None,'source':'model'},'question_intent':route,'source_status':'no-source: model knowledge'}
         return result
 
     def conversation_turn(self, store, owner, conversation_id, question, circumstances=None, **kwargs):
