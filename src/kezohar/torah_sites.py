@@ -166,7 +166,8 @@ def _jina(url, timeout=20):
             data = json.load(r).get('data', {})
     except Exception:
         return None
-    return _clean_title(data.get('title', '')), [re.sub(r'\s+', ' ', p).strip() for p in (data.get('content') or '').split('\n')]
+    from .web_answer import clean_web_text
+    return _clean_title(data.get('title', '')), [clean_web_text(re.sub(r'\s+', ' ', p)) for p in (data.get('content') or '').split('\n')]
 
 
 def _download(url, timeout=8):
