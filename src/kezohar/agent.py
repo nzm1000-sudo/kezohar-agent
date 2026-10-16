@@ -455,6 +455,15 @@ class Agent:
         # A kashrut question is answered first from הכשרות למעשה (owner, 2026-10-16), the author's book; the usual
         # path follows only when the book has no passage that answers it.
         import os
+        # The ready answer bank first: a near restatement of a prepared question is answered at once (qa_bank.py).
+        if not circumstances and 'PYTEST_CURRENT_TEST' not in os.environ:
+            dense=next((b for b in getattr(self.search,'backends',[]) if hasattr(b,'index')),None)
+            try:
+                from .qa_bank import lookup
+                ready=lookup(question,dense.index.model if dense else None)
+            except Exception:
+                ready=None
+            if ready:return ready
         if not circumstances and 'PYTEST_CURRENT_TEST' not in os.environ and (book=='Hakashrut_Lemaase' or _KASHRUT.search(question)):
             found=self._from_book('Hakashrut_Lemaase',question)
             if found:return found
