@@ -38,18 +38,25 @@ def finish(question, result):
     if not isinstance(result, dict) or config.get('FINAL_CHECK', '1') == '0' or result.get('mode') in DONE:
         return result
     text = ((result.get('bari') or {}).get('answer') or result.get('answer') or '').strip()
-    if not text or answers(question, text) is not False:
+    if not text:
         return result
     from concurrent.futures import ThreadPoolExecutor
     from .web_answer import read_and_answer, model_answer
     sources = [s for s in result.get('sources', []) if isinstance(s, dict) and s.get('text')][:3]
-    # Re-reading the sources and the model's own answer run at the same time (they were 2 s + 4 s in a row); the
-    # sourced answer wins when it holds.
-    with ThreadPoolExecutor(2) as pool:
+    # The check and both replacements (re-reading the sources, the model's own answer) start together: a rejected
+    # answer no longer waits for the check before its replacement begins (~1.5-2 s). When the check passes, the
+    # replacements are simply not used (a fraction of a cent).
+    pool = ThreadPoolExecutor(3)
+    try:
+        verdict = pool.submit(answers, question, text)
         reread = pool.submit(read_and_answer, question, sources, chars=1500) if sources else None
         known_future = pool.submit(model_answer, question)
+        if verdict.result() is not False:
+            return result
         found = reread.result() if reread else None
         jewish, known = known_future.result()
+    finally:
+        pool.shutdown(wait=False)
     if found:
         answer, quote, source, _ = found
         result.update(answer=answer + '\n\nמקור: ״' + quote + '״ (' + source.get('reference', '') + ').',

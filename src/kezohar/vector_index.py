@@ -130,7 +130,9 @@ def _scores(matrix, q, chunk=32768):
     out = np.empty(len(matrix), dtype=np.float32)
 
     def part(i):
-        out[i:i + chunk] = matrix[i:i + chunk].astype(np.float32) @ q
+        # numpy 2.0 with Apple Accelerate raises false overflow warnings here; every score is finite (checked).
+        with np.errstate(all='ignore'):
+            out[i:i + chunk] = matrix[i:i + chunk].astype(np.float32) @ q
     list(_POOL.map(part, range(0, len(matrix), chunk)))
     return out
 
