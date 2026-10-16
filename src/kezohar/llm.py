@@ -71,8 +71,8 @@ def _anthropic(body, key, timeout):
     A JSON-schema answer is asked for as one forced tool call, whose input is the JSON."""
     system = '\n'.join(m['content'] for m in body.get('messages', []) if m.get('role') == 'system')
     messages = [{'role': m['role'], 'content': m['content']} for m in body.get('messages', []) if m.get('role') in ('user', 'assistant')]
-    req = {'model': body['model'], 'max_tokens': min(int(body.get('max_tokens') or 1024), 8000), 'messages': messages,
-           'temperature': body.get('temperature', 0)}
+    # No temperature: the current Claude models reject it (2026-10-16).
+    req = {'model': body['model'], 'max_tokens': min(int(body.get('max_tokens') or 1024), 8000), 'messages': messages}
     if system:
         req['system'] = system
     schema = ((body.get('response_format') or {}).get('json_schema') or {}).get('schema')
