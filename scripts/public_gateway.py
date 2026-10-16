@@ -2,7 +2,7 @@
 
 Listens on 127.0.0.1:8720. Exposes POST /demo/ask and /demo/speak (an answer read aloud) only, requires the app key, limits size and rate per client,
 allows three answers at a time with a short queue, forwards to the loopback agent (127.0.0.1:8711) and returns only
-the answer fields the app shows. Question text is never written to disk or logs.
+the answer fields the app shows. Each request's duration and question go to data/store/gateway-timing.log (owner, 2026-10-16).
 """
 import asyncio
 import json
@@ -26,11 +26,12 @@ PER_MINUTE, PER_DAY, QUEUE = 6, 150, 3
 TIMING = ROOT / 'data/store/gateway-timing.log'
 
 
-def timing(kind, status, started, turns=0):
-    """Duration only, to see where waiting goes — never the question, the answer or the client."""
+def timing(kind, status, started, turns=0, question=''):
+    """Duration and the question (owner, 2026-10-16: "no privacy needed from now on" — to find what is slow).
+    Never the answer or the client's address."""
     try:
         with open(TIMING, 'a') as log:
-            log.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {kind} {status} {round((time.time() - started) * 1000)}ms turns={turns}\n")
+            log.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {kind} {status} {round((time.time() - started) * 1000)}ms turns={turns} q={' '.join(question.split())[:300]}\n")
     except OSError:
         pass
 
@@ -107,7 +108,7 @@ async def ask(request: Request):
     if not isinstance(question, str) or not question.strip() or len(question) > 500:
         return JSONResponse({'error': 'question required (up to 500 characters)'}, 400, headers=headers)
     if waiting >= QUEUE:
-        timing('ask', 503, time.time(), len(history))
+        timing('ask', 503, time.time(), len(history), question)
         return JSONResponse({'error': 'busy, try again in a minute'}, 503, headers=headers)
     waiting += 1
     started = time.time()
@@ -115,11 +116,11 @@ async def ask(request: Request):
         async with slot:
             result = await asyncio.get_running_loop().run_in_executor(None, forward, question.strip(), history)
     except Exception:
-        timing('ask', 502, started, len(history))
+        timing('ask', 502, started, len(history), question)
         return JSONResponse({'error': 'agent unavailable'}, 502, headers=headers)
     finally:
         waiting -= 1
-    timing('ask', 200, started, len(history))
+    timing('ask', 200, started, len(history), question)
     return JSONResponse(result, headers=headers)
 
 
