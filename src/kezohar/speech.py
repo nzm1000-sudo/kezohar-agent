@@ -50,3 +50,69 @@ def speak(text, voice=None):
         path.write_bytes(audio)
         return audio
     return None
+
+
+WHISPER_MODEL = '/Users/nitz/.lmstudio/models/mlx-community/ivrit-ai-whisper-large-v3-turbo-mlx'
+WHISPER_SITE = '/Users/nitz/Library/Python/3.9/lib/python/site-packages'
+_ALIGN = """
+import sys, json
+sys.path.insert(0, sys.argv[3])
+import mlx_whisper
+r = mlx_whisper.transcribe(sys.argv[1], path_or_hf_repo=sys.argv[2], language='he', word_timestamps=True)
+print(json.dumps([[w['word'].strip(), float(w['start']), float(w['end'])] for s in r['segments'] for w in s.get('words', [])]))
+"""
+
+
+def _norm(word):
+    import re
+    from .hebrew import normalize
+    return re.sub(r'[^א-תa-z0-9]', '', normalize(word or ''))
+
+
+def align(text, voice=None):
+    """Each word of `text` with its start and end in the reading (the owner's Whisper, ivrit-ai, run once and kept
+    beside the audio). The voice is not touched: Whisper only listens. None when there is no reading yet."""
+    import difflib
+    import subprocess
+    import sys
+    text = ' '.join(str(text or '').split())[:1200]
+    voice = voice or config.get('TTS_VOICE', VOICE)
+    cache = Path(config.get('TTS_CACHE', 'data/store/tts'))
+    stem = hashlib.sha256((voice + '\n' + text).encode()).hexdigest()[:32]
+    wav, timing = cache / (stem + '.wav'), cache / (stem + '.words.json')
+    if timing.exists():
+        return json.loads(timing.read_text())
+    if not wav.exists():
+        return None
+    # A separate process: the model's memory is released when it ends; one alignment at a time.
+    from .model_gate import local_slot
+    try:
+        with local_slot(60, path=cache / 'align.lock'):
+            heard = json.loads(subprocess.run([sys.executable, '-c', _ALIGN, str(wav), WHISPER_MODEL, WHISPER_SITE],
+                                              capture_output=True, text=True, timeout=60, check=True).stdout)
+    except Exception:
+        return None
+    words = text.split()
+    a, b = [_norm(w) for w in words], [_norm(w) for w, _, _ in heard]
+    times = [None] * len(words)
+    for block in difflib.SequenceMatcher(a=a, b=b, autojunk=False).get_matching_blocks():
+        for k in range(block.size):
+            times[block.a + k] = heard[block.b + k][1:]
+    # Words Whisper heard differently (abbreviations, numbers, spelling) take a share of the time between neighbours.
+    i = 0
+    while i < len(words):
+        if times[i] is None:
+            j = i
+            while j < len(words) and times[j] is None:
+                j += 1
+            start = times[i - 1][1] if i else 0.0
+            end = times[j][0] if j < len(words) else (heard[-1][2] if heard else start + 0.4 * (j - i))
+            step = max(0.05, (end - start) / (j - i))
+            for k in range(i, j):
+                times[k] = [round(start + step * (k - i), 3), round(start + step * (k - i + 1), 3)]
+            i = j
+        else:
+            i += 1
+    result = [[w, round(t[0], 3), round(t[1], 3)] for w, t in zip(words, times)]
+    timing.write_text(json.dumps(result, ensure_ascii=False))
+    return result

@@ -81,6 +81,7 @@ def forward(question, history=None):
                         for s in (result.get('sources') or [])[:5] if isinstance(s, dict)]}
 
 
+@app.options('/demo/align')
 @app.options('/demo/speak')
 @app.options('/demo/ask')
 async def preflight(request: Request):
@@ -150,6 +151,32 @@ async def speak(request: Request):
     except Exception:
         return JSONResponse({'error': 'voice unavailable'}, 502, headers=headers)
     return Response(audio, media_type='audio/wav', headers={**headers, 'Cache-Control': 'private, max-age=86400'})
+
+
+@app.post('/demo/align')
+async def align(request: Request):
+    """Word timings for a reading already made (/demo/speak), for highlighting each word as it is read."""
+    headers = cors(request.headers.get('origin'))
+    if not secrets.compare_digest(request.headers.get('x-kezohar-key', ''), KEY):
+        return JSONResponse({'error': 'unauthorized'}, 401, headers=headers)
+    raw = await request.body()
+    try:
+        text = json.loads(raw).get('text', '') if len(raw) <= 8192 else ''
+    except ValueError:
+        text = ''
+    if not isinstance(text, str) or not text.strip() or len(text) > 1200:
+        return JSONResponse({'error': 'text required'}, 400, headers=headers)
+
+    def fetch():
+        req = urllib.request.Request(UPSTREAM + '/demo/align', data=json.dumps({'text': text}).encode(),
+                                     headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.load(r)
+    try:
+        result = await asyncio.get_running_loop().run_in_executor(None, fetch)
+    except Exception:
+        return JSONResponse({'error': 'no timings'}, 404, headers=headers)
+    return JSONResponse(result, headers=headers)
 
 
 @app.api_route('/{path:path}', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])

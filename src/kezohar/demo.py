@@ -125,6 +125,19 @@ async def speak_route(request: Request):
     audio=await asyncio.get_running_loop().run_in_executor(None,speak,text)
     return Response(audio,media_type='audio/wav') if audio else JSONResponse({'error':'voice unavailable'},status_code=503)
 
+@app.post('/demo/align')
+async def align_route(request: Request):
+    import asyncio
+    from .speech import align
+    try:
+        text=json.loads((await request.body())[:8192]).get('text','')
+    except ValueError:
+        text=''
+    if not isinstance(text,str) or not text.strip():
+        return JSONResponse({'error':'text required'},status_code=400)
+    words=await asyncio.get_running_loop().run_in_executor(None,align,text)
+    return JSONResponse({'words':words}) if words else JSONResponse({'error':'no reading yet'},status_code=404)
+
 @app.post('/demo/ask')
 async def ask(request: Request):
     try:
