@@ -121,6 +121,9 @@ def subtopics(per_sub=30, n_subs=12):
                 print(f'{label}: {kept}', flush=True)
 
 
+WORKERS = 3
+
+
 def answers(limit=None):
     from kezohar.demo import demo_agent
     from kezohar.request_budget import RequestBudget
@@ -128,24 +131,34 @@ def answers(limit=None):
     qpath, apath = OUT / 'questions.jsonl', OUT / 'answers.jsonl'
     done = {json.loads(l)['q'] for l in apath.read_text().splitlines()} if apath.exists() else set()
     todo = [json.loads(l) for l in qpath.read_text().splitlines() if json.loads(l)['q'] not in done]
-    kept = tried = 0
-    with apath.open('a') as out:
-        for row in todo[:limit]:
-            tried += 1
-            started = time.time()
-            try:
-                r = agent.converse(row['q'], request_budget=RequestBudget(seconds=90, max_context_bytes=48000), timeout=45, cache_ttl=0)
-            except Exception as exc:
-                r = {'verdict': 'error', 'error': type(exc).__name__}
-            bari = r.get('bari') or {}
-            sourced = bool(bari.get('answer') and bari.get('quote') and bari.get('cite'))
-            out.write(json.dumps({'topic': row['topic'], 'q': row['q'], 'sourced': sourced, 'answer': bari.get('answer'),
-                                  'quote': bari.get('quote'), 'cite': bari.get('cite'), 'mode': r.get('mode'),
-                                  'seconds': round(time.time() - started, 1)}, ensure_ascii=False) + '\n')
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    lock = threading.Lock()
+    count = {'tried': 0, 'kept': 0}
+
+    def one(row):
+        started = time.time()
+        try:
+            r = agent.converse(row['q'], request_budget=RequestBudget(seconds=90, max_context_bytes=48000), timeout=45, cache_ttl=0)
+        except Exception as exc:
+            r = {'verdict': 'error', 'error': type(exc).__name__}
+        bari = r.get('bari') or {}
+        sourced = bool(bari.get('answer') and bari.get('quote') and bari.get('cite'))
+        line = json.dumps({'topic': row['topic'], 'q': row['q'], 'sourced': sourced, 'answer': bari.get('answer'),
+                           'quote': bari.get('quote'), 'cite': bari.get('cite'), 'mode': r.get('mode'),
+                           'seconds': round(time.time() - started, 1)}, ensure_ascii=False) + '\n'
+        with lock:  # one writer at a time: each answer stays one whole line
+            out.write(line)
             out.flush()
-            kept += sourced
-            if tried % 25 == 0:
-                print(f'{tried} tried, {kept} sourced', flush=True)
+            count['tried'] += 1
+            count['kept'] += sourced
+            if count['tried'] % 25 == 0:
+                print(f"{count['tried']} tried, {count['kept']} sourced", flush=True)
+
+    # Three questions at a time (owner, 2026-10-17): one by one took ~10 s a question, a day and a half for a round.
+    with apath.open('a') as out, ThreadPoolExecutor(WORKERS) as pool:
+        list(pool.map(one, todo[:limit]))
+    tried, kept = count['tried'], count['kept']
     print(f'done: {tried} tried, {kept} sourced', flush=True)
 
 
