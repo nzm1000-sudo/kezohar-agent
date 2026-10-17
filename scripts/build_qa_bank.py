@@ -202,6 +202,34 @@ def verify():
     print(f'verify done: {good} ok, {bad} rejected', flush=True)
 
 
+def repair():
+    """Answers the check rejected are answered again (owner, 2026-10-17: the question stays, only the answer is redone).
+    Run when no other stage writes answers.jsonl; the new answers are checked by the next `verify`."""
+    from kezohar.demo import demo_agent
+    from kezohar.request_budget import RequestBudget
+    agent = demo_agent()
+    verdict = checks()
+    apath = OUT / 'answers.jsonl'
+    rows = [json.loads(l) for l in apath.read_text().splitlines()]
+    fixed = 0
+    for i, row in enumerate(rows):
+        if not row.get('answer') or verdict.get(key_of(row)) is not False:
+            continue
+        try:
+            r = agent.converse(row['q'], request_budget=RequestBudget(seconds=90, max_context_bytes=48000), timeout=45, cache_ttl=0)
+        except Exception:
+            continue
+        bari = r.get('bari') or {}
+        if bari.get('answer') and bari['answer'] != row['answer']:
+            rows[i] = {**row, 'sourced': bool(bari.get('quote') and bari.get('cite')), 'answer': bari['answer'],
+                       'quote': bari.get('quote'), 'cite': bari.get('cite'), 'mode': r.get('mode')}
+            fixed += 1
+            if fixed % 25 == 0:
+                apath.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows))
+    apath.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows))
+    print('repair done:', fixed, flush=True)
+
+
 def rekashrut():
     """Kashrut questions answered again with the bank off, so they come from הכשרות למעשה (owner, 2026-10-17)."""
     import os
@@ -232,7 +260,7 @@ def rekashrut():
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
-    p.add_argument('stage', choices=['questions', 'subtopics', 'answers', 'rekashrut', 'verify'])
+    p.add_argument('stage', choices=['questions', 'subtopics', 'answers', 'rekashrut', 'verify', 'repair'])
     p.add_argument('--limit', type=int)
     a = p.parse_args()
-    {'questions': questions, 'subtopics': subtopics, 'rekashrut': rekashrut, 'verify': verify}.get(a.stage, lambda: answers(a.limit))()
+    {'questions': questions, 'subtopics': subtopics, 'rekashrut': rekashrut, 'verify': verify, 'repair': repair}.get(a.stage, lambda: answers(a.limit))()
