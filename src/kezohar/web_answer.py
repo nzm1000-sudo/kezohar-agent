@@ -65,7 +65,8 @@ def clean_web_text(text):
 
 def _plain(text):
     """Compare words, not typography: niqqud, quote/dash styles and spacing differ between copies."""
-    text = re.sub(r'[֑-ׇ]', '', (text or '').translate(QUOTES))
+    # The maqaf (U+05BE) is inside the niqqud range: it becomes a hyphen, not nothing ("מרוקאי־ישראלי" was fused).
+    text = re.sub(r'[֑-ׇ]', '', (text or '').replace('\u05be', '-').translate(QUOTES))
     return re.sub(r'\s+', ' ', text).strip()
 
 
@@ -157,6 +158,20 @@ def _gather(question, route, budget, discovered):
     return sources[:14], errors
 
 
+def _for_person(route, sources):
+    """A question about a person (owner, 2026-10-17): never a place or institution named after them ("החפץ חיים" was
+    answered from the kibbutz), and the person's own article read first."""
+    request = route.get('identity_request') or {}
+    if request.get('identity_kind') != 'people':
+        return sources
+    from .answer_gate import NAMED_AFTER
+    names = [s.get('name', '') for s in request.get('subjects') or [] if s.get('name')]
+    own = lambda src: any(str(src.get('reference') or '').replace('ה', '').startswith(n.replace('ה', '')[:8]) for n in names)
+    kept = [src for src in sources if not NAMED_AFTER.search(str(src.get('reference') or ''))]
+    encyclopedia = lambda src: 'ויקיפדיה' in str(src.get('reference') or '') or src.get('primary_kind') == 'secondary-encyclopedia'
+    return sorted(kept, key=lambda src: (not own(src), not encyclopedia(src)))
+
+
 def answer(question, route, budget=None, discovered=(), timeout=35, ask=None):
     """Return a fact_supported result dict, or None when no verified quote supports an answer."""
     if route.get('export_allowed') is False:
@@ -164,6 +179,7 @@ def answer(question, route, budget=None, discovered=(), timeout=35, ask=None):
     from .request_budget import RequestBudget
     budget = budget or RequestBudget(timeout)
     sources, errors = _gather(question, route, budget, list(discovered))
+    sources = _for_person(route, sources)
     if not sources:
         return None
     found = read_and_answer(question, sources, timeout=timeout, ask=ask)

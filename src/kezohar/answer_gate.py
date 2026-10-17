@@ -6,6 +6,7 @@ source answer leaves the server, the local model picks which retrieved passage
 directly answers the question, or none. It can only choose among retrieved,
 already-permitted sources; its choice is relevance evidence, never a ruling.
 """
+import re
 import json
 from . import config
 from .llm import _post, LLMUnavailable
@@ -61,6 +62,18 @@ def _encyclopedic(source):
     return 'secondary-encyclopedia' in (meta.get('knowledge_primary_kind'), source.get('authority_level'), source.get('primary_kind'))
 
 
+NAMED_AFTER = re.compile(r'\((?:קיבוץ|מושב|יישוב|עיר|כפר|שכונה|רחוב|מועצה[^)]*|ישיבה|בית ספר|בית כנסת|ארגון|עמותה|כתב עת|ספר|אנייה|ספינה)\)')
+
+
+def _about_person(question):
+    try:
+        from .question_intent import QuestionIntentRouter
+        request = QuestionIntentRouter().route(question).get('identity_request') or {}
+        return request.get('identity_kind') == 'people'
+    except Exception:
+        return False
+
+
 def _halachic(question):
     try:
         from .question_intent import QuestionIntentRouter
@@ -78,6 +91,10 @@ def gate(question, result, timeout=35, ask=None):
     # (owner, 2026-10-17 — a third of the bank's halacha answers had come from Wikipedia).
     if _halachic(question):
         candidates.sort(key=_encyclopedic)
+    # A question about a person is never answered from a place or an institution named after them ("מי היה החפץ חיים"
+    # was answered from the kibbutz חפץ חיים, owner 2026-10-17).
+    if _about_person(question):
+        candidates = [s for s in candidates if not NAMED_AFTER.search(str(s.get('reference') or s.get('title') or ''))]
     candidates = candidates[:MAX_CANDIDATES]
     if not candidates:
         return result

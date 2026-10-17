@@ -9,7 +9,8 @@ PUNCT_RE = re.compile(r'[^\w֐-׿]+', re.UNICODE)
 WS_RE = re.compile(r'\s+')
 
 def strip_niqqud(s):
-    return NIQQUD_RE.sub("", s)
+    # The maqaf (U+05BE) sits inside the niqqud range: removing it fused the words ("ישראל־מאיר" -> "ישראלמאיר").
+    return NIQQUD_RE.sub("", s.replace("\u05be", " "))
 
 def unify_finals(s):
     return s.translate(FINAL_MAP)

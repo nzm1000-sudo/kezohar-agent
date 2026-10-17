@@ -37,7 +37,11 @@ class JewishEncyclopediaEngine:
         elif 'משנה' in terms and 'גמרא' in terms:term='משנה תלמוד'
         data=self.transport.json('https://he.wikipedia.org/w/api.php?'+urllib.parse.urlencode({
             'action':'query','list':'search','srsearch':term,'srlimit':limit,'srnamespace':0,'format':'json','maxlag':5}),request_budget=budget)
-        return [r['title'] for r in data.get('query',{}).get('search',[])][:limit]
+        found=[r['title'] for r in data.get('query',{}).get('search',[])]
+        # A person asked by name: that very name first — Wikipedia's redirect leads to the person ("החפץ חיים" -> ישראל
+        # מאיר הכהן), where the search led to a disambiguation page and then to a kibbutz (owner, 2026-10-17).
+        people=[s['name'] for s in ((route.get('identity_request') or {}).get('identity_kind')=='people' and route['identity_request'].get('subjects') or []) if s.get('name')]
+        return list(dict.fromkeys(people+found))[:limit]
     def read(self,title,budget):
         data=self.transport.json('https://he.wikipedia.org/w/api.php?'+urllib.parse.urlencode({
             'action':'query','titles':title,'prop':'extracts|info|revisions|pageprops','exintro':1,'explaintext':1,
