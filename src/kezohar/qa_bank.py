@@ -19,6 +19,12 @@ def _load(model):
     rows = [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
     # An answer that talks about "the passage" instead of answering is left out (the prompt forbids it; some slipped).
     rows = [r for r in rows if r.get('sourced') and r.get('answer') and r.get('quote') and r.get('cite') and 'הקטע' not in r['answer']]
+    # Only answers the strong model judged correct and complete (scripts/build_qa_bank.py verify).
+    checks = path.with_name('checks.jsonl')
+    if checks.exists():
+        import hashlib
+        ok = {r['key'] for r in map(json.loads, checks.read_text().splitlines()) if r['ok']}
+        rows = [r for r in rows if hashlib.sha256((r['q'] + '|' + r['answer']).encode()).hexdigest()[:20] in ok]
     if not rows:
         return [], []
     # Question vectors are kept beside the bank (keyed by the question), so a restart embeds only new ones.

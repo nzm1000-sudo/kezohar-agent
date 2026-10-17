@@ -149,6 +149,59 @@ def answers(limit=None):
     print(f'done: {tried} tried, {kept} sourced', flush=True)
 
 
+CHECK_SCHEMA = {'type': 'object', 'properties': {'ok': {'type': 'boolean'}, 'why': {'type': 'string'}},
+                'required': ['ok', 'why'], 'additionalProperties': False}
+CHECK_PROMPT = ('אתה בודק תשובות במאגר שאלות ביהדות. ok=true רק אם כל אלה מתקיימים: (1) התשובה עונה ישירות ובמלואו על השאלה, '
+                'בלי לדבר על "הקטע" או "המקור" במקום לענות; (2) היא נכונה לפי ההלכה והעובדות המקובלות (בהלכה — לפי מרן '
+                'השולחן ערוך ופוסקי ספרד, או שהיא מציינת למי הדין); (3) הציטוט עוסק באותו עניין ותומך בעיקר התשובה; '
+                '(4) הניסוח ברור ולא סותר את עצמו. בכל ספק — ok=false. why: משפט קצר. החזר JSON בלבד.')
+
+
+def key_of(row):
+    import hashlib
+    return hashlib.sha256((row['q'] + '|' + (row.get('answer') or '')).encode()).hexdigest()[:20]
+
+
+def checks():
+    """{key_of(row): ok} from checks.jsonl — written by `verify`, beside the bank so the answer stages never race it."""
+    path = OUT / 'checks.jsonl'
+    return {r['key']: r['ok'] for r in map(json.loads, path.read_text().splitlines())} if path.exists() else {}
+
+
+def verify():
+    """Every sourced answer judged by the strong cloud model (owner, 2026-10-17: "checked questions"); the bank and the
+    app use only answers judged ok. Resumable."""
+    from concurrent.futures import ThreadPoolExecutor
+    from kezohar import config
+    from kezohar.llm import _post
+    done = checks()
+    rows = [r for r in map(json.loads, (OUT / 'answers.jsonl').read_text().splitlines())
+            if r.get('sourced') and r.get('answer') and key_of(r) not in done]
+
+    def judge(row):
+        body = {'model': config.llm_model(), 'temperature': 0, 'max_tokens': 120, 'stream': False,
+                'response_format': {'type': 'json_schema', 'json_schema': {'name': 'check', 'strict': True, 'schema': CHECK_SCHEMA}},
+                'messages': [{'role': 'system', 'content': CHECK_PROMPT},
+                             {'role': 'user', 'content': f"שאלה: {row['q']}\nתשובה: {row['answer']}\nציטוט: {row.get('quote')}\nמקור: {row.get('cite')}"}]}
+        try:
+            got = json.loads(_post(config.llm_base_url(), '/chat/completions', body, timeout=40)['choices'][0]['message']['content'])
+            return {'key': key_of(row), 'q': row['q'], 'ok': bool(got['ok']), 'why': got.get('why', '')}
+        except Exception:
+            return None
+
+    good = bad = 0
+    with (OUT / 'checks.jsonl').open('a') as out, ThreadPoolExecutor(4) as pool:
+        for got in pool.map(judge, rows):
+            if got:
+                out.write(json.dumps(got, ensure_ascii=False) + '\n')
+                out.flush()
+                good += got['ok']
+                bad += not got['ok']
+                if (good + bad) % 100 == 0:
+                    print(f'{good} ok, {bad} rejected', flush=True)
+    print(f'verify done: {good} ok, {bad} rejected', flush=True)
+
+
 def rekashrut():
     """Kashrut questions answered again with the bank off, so they come from הכשרות למעשה (owner, 2026-10-17)."""
     import os
@@ -179,7 +232,7 @@ def rekashrut():
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
-    p.add_argument('stage', choices=['questions', 'subtopics', 'answers', 'rekashrut'])
+    p.add_argument('stage', choices=['questions', 'subtopics', 'answers', 'rekashrut', 'verify'])
     p.add_argument('--limit', type=int)
     a = p.parse_args()
-    {'questions': questions, 'subtopics': subtopics, 'rekashrut': rekashrut}.get(a.stage, lambda: answers(a.limit))()
+    {'questions': questions, 'subtopics': subtopics, 'rekashrut': rekashrut, 'verify': verify}.get(a.stage, lambda: answers(a.limit))()

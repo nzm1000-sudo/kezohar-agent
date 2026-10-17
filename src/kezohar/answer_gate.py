@@ -56,11 +56,29 @@ def _ask(question, candidates, timeout):
     return json.loads(resp['choices'][0]['message']['content'])
 
 
+def _encyclopedic(source):
+    meta = source.get('metadata') or {}
+    return 'secondary-encyclopedia' in (meta.get('knowledge_primary_kind'), source.get('authority_level'), source.get('primary_kind'))
+
+
+def _halachic(question):
+    try:
+        from .question_intent import QuestionIntentRouter
+        return QuestionIntentRouter().route(question).get('engine') == 'halachic'
+    except Exception:
+        return False
+
+
 def gate(question, result, timeout=35, ask=None):
     """Return result unchanged, re-pointed to the passage that answers, or declined."""
     if result.get('verdict') not in GATED_VERDICTS or not config.llm_base_url():
         return result
-    candidates = [s for s in result.get('sources', []) if s.get('source_id') and s.get('text')][:MAX_CANDIDATES]
+    candidates = [s for s in result.get('sources', []) if s.get('source_id') and s.get('text')]
+    # A halacha question is answered from the poskim first: an encyclopedia passage is offered only after them
+    # (owner, 2026-10-17 — a third of the bank's halacha answers had come from Wikipedia).
+    if _halachic(question):
+        candidates.sort(key=_encyclopedic)
+    candidates = candidates[:MAX_CANDIDATES]
     if not candidates:
         return result
     try:
