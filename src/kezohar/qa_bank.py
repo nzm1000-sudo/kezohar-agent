@@ -28,6 +28,10 @@ def _load(model):
         rows = [r for r in rows if hashlib.sha256((r['q'] + '|' + r['answer']).encode()).hexdigest()[:20] not in rejected]
     if not rows:
         return [], []
+    # The questions as people ask them (scripts/build_qa_bank.py wording): matched in their new wording.
+    wording = path.with_name('wording.jsonl')
+    new = {r['old']: r['new'] for r in map(json.loads, wording.read_text().splitlines())} if wording.exists() else {}
+    rows = [dict(r, q=new.get(r['q'], r['q'])) for r in rows]
     # Question vectors are kept beside the bank (keyed by the question), so a restart embeds only new ones.
     cache_path = path.with_suffix('.vectors.json')
     cache = json.loads(cache_path.read_text()) if cache_path.exists() else {}

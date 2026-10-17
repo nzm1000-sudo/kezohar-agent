@@ -243,6 +243,61 @@ def repair():
     print('repair done:', fixed, flush=True)
 
 
+WORDING_SCHEMA = {'type': 'object', 'properties': {'fixes': {'type': 'array', 'items': {'type': 'object', 'properties': {
+    'i': {'type': 'integer'}, 'q': {'type': 'string'}}, 'required': ['i', 'q'], 'additionalProperties': False}}},
+    'required': ['fixes'], 'additionalProperties': False}
+WORDING_PROMPT = ('אתה עורך לשון. לפניך שאלות ביהדות ממאגר. תקן שאלה שניסוחה אינו טבעי, מסורבל, כפול או אינו כפי שאדם '
+                  'שואל בעברית של היום — קצר, פשוט וברור. דוגמאות: "מה מברכים על ריח של עשבי בשמים?" -> "מה מברכים על עשבים '
+                  'ריחניים?"; "מה ביקש המן להכין למרדכי?" -> "מה הכין המן למרדכי?"; "מהו כלל הלכתי ומה ההבדל בינו לבין '
+                  'פסיקה?" -> "מה ההבדל בין כלל הלכתי לפסק הלכה?". שם ברכה או נוסח שייך לתשובה, לא לשאלה. שמור בדיוק על '
+                  'משמעות השאלה ועל כל פרט בה; אל תוסיף ואל תשמיט פרטים; מונחים הלכתיים נכונים נשארים. שאלה טובה — אל '
+                  'תחזיר אותה. החזר JSON: fixes = [{i, q}] רק לשאלות שתוקנו.')
+
+
+def wording():
+    """Questions worded as people ask them (owner, 2026-10-17): the strong model rewrites only unnatural or imprecise
+    wording, meaning kept. Written to wording.jsonl ({old, new}); the bank and the app read the new wording."""
+    from concurrent.futures import ThreadPoolExecutor
+    from kezohar import config
+    from kezohar.llm import _post
+    path = OUT / 'wording.jsonl'
+    seen = {json.loads(l)['old'] for l in path.read_text().splitlines()} if path.exists() else set()
+    done_path = OUT / 'wording.checked'
+    checked = set(done_path.read_text().splitlines()) if done_path.exists() else set()
+    qs = [json.loads(l)['q'] for l in (OUT / 'questions.jsonl').read_text().splitlines()]
+    todo = [q for q in dict.fromkeys(qs) if q not in seen and q not in checked]
+    batches = [todo[i:i + 25] for i in range(0, len(todo), 25)]
+
+    def one(batch):
+        listing = '\n'.join(f'{i}. {q}' for i, q in enumerate(batch))
+        body = {'model': config.llm_model(), 'temperature': 0, 'max_tokens': 1500, 'stream': False,
+                'response_format': {'type': 'json_schema', 'json_schema': {'name': 'wording', 'strict': True, 'schema': WORDING_SCHEMA}},
+                'messages': [{'role': 'system', 'content': WORDING_PROMPT}, {'role': 'user', 'content': listing}]}
+        try:
+            fixes = json.loads(_post(config.llm_base_url(), '/chat/completions', body, timeout=60)['choices'][0]['message']['content'])['fixes']
+        except Exception:
+            return batch, None
+        return batch, [(batch[f['i']], ' '.join(f['q'].split())) for f in fixes if 0 <= f['i'] < len(batch) and f['q'].strip() and f['q'].strip() != batch[f['i']]]
+
+    changed = 0
+    with path.open('a') as out, done_path.open('a') as ok, ThreadPoolExecutor(3) as pool:
+        for batch, fixes in pool.map(one, batches):
+            if fixes is None:
+                continue
+            for old, new in fixes:
+                out.write(json.dumps({'old': old, 'new': new}, ensure_ascii=False) + '\n')
+                changed += 1
+            ok.write('\n'.join(batch) + '\n')
+            out.flush(); ok.flush()
+    print(f'wording done: {changed} reworded of {len(todo)}', flush=True)
+
+
+def reworded():
+    """{old question: new wording}."""
+    path = OUT / 'wording.jsonl'
+    return {r['old']: r['new'] for r in map(json.loads, path.read_text().splitlines())} if path.exists() else {}
+
+
 def rekashrut():
     """Kashrut questions answered again with the bank off, so they come from הכשרות למעשה (owner, 2026-10-17)."""
     import os
@@ -273,7 +328,7 @@ def rekashrut():
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
-    p.add_argument('stage', choices=['questions', 'subtopics', 'answers', 'rekashrut', 'verify', 'repair'])
+    p.add_argument('stage', choices=['questions', 'subtopics', 'answers', 'rekashrut', 'verify', 'repair', 'wording'])
     p.add_argument('--limit', type=int)
     a = p.parse_args()
-    {'questions': questions, 'subtopics': subtopics, 'rekashrut': rekashrut, 'verify': verify, 'repair': repair}.get(a.stage, lambda: answers(a.limit))()
+    {'questions': questions, 'subtopics': subtopics, 'rekashrut': rekashrut, 'verify': verify, 'repair': repair, 'wording': wording}.get(a.stage, lambda: answers(a.limit))()

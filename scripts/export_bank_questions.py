@@ -9,11 +9,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts'))
+from build_qa_bank import reworded
+new = reworded()  # the questions as people ask them (build_qa_bank.py wording)
 rows = [json.loads(l) for l in (ROOT / 'data/store/qa-bank/answers.jsonl').read_text().splitlines()]
 seen, out = set(), []
 for r in rows:
     if r.get('answer') and r['q'] not in seen:
         seen.add(r['q'])
-        out.append([r['topic'].split(' › ')[0].strip(), r['q']])
+        out.append([r['topic'].split(' › ')[0].strip(), new.get(r['q'], r['q'])])
 Path(sys.argv[1]).write_text(json.dumps(out, ensure_ascii=False, separators=(',', ':')))
 print(len(out), 'questions')
