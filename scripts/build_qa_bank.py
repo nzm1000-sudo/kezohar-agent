@@ -77,12 +77,12 @@ def questions(per_topic=55):
             print(f'{topic}: {kept}', flush=True)
 
 
-SUB_PROMPT = 'פרק את הנושא "{topic}" ביהדות ל-6 תתי-נושאים מובחנים ומעשיים (שמות קצרים). החזר JSON.'
+SUB_PROMPT = 'פרק את הנושא "{topic}" ביהדות ל-{n} תתי-נושאים מובחנים ומעשיים (שמות קצרים). החזר JSON.'
 SUB_SCHEMA = {'type': 'object', 'properties': {'subtopics': {'type': 'array', 'items': {'type': 'string'}}},
               'required': ['subtopics'], 'additionalProperties': False}
 
 
-def subtopics(per_sub=30):
+def subtopics(per_sub=30, n_subs=12):
     """Round two (owner, 2026-10-16: beyond 5,000): each topic split into ~6 subtopics, ~30 new questions each."""
     from kezohar import config
     from kezohar.llm import _post
@@ -94,9 +94,9 @@ def subtopics(per_sub=30):
         for topic in TOPICS:
             body = {'model': config.llm_model(), 'temperature': 0, 'max_tokens': 400, 'stream': False,
                     'response_format': {'type': 'json_schema', 'json_schema': {'name': 'subtopics', 'strict': True, 'schema': SUB_SCHEMA}},
-                    'messages': [{'role': 'user', 'content': SUB_PROMPT.format(topic=topic)}]}
+                    'messages': [{'role': 'user', 'content': SUB_PROMPT.format(topic=topic, n=n_subs)}]}
             try:
-                subs = json.loads(_post(config.llm_base_url(), '/chat/completions', body, timeout=60)['choices'][0]['message']['content'])['subtopics'][:6]
+                subs = json.loads(_post(config.llm_base_url(), '/chat/completions', body, timeout=60)['choices'][0]['message']['content'])['subtopics'][:n_subs]
             except Exception:
                 continue
             for sub in subs:
@@ -149,9 +149,37 @@ def answers(limit=None):
     print(f'done: {tried} tried, {kept} sourced', flush=True)
 
 
+def rekashrut():
+    """Kashrut questions answered again with the bank off, so they come from הכשרות למעשה (owner, 2026-10-17)."""
+    import os
+    os.environ['QA_BANK_LOOKUP'] = '0'
+    from kezohar.agent import _KASHRUT
+    from kezohar.demo import demo_agent
+    from kezohar.request_budget import RequestBudget
+    agent = demo_agent()
+    apath = OUT / 'answers.jsonl'
+    rows = [json.loads(l) for l in apath.read_text().splitlines()]
+    changed = 0
+    for i, row in enumerate(rows):
+        if 'הכשרות למעשה' in (row.get('cite') or '') or not (_KASHRUT.search(row['q']) or row['topic'].startswith('כשרות')):
+            continue
+        try:
+            r = agent.converse(row['q'], request_budget=RequestBudget(seconds=90, max_context_bytes=48000), timeout=45, cache_ttl=0)
+        except Exception:
+            continue
+        bari = r.get('bari') or {}
+        if bari.get('answer') and bari.get('quote') and bari.get('cite'):
+            rows[i] = {**row, 'sourced': True, 'answer': bari['answer'], 'quote': bari['quote'], 'cite': bari['cite'], 'mode': r.get('mode')}
+            changed += 1
+        if changed and changed % 25 == 0:
+            apath.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows))
+    apath.write_text(''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows))
+    print('rekashrut done:', changed, flush=True)
+
+
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
-    p.add_argument('stage', choices=['questions', 'subtopics', 'answers'])
+    p.add_argument('stage', choices=['questions', 'subtopics', 'answers', 'rekashrut'])
     p.add_argument('--limit', type=int)
     a = p.parse_args()
-    {'questions': questions, 'subtopics': subtopics}.get(a.stage, lambda: answers(a.limit))()
+    {'questions': questions, 'subtopics': subtopics, 'rekashrut': rekashrut}.get(a.stage, lambda: answers(a.limit))()

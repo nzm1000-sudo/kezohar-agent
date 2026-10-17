@@ -39,12 +39,26 @@ class _AuditedModel:
                 file.write(json.dumps(row,ensure_ascii=False)+'\n')
         return result
 
+_warmed=threading.Event()
+def _warm_bank(agent):
+    # The answer bank loads in the background at start, so the first question does not wait for it (~40 s).
+    if _warmed.is_set() or 'PYTEST_CURRENT_TEST' in os.environ:return
+    _warmed.set()
+    def run():
+        dense=next((b for b in getattr(agent.search,'backends',[]) if hasattr(b,'index')),None)
+        if dense:
+            from .qa_bank import lookup
+            try:lookup('שלום',dense.index.model)
+            except Exception:pass
+    threading.Thread(target=run,daemon=True).start()
+
 def demo_agent():
     os.environ['SOURCE_GRAPH_ENABLED']='false'  # This private process only.
     agent=api.get_agent()
     # Demo retrieval is read-only; co-retrieval proposals must not mutate the
     # active source graph. This changes only this demo process, not config files.
     agent.source_graph=None
+    _warm_bank(agent)
     # Opt-in trace only for the authorized demonstration. Ordinary UI use does
     # not persist questions or model output; nothing raw is returned publicly.
     raw=os.environ.get('DEMO_AUDIT_PATH')

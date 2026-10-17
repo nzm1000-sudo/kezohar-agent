@@ -17,7 +17,8 @@ _bank = None
 def _load(model):
     path = Path(config.get('QA_BANK', 'data/store/qa-bank/answers.jsonl'))
     rows = [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
-    rows = [r for r in rows if r.get('sourced') and r.get('answer') and r.get('quote') and r.get('cite')]
+    # An answer that talks about "the passage" instead of answering is left out (the prompt forbids it; some slipped).
+    rows = [r for r in rows if r.get('sourced') and r.get('answer') and r.get('quote') and r.get('cite') and 'הקטע' not in r['answer']]
     if not rows:
         return [], []
     # Question vectors are kept beside the bank (keyed by the question), so a restart embeds only new ones.
