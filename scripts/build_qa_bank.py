@@ -27,7 +27,10 @@ TOPICS = [
     'נביאים אחרונים', 'כתובים – תהילים, משלי, איוב, מגילות', 'משנה ותלמוד – מושגים ותנאים', 'אמוראים וגאונים',
     'ראשונים ואחרונים – אישים וספרים', 'מושגים בהלכה ובאמונה', 'קבלה וחסידות – מושגים', 'מנהגי עדות המזרח',
     'בית המקדש והקרבנות', 'היסטוריה יהודית ומועדים בלוח',
+    # Each book of the Torah its own subject (owner, 2026-10-18: ויקרא was missing; במדבר and דברים apart).
+    'חומש ויקרא – פרשות, אישים ואירועים', 'חומש במדבר – אישים ואירועים', 'חומש דברים – אישים ואירועים',
 ]
+ONLY = None  # --topics: run the questions stages for these subjects only
 
 PROMPT = ('כתוב {n} שאלות ביהדות בנושא: {topic}. שאלות שאנשים באמת שואלים — מעשיות, עובדתיות ומושגיות, מגוונות, '
           'כל אחת שאלה אחת ברורה בעברית (עד 15 מילים), בלי מספור. לא שאלות אישיות רגישות ולא שאלות שתשובתן תלויה '
@@ -55,7 +58,7 @@ def questions(per_topic=55):
             seen.add(norm(row['q']))
             done_topics.add(row['topic'])
     with path.open('a') as out:
-        for topic in TOPICS:
+        for topic in ONLY or TOPICS:
             if topic in done_topics:
                 continue
             body = {'model': config.llm_model(), 'temperature': 0.7, 'max_tokens': 3000, 'stream': False,
@@ -91,7 +94,7 @@ def subtopics(per_sub=30, n_subs=12):
     seen = {norm(q) for q in json.loads((ROOT / 'data/store/app-questions.json').read_text())} | {norm(r['q']) for r in rows}
     done = {r['topic'] for r in rows}
     with path.open('a') as out:
-        for topic in TOPICS:
+        for topic in ONLY or TOPICS:
             body = {'model': config.llm_model(), 'temperature': 0, 'max_tokens': 400, 'stream': False,
                     'response_format': {'type': 'json_schema', 'json_schema': {'name': 'subtopics', 'strict': True, 'schema': SUB_SCHEMA}},
                     'messages': [{'role': 'user', 'content': SUB_PROMPT.format(topic=topic, n=n_subs)}]}
@@ -330,9 +333,44 @@ def rekashrut():
     print('rekashrut done:', changed, flush=True)
 
 
+
+RETOPIC_SCHEMA = {'type': 'object', 'properties': {'books': {'type': 'array', 'items': {'type': 'object', 'properties': {
+    'q': {'type': 'string'}, 'book': {'type': 'string', 'enum': ['במדבר', 'דברים']}}, 'required': ['q', 'book'], 'additionalProperties': False}}},
+    'required': ['books'], 'additionalProperties': False}
+
+
+def retopic():
+    """The old "במדבר ודברים" subject split by book (owner, 2026-10-18): each question asked of the strong model — is it
+    about the book of במדבר or of דברים? — written to retopic.json {question: new subject}; the export reads it."""
+    from kezohar import config
+    from kezohar.llm import _post
+    path = OUT / 'retopic.json'
+    done = json.loads(path.read_text()) if path.exists() else {}
+    todo = [r['q'] for r in map(json.loads, (OUT / 'questions.jsonl').read_text().splitlines())
+            if r['topic'].startswith('במדבר ודברים') and r['q'] not in done]
+    for i in range(0, len(todo), 40):
+        batch = todo[i:i + 40]
+        body = {'model': config.llm_model(), 'temperature': 0, 'max_tokens': 4000, 'stream': False,
+                'response_format': {'type': 'json_schema', 'json_schema': {'name': 'books', 'strict': True, 'schema': RETOPIC_SCHEMA}},
+                'messages': [{'role': 'user', 'content': 'לכל שאלה: האם היא עוסקת בחומש במדבר או בחומש דברים? q הוא נוסח השאלה מילה במילה. JSON בלבד.\n' + '\n'.join(batch)}]}
+        try:
+            got = json.loads(_post(config.llm_base_url(), '/chat/completions', body, timeout=90)['choices'][0]['message']['content'])['books']
+        except Exception as exc:
+            print('batch failed', type(exc).__name__, flush=True)
+            continue
+        asked = set(batch)
+        for item in got:
+            if item['q'] in asked:
+                done[item['q']] = f"חומש {item['book']} – אישים ואירועים"
+        path.write_text(json.dumps(done, ensure_ascii=False))
+    print('retopic done:', len(done), flush=True)
+
+
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
-    p.add_argument('stage', choices=['questions', 'subtopics', 'answers', 'rekashrut', 'verify', 'repair', 'wording'])
+    p.add_argument('stage', choices=['questions', 'subtopics', 'answers', 'rekashrut', 'verify', 'repair', 'wording', 'retopic'])
+    p.add_argument('--topics', nargs='*')
     p.add_argument('--limit', type=int)
     a = p.parse_args()
-    {'questions': questions, 'subtopics': subtopics, 'rekashrut': rekashrut, 'verify': verify, 'repair': repair, 'wording': wording}.get(a.stage, lambda: answers(a.limit))()
+    ONLY = a.topics or None
+    {'questions': questions, 'subtopics': subtopics, 'retopic': retopic, 'rekashrut': rekashrut, 'verify': verify, 'repair': repair, 'wording': wording}.get(a.stage, lambda: answers(a.limit))()

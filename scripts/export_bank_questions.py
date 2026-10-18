@@ -32,6 +32,7 @@ def category_of(topic):
 def main(target):
     bank = ROOT / 'data/store/qa-bank'
     new = reworded()  # the questions as people ask them (build_qa_bank.py wording)
+    retopic = json.loads((bank / 'retopic.json').read_text()) if (bank / 'retopic.json').exists() else {}
     good = {r['key'] for r in map(json.loads, (bank / 'checks.jsonl').read_text().splitlines()) if r['ok']}
     key = lambda r: hashlib.sha256((r['q'] + '|' + r['answer']).encode()).hexdigest()[:20]
     seen, out = set(), []
@@ -40,7 +41,8 @@ def main(target):
         if not r.get('answer') or 'הקטע' in r['answer'] or q in seen or key(r) not in good:
             continue
         seen.add(q)
-        topic = r['topic'].split(' › ')[0].strip()
+        # The old "במדבר ודברים" subject, split by book (build_qa_bank.py retopic).
+        topic = retopic.get(r['q']) or r['topic'].split(' › ')[0].strip()
         sourced = bool(r.get('quote') and r.get('cite'))
         cat = category_of(topic)
         if cat in ('shabbat', 'kashrut') and ' – ' in topic:  # "שבת – מוקצה וטלטול" under שבת reads "מוקצה וטלטול"
