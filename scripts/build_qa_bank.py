@@ -166,7 +166,7 @@ CHECK_SCHEMA = {'type': 'object', 'properties': {'ok': {'type': 'boolean'}, 'why
                 'required': ['ok', 'why'], 'additionalProperties': False}
 CHECK_PROMPT = ('אתה בודק תשובות במאגר שאלות ביהדות. ok=true רק אם כל אלה מתקיימים: (1) התשובה עונה ישירות ובמלואו על השאלה, '
                 'בלי לדבר על "הקטע" או "המקור" במקום לענות; (2) היא נכונה לפי ההלכה והעובדות המקובלות (בהלכה — לפי מרן '
-                'השולחן ערוך ופוסקי ספרד, או שהיא מציינת למי הדין); (3) הציטוט עוסק באותו עניין ותומך בעיקר התשובה; '
+                'השולחן ערוך ופוסקי ספרד, או שהיא מציינת למי הדין); (3) אם יש ציטוט — הוא עוסק באותו עניין ותומך בעיקר התשובה; '
                 '(4) הניסוח ברור ולא סותר את עצמו. בכל ספק — ok=false. why: משפט קצר. החזר JSON בלבד.')
 
 
@@ -182,20 +182,20 @@ def checks():
 
 
 def verify():
-    """Every sourced answer judged by the strong cloud model (owner, 2026-10-17: "checked questions"); the bank and the
-    app use only answers judged ok. Resumable."""
+    """Every answer judged by the strong cloud model (owner, 2026-10-17: "checked questions"; 2026-10-18: a source is not
+    required when the answer is right); the bank and the app use only answers judged ok. Resumable."""
     from concurrent.futures import ThreadPoolExecutor
     from kezohar import config
     from kezohar.llm import _post
     done = checks()
     rows = [r for r in map(json.loads, (OUT / 'answers.jsonl').read_text().splitlines())
-            if r.get('sourced') and r.get('answer') and key_of(r) not in done]
+            if r.get('answer') and key_of(r) not in done]
 
     def judge(row):
         body = {'model': config.llm_model(), 'temperature': 0, 'max_tokens': 120, 'stream': False,
                 'response_format': {'type': 'json_schema', 'json_schema': {'name': 'check', 'strict': True, 'schema': CHECK_SCHEMA}},
                 'messages': [{'role': 'system', 'content': CHECK_PROMPT},
-                             {'role': 'user', 'content': f"שאלה: {row['q']}\nתשובה: {row['answer']}\nציטוט: {row.get('quote')}\nמקור: {row.get('cite')}"}]}
+                             {'role': 'user', 'content': f"שאלה: {row['q']}\nתשובה: {row['answer']}\nציטוט: {row.get('quote') or 'אין'}\nמקור: {row.get('cite') or 'אין'}"}]}
         try:
             got = json.loads(_post(config.llm_base_url(), '/chat/completions', body, timeout=40)['choices'][0]['message']['content'])
             return {'key': key_of(row), 'q': row['q'], 'ok': bool(got['ok']), 'why': got.get('why', '')}

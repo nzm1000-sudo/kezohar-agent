@@ -18,14 +18,13 @@ def _load(model):
     path = Path(config.get('QA_BANK', 'data/store/qa-bank/answers.jsonl'))
     rows = [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
     # An answer that talks about "the passage" instead of answering is left out (the prompt forbids it; some slipped).
-    rows = [r for r in rows if r.get('sourced') and r.get('answer') and r.get('quote') and r.get('cite') and 'הקטע' not in r['answer']]
-    # Answers the strong model rejected are left out (scripts/build_qa_bank.py verify); while a check is still running,
-    # an unchecked answer stays.
+    rows = [r for r in rows if r.get('answer') and 'הקטע' not in r['answer']]
+    # Only answers the strong model judged right (scripts/build_qa_bank.py verify; owner, 2026-10-18: "only what passed
+    # the check — the source does not matter as long as the answer is right").
     checks = path.with_name('checks.jsonl')
-    if checks.exists():
-        import hashlib
-        rejected = {r['key'] for r in map(json.loads, checks.read_text().splitlines()) if not r['ok']}
-        rows = [r for r in rows if hashlib.sha256((r['q'] + '|' + r['answer']).encode()).hexdigest()[:20] not in rejected]
+    import hashlib
+    good = {r['key'] for r in map(json.loads, checks.read_text().splitlines()) if r['ok']} if checks.exists() else set()
+    rows = [r for r in rows if hashlib.sha256((r['q'] + '|' + r['answer']).encode()).hexdigest()[:20] in good]
     if not rows:
         return [], []
     # The questions as people ask them (scripts/build_qa_bank.py wording): matched in their new wording.
@@ -63,6 +62,10 @@ def lookup(question, model):
     best, row = max(((cosine(qv, v), r) for v, r in zip(vectors, rows)), key=lambda pair: pair[0])
     if best < THRESHOLD:
         return None
+    if not (row.get('quote') and row.get('cite')):  # checked right, with no source found: labelled so (owner, 2026-10-16)
+        return {'verdict': 'model_knowledge', 'mode': 'model-knowledge', 'sources': [], 'halachic_verified': False,
+                'answer': row['answer'], 'bari': {'answer': row['answer'], 'quote': None, 'cite': None, 'source': 'model'},
+                'qa_bank': {'question': row['q'], 'similarity': round(best, 3)}}
     return {'verdict': 'ok', 'mode': 'summary-with-quote', 'sources': [{'reference': row['cite']}], 'halachic_verified': False,
             'answer': row['answer'] + '\n\nמקור: ״' + row['quote'] + '״ (' + row['cite'] + ').',
             'bari': {'answer': row['answer'], 'quote': row['quote'], 'cite': row['cite'], 'source': 'library'},

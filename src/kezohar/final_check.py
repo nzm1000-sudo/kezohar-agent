@@ -39,7 +39,8 @@ def finish(question, result):
         return result
     # A commentator's own words (commentary_lookup.py) are never replaced by an answer from memory (owner, 2026-10-18:
     # a model "Ramban" replaced them and said the Torah was written after the conquest).
-    if result.get('commentary_lookup'):
+    # A checked bank answer (qa_bank.py) was judged already; it is not judged again.
+    if result.get('commentary_lookup') or result.get('qa_bank'):
         return result
     text = ((result.get('bari') or {}).get('answer') or result.get('answer') or '').strip()
     if not text:
