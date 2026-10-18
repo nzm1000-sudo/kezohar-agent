@@ -243,15 +243,17 @@ def repair():
     print('repair done:', fixed, flush=True)
 
 
+# Each fix names the question it fixes, word for word: a fix is kept only when that text is exactly the question asked
+# (2026-10-18: by index alone, 12% of the fixes landed on a neighbouring question).
 WORDING_SCHEMA = {'type': 'object', 'properties': {'fixes': {'type': 'array', 'items': {'type': 'object', 'properties': {
-    'i': {'type': 'integer'}, 'q': {'type': 'string'}}, 'required': ['i', 'q'], 'additionalProperties': False}}},
+    'original': {'type': 'string'}, 'q': {'type': 'string'}}, 'required': ['original', 'q'], 'additionalProperties': False}}},
     'required': ['fixes'], 'additionalProperties': False}
 WORDING_PROMPT = ('אתה עורך לשון. לפניך שאלות ביהדות ממאגר. תקן שאלה שניסוחה אינו טבעי, מסורבל, כפול או אינו כפי שאדם '
                   'שואל בעברית של היום — קצר, פשוט וברור. דוגמאות: "מה מברכים על ריח של עשבי בשמים?" -> "מה מברכים על עשבים '
                   'ריחניים?"; "מה ביקש המן להכין למרדכי?" -> "מה הכין המן למרדכי?"; "מהו כלל הלכתי ומה ההבדל בינו לבין '
                   'פסיקה?" -> "מה ההבדל בין כלל הלכתי לפסק הלכה?". שם ברכה או נוסח שייך לתשובה, לא לשאלה. שמור בדיוק על '
                   'משמעות השאלה ועל כל פרט בה; אל תוסיף ואל תשמיט פרטים; מונחים הלכתיים נכונים נשארים. שאלה טובה — אל '
-                  'תחזיר אותה. החזר JSON: fixes = [{i, q}] רק לשאלות שתוקנו.')
+                  'תחזיר אותה. החזר JSON: fixes = [{original, q}] רק לשאלות שתוקנו — original הוא נוסח השאלה המקורי מילה במילה.')
 
 
 def wording():
@@ -266,10 +268,10 @@ def wording():
     checked = set(done_path.read_text().splitlines()) if done_path.exists() else set()
     qs = [json.loads(l)['q'] for l in (OUT / 'questions.jsonl').read_text().splitlines()]
     todo = [q for q in dict.fromkeys(qs) if q not in seen and q not in checked]
-    batches = [todo[i:i + 25] for i in range(0, len(todo), 25)]
+    batches = [todo[i:i + 10] for i in range(0, len(todo), 10)]
 
     def one(batch):
-        listing = '\n'.join(f'{i}. {q}' for i, q in enumerate(batch))
+        listing = '\n'.join(batch)
         body = {'model': config.llm_model(), 'temperature': 0, 'max_tokens': 1500, 'stream': False,
                 'response_format': {'type': 'json_schema', 'json_schema': {'name': 'wording', 'strict': True, 'schema': WORDING_SCHEMA}},
                 'messages': [{'role': 'system', 'content': WORDING_PROMPT}, {'role': 'user', 'content': listing}]}
@@ -277,7 +279,9 @@ def wording():
             fixes = json.loads(_post(config.llm_base_url(), '/chat/completions', body, timeout=60)['choices'][0]['message']['content'])['fixes']
         except Exception:
             return batch, None
-        return batch, [(batch[f['i']], ' '.join(f['q'].split())) for f in fixes if 0 <= f['i'] < len(batch) and f['q'].strip() and f['q'].strip() != batch[f['i']]]
+        asked = set(batch)
+        return batch, [(f['original'].strip(), ' '.join(f['q'].split())) for f in fixes
+                       if f['original'].strip() in asked and f['q'].strip() and f['q'].strip() != f['original'].strip()]
 
     changed = 0
     with path.open('a') as out, done_path.open('a') as ok, ThreadPoolExecutor(3) as pool:
