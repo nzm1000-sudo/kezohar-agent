@@ -1,4 +1,5 @@
 """Agent orchestration: fastpath -> retrieval (code) -> one LLM call -> safety check."""
+import re
 import time
 from . import fastpath, llm as llm_client
 from .knowledge import KnowledgeBase
@@ -168,6 +169,22 @@ def _display(result):
     if text!=(result.get('answer') or '').strip():
         result['bari']={'answer':text,'quote':None,'cite':cite,'source':'library' if cite else 'model'}
     return result
+
+
+# Only Judaism leaves this server (owner, 2026-10-18: "מהם עשרת הדיברות", heard as "הסרט הדיברות", was answered with the
+# 1923 and 1956 films). An answer about cinema, music, sport or television — by its own clear marks, never by the word
+# "סרט" alone ("מותר לראות סרט בשבת?" is a halacha question) — is withheld, and the reader asked to put it again.
+SECULAR_MARKS=re.compile(r'בבימוי|בימויו|בימוי של|במאי הסרט|הוליווד|פרס האוסקר|אוסקר|כוכבי? קולנוע|שחקני? הסרט|קולנוע אילם|'
+                         r'אלבום|להקת|ליגת|כדורגל|כדורסל|סדרת טלוויזיה|עונה של הסדרה|נטפליקס|משחק וידאו|פלייסטיישן|'
+                         r'\(סרט|\(סדרה|\(אלבום|\(להקה|\(שיר\)')
+SECULAR_REFUSAL={'verdict':'out_of_scope','mode':'scope','sources':[],'halachic_verified':False,
+                 'answer':'אני עונה רק על שאלות ביהדות — תורה, הלכה, מנהגים, חגים, תפילה, אישים וספרים. אם השאלה נשמעה או נכתבה אחרת ממה שהתכוונתם, נסחו אותה שוב.'}
+
+
+def secular_answer(result):
+    text=' '.join([str(result.get('answer') or ''),str((result.get('bari') or {}).get('answer') or '')]+
+                  [str(s.get('reference') or s.get('title') or '') for s in result.get('sources') or [] if isinstance(s,dict)])
+    return result.get('verdict')!='out_of_scope' and bool(SECULAR_MARKS.search(text))
 
 
 class Agent:
@@ -455,6 +472,7 @@ class Agent:
         from .final_check import finish
         result=finish(question,self._converse(question,circumstances,research,**kwargs)) if not circumstances else self._converse(question,circumstances,research,**kwargs)
         if isinstance(result,dict) and question!=asked:result['understood_as']=question
+        if isinstance(result,dict) and secular_answer(result):result=SECULAR_REFUSAL
         if isinstance(result,dict) and not result.get('bari'):result=_display(result)
         return result
 
