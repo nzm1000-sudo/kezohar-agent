@@ -30,7 +30,8 @@ GLOBAL_PER_DAY = {'ask': int(os.environ.get('KEZOHAR_GLOBAL_ASKS_PER_DAY', '3000
                   'voice': int(os.environ.get('KEZOHAR_GLOBAL_VOICE_PER_DAY', '600')),
                   'align': int(os.environ.get('KEZOHAR_GLOBAL_ALIGN_PER_DAY', '600')),
                   'food': int(os.environ.get('KEZOHAR_GLOBAL_FOOD_PER_DAY', '800')),
-                  'rate': int(os.environ.get('KEZOHAR_GLOBAL_RATE_PER_DAY', '5000'))}
+                  'rate': int(os.environ.get('KEZOHAR_GLOBAL_RATE_PER_DAY', '5000')),
+                  'tehillim': int(os.environ.get('KEZOHAR_GLOBAL_TEHILLIM_PER_DAY', '200000'))}
 
 
 TIMING = ROOT / 'data/store/gateway-timing.log'
@@ -64,7 +65,7 @@ waiting = 0
 def cors(origin):
     if origin in ORIGINS or (origin or '').startswith(('http://localhost:', 'http://127.0.0.1:', 'http://192.168.')):
         return {'Access-Control-Allow-Origin': origin, 'Vary': 'Origin',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
                 'Access-Control-Allow-Headers': 'content-type, x-kezohar-key, x-kezohar-device', 'Access-Control-Max-Age': '600'}
     return {}
 
@@ -131,6 +132,7 @@ def forward(question, history=None):
                         for s in (result.get('sources') or [])[:5] if isinstance(s, dict)]}
 
 
+@app.options('/demo/tehillim')
 @app.options('/demo/rate')
 @app.options('/demo/food')
 @app.options('/demo/align')
@@ -290,6 +292,46 @@ async def rate(request: Request):
     except OSError:
         return JSONResponse({'error': 'not saved'}, 503, headers=headers)
     return JSONResponse({'ok': True}, headers=headers)
+
+
+TEHILLIM = ROOT / 'data/store/tehillim-count.json'
+
+
+def _tehillim_today():
+    today = time.strftime('%Y-%m-%d')
+    try:
+        counts = json.loads(TEHILLIM.read_text())
+    except (OSError, ValueError):
+        counts = {}
+    return today, counts
+
+
+@app.get('/demo/tehillim')
+async def tehillim_count(request: Request):
+    """עולם אומר תהילים (owner, 2026-10-18): today's chapters said in the app, all together — a number only."""
+    today, counts = _tehillim_today()
+    return JSONResponse({'date': today, 'chapters': int(counts.get(today, 0))}, headers={**cors(request.headers.get('origin')), 'Cache-Control': 'max-age=30'})
+
+
+@app.post('/demo/tehillim')
+async def tehillim_add(request: Request):
+    """Chapters said (1–150 at a time), counted for today; no name, address or device is kept."""
+    headers = cors(request.headers.get('origin'))
+    if not secrets.compare_digest(request.headers.get('x-kezohar-key', ''), KEY):
+        return JSONResponse({'error': 'unauthorized'}, 401, headers=headers)
+    if over(request, 'tehillim'):
+        return JSONResponse({'error': 'too many'}, 429, headers=headers)
+    try:
+        chapters = int(json.loads((await request.body())[:200]).get('chapters', 0))
+    except (ValueError, TypeError, AttributeError):
+        chapters = 0
+    if not 1 <= chapters <= 150:
+        return JSONResponse({'error': 'chapters 1-150'}, 400, headers=headers)
+    today, counts = _tehillim_today()
+    counts = {k: v for k, v in counts.items() if k >= time.strftime('%Y-%m-%d', time.localtime(time.time() - 40 * 86400))}
+    counts[today] = int(counts.get(today, 0)) + chapters
+    TEHILLIM.write_text(json.dumps(counts))
+    return JSONResponse({'date': today, 'chapters': counts[today]}, headers=headers)
 
 
 @app.api_route('/{path:path}', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
