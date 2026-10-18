@@ -1,7 +1,7 @@
 """The bank's checked answers for the app's "מאגר השאלות" (owner, 2026-10-18: "only what passed the check — the source
 does not matter as long as the answer is right"; spread over the existing categories, opened at once with no agent run).
 
-Each row: [category, topic, question, answer, quote, cite] — category is the app's halacha category id (HALACHA_TOPICS)
+The list's rows: [category, topic, question]; the answers per category in rav-bari/<category>.json — category is the app's halacha category id (HALACHA_TOPICS)
 or 'torah' for the Tanakh, people and thought; topic is the bank's own subject. quote/cite are null when no source.
 
 Usage: export_bank_questions.py <app>/public/data/rav-bari-questions.json
@@ -46,7 +46,17 @@ def main(target):
         if cat in ('shabbat', 'kashrut') and ' – ' in topic:  # "שבת – מוקצה וטלטול" under שבת reads "מוקצה וטלטול"
             topic = topic.split(' – ', 1)[1]
         out.append([cat, topic, q, r['answer'], r['quote'] if sourced else None, r['cite'] if sourced else None])
-    Path(target).write_text(json.dumps(out, ensure_ascii=False, separators=(',', ':')))
+    # The list holds the questions only (it opens at once — owner, 2026-10-18: "still slow"); each category's answers are
+    # their own file beside it, read when an answer of that category opens: rav-bari/<category>.json {question: [answer, quote, cite]}.
+    target = Path(target)
+    target.write_text(json.dumps([row[:3] for row in out], ensure_ascii=False, separators=(',', ':')))
+    shards = target.with_name('rav-bari')
+    shards.mkdir(exist_ok=True)
+    for old in shards.glob('*.json'):
+        old.unlink()
+    for cat in {row[0] for row in out}:
+        answers = {row[2]: row[3:] for row in out if row[0] == cat}
+        (shards / f'{cat}.json').write_text(json.dumps(answers, ensure_ascii=False, separators=(',', ':')))
     print(len(out), 'checked answers')
 
 
