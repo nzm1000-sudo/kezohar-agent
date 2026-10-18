@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import urllib.parse
+import urllib.error
 import urllib.request
 from html.parser import HTMLParser
 from . import config, hebrew
@@ -170,9 +171,23 @@ def _jina(url, timeout=3):
     return _clean_title(data.get('title', '')), [clean_web_text(re.sub(r'\s+', ' ', p)) for p in (data.get('content') or '').split('\n')]
 
 
+class _AllowedRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect is followed only to an allowed site (security review 2026-10-18: it was checked after being followed,
+    so an allowed site's redirect could make the server request an internal address)."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not allowed(newurl):
+            raise urllib.error.URLError('redirect to a site that is not allowed')
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_OPENER = urllib.request.build_opener(_AllowedRedirect)
+
+
 def _download(url, timeout=3):
+    if not allowed(url):
+        return None
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (KezoharAgent; Torah study)'})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with _OPENER.open(req, timeout=timeout) as r:
         if not allowed(r.geturl()) or 'html' not in (r.headers.get('Content-Type') or ''):
             return None
         raw = r.read(2_000_001)

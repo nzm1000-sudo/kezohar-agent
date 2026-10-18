@@ -21,6 +21,11 @@ KEY_FILE = ROOT / 'data/store/public_gateway.key'
 UPSTREAM = os.environ.get('KEZOHAR_AGENT_UPSTREAM', 'http://127.0.0.1:8711')
 ORIGINS = {'https://nzm1000-sudo.github.io', 'capacitor://localhost', 'https://localhost', 'http://localhost'}
 PER_MINUTE, PER_DAY, QUEUE = 6, 150, 3
+# The whole service's daily ceiling, whatever the address (security review 2026-10-18: the app key is public, so a caller
+# changing addresses could run up the paid models' bill): questions, readings aloud and word timings.
+GLOBAL_PER_DAY = {'ask': int(os.environ.get('KEZOHAR_GLOBAL_ASKS_PER_DAY', '3000')),
+                  'voice': int(os.environ.get('KEZOHAR_GLOBAL_VOICE_PER_DAY', '600')),
+                  'align': int(os.environ.get('KEZOHAR_GLOBAL_ALIGN_PER_DAY', '600'))}
 
 
 TIMING = ROOT / 'data/store/gateway-timing.log'
@@ -30,7 +35,7 @@ def timing(kind, status, started, turns=0, question=''):
     """Duration and the question (owner, 2026-10-16: "no privacy needed from now on" — to find what is slow).
     Never the answer or the client's address."""
     try:
-        with open(TIMING, 'a') as log:
+        with open(os.open(TIMING, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), 'a') as log:
             log.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {kind} {status} {round((time.time() - started) * 1000)}ms turns={turns} q={' '.join(question.split())[:300]}\n")
     except OSError:
         pass
@@ -59,13 +64,24 @@ def cors(origin):
     return {}
 
 
-def limited(client):
-    now, q = time.time(), hits[client]
-    while q and now - q[0] > 86400:
-        q.popleft()
-    if len(q) >= PER_DAY or sum(1 for t in q if now - t < 60) >= PER_MINUTE:
+served = defaultdict(deque)
+last_sweep = [0.0]
+
+
+def limited(client, kind='ask'):
+    """Per address (a minute and a day) and for the whole service (a day). Addresses idle for a day are forgotten."""
+    now, q, total = time.time(), hits[client], served[kind]
+    if now - last_sweep[0] > 3600:
+        last_sweep[0] = now
+        for key in [k for k, v in hits.items() if not v or now - v[-1] > 86400]:
+            del hits[key]
+    for dq in (q, total):
+        while dq and now - dq[0] > 86400:
+            dq.popleft()
+    if len(total) >= GLOBAL_PER_DAY[kind] or len(q) >= PER_DAY or sum(1 for t in q if now - t < 60) >= PER_MINUTE:
         return True
     q.append(now)
+    total.append(now)
     return False
 
 
@@ -131,7 +147,7 @@ async def speak(request: Request):
     if not secrets.compare_digest(request.headers.get('x-kezohar-key', ''), KEY):
         return JSONResponse({'error': 'unauthorized'}, 401, headers=headers)
     client = (request.headers.get('cf-connecting-ip') or request.client.host) + ':voice'
-    if limited(client):
+    if limited(client, 'voice'):
         return JSONResponse({'error': 'too many requests, try again soon'}, 429, headers=headers)
     raw = await request.body()
     try:
@@ -159,6 +175,8 @@ async def align(request: Request):
     headers = cors(request.headers.get('origin'))
     if not secrets.compare_digest(request.headers.get('x-kezohar-key', ''), KEY):
         return JSONResponse({'error': 'unauthorized'}, 401, headers=headers)
+    if limited((request.headers.get('cf-connecting-ip') or request.client.host) + ':align', 'align'):
+        return JSONResponse({'error': 'too many requests, try again soon'}, 429, headers=headers)
     raw = await request.body()
     try:
         text = json.loads(raw).get('text', '') if len(raw) <= 8192 else ''

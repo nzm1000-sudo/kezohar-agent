@@ -19,6 +19,19 @@ def _wav(pcm, rate=24000):
         + b'data' + struct.pack('<I', len(pcm)) + pcm
 
 
+TTS_CACHE_MB = 500
+
+
+def _prune(cache):
+    """The readings kept are bounded (security review 2026-10-18: the cache grew without limit): the oldest go first."""
+    files = sorted(cache.glob('*.wav'), key=lambda f: f.stat().st_mtime)
+    total = sum(f.stat().st_size for f in files)
+    while files and total > TTS_CACHE_MB * 1_000_000:
+        oldest = files.pop(0)
+        total -= oldest.stat().st_size
+        oldest.unlink(missing_ok=True)
+
+
 def speak(text, voice=None):
     text = ' '.join(str(text or '').split())[:1200]
     key = config.get('GEMINI_API_KEY', '')
@@ -48,6 +61,7 @@ def speak(text, voice=None):
         audio = audio if audio[:4] == b'RIFF' else _wav(audio)
         cache.mkdir(parents=True, exist_ok=True)
         path.write_bytes(audio)
+        _prune(cache)
         return audio
     return None
 
