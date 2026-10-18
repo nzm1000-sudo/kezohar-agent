@@ -44,6 +44,17 @@ FOODS = [
     ('glass of wine', ['יין']), ('glass of water', ['מים']), ('coffee cup', ['קפה']), ('tea cup', ['תה']),
     ('orange juice', ['מיץ']), ('cola soda', ['קולה', 'משקה']), ('beer glass', ['בירה']), ('milk glass', ['חלב']),
     ('lentil soup', ['מרק', 'עדשים']), ('mujaddara', ['מג\'דרה', 'אורז', 'עדשים']), ('jachnun', ["ג'חנון"]), ('malawach', ['מלאווח']),
+    # Israeli dishes and snacks (owner, 2026-10-18: "more photos")
+    ('sabich', ['סביח']), ('bourekas', ['בורקס']), ('kubbeh', ['קובה']), ('ptitim', ['פתיתים']), ('israeli couscous', ['פתיתים', 'קוסקוס']),
+    ('tahini', ['טחינה']), ('labneh', ['לאבנה']), ('halva', ['חלבה']), ('baklava', ['בקלאווה']), ('knafeh', ['כנאפה']),
+    ('kugel', ['קוגל']), ('cholent', ["צ'ולנט", 'חמין']), ('hamantaschen', ['אוזני המן']), ('babka', ['בבקה', 'עוגת שמרים']),
+    ('rugelach', ['רוגלך', 'רוגעלך']), ('challah', ['חלה', 'לחם']), ('matzo ball soup', ['מרק', 'קניידלך']), ('kreplach', ['קרעפלך']),
+    ('shawarma laffa', ['שווארמה', 'לאפה']), ('laffa bread', ['לאפה', 'לחם']), ('schnitzel plate', ['שניצל']), ('kebab', ['קבב']),
+    ('stuffed peppers', ['פלפל ממולא', 'ממולאים']), ('stuffed grape leaves', ['עלי גפן', 'ממולאים']), ('moussaka', ['מוסקה']),
+    ('pastilla', ['פסטל']), ('cheese blintzes', ['בלינצס']), ('latke', ['לביבה', 'לביבות']), ('fried cauliflower', ['כרובית']),
+    ('roasted eggplant', ['חציל']), ('matbucha', ['מטבוחה']), ('schug', ['סחוג']), ('amba', ['עמבה']), ('date honey silan', ['סילאן', 'דבש']),
+    ('pomegranate seeds', ['רימון']), ('sunflower seeds', ['גרעינים']), ('pita chips', ['חטיף', 'פיתה']), ('wafer snack', ['ופל', 'ופלים']),
+    ('rice cakes', ['פריכיות']), ('granola bar', ['חטיף דגנים', 'גרנולה']),
 ]
 
 

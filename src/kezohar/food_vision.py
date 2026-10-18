@@ -53,23 +53,32 @@ def vocab():
     return _VOCAB
 
 
-def learned_corrections(least=2, most=40):
-    """Corrections readers made ("זוהה X — נכון Y", data/store/answer-ratings.jsonl), each seen at least twice, so that one
-    mistaken tap — or a mischievous one — teaches nothing (owner, 2026-10-18: the camera must learn from its users)."""
+def pending_corrections():
+    """Readers' corrections ("זוהה X — נכון Y", data/store/answer-ratings.jsonl), counted, newest pairs included."""
     from collections import Counter
     from pathlib import Path
     path = Path(config.get('ANSWER_RATINGS', 'data/store/answer-ratings.jsonl'))
-    if not path.exists():
-        return []
     pairs = Counter()
-    for line in path.read_text().splitlines():
+    for line in (path.read_text().splitlines() if path.exists() else []):
         try:
             row = json.loads(line)
         except ValueError:
             continue
         if row.get('kind') in ('food-camera-choice', 'food-camera-typed') and row.get('question', '').startswith('זוהה: '):
             pairs[(row['question'][6:].strip(), row.get('answer', '')[5:].strip())] += 1
-    return [pair for pair, n in pairs.most_common(most) if n >= least and pair[0] and pair[1]]
+    return pairs
+
+
+def learned_corrections():
+    """Only corrections the owner approved (data/store/food-corrections.json, scripts/review_corrections.py) teach the
+    camera — a reader's correction waits in a queue, so one about a product never becomes a rule for all that look alike
+    (owner, 2026-10-18)."""
+    from pathlib import Path
+    path = Path(config.get('FOOD_CORRECTIONS', 'data/store/food-corrections.json'))
+    try:
+        return [tuple(pair) for pair in json.loads(path.read_text()).get('approved', [])][:60]
+    except (OSError, ValueError):
+        return []
 
 
 def identify(image_b64, timeout=30):
