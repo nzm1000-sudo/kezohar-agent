@@ -120,6 +120,36 @@ def limited(client, kind='ask'):
     return None
 
 
+# Repeated questions answered at once (2026-10-18, speed at no cost): a question asked again with no conversation before
+# it gets the same answer for twelve hours. Never a follow-up, never one tied to the clock or the calendar, never a failure.
+import re as _re
+from collections import OrderedDict
+ANSWERS = OrderedDict()
+ANSWER_TTL, ANSWERS_MAX = 12 * 3600, 3000
+TIMELY = _re.compile(r'היום|עכשיו|הלילה|מחר|אתמול|השבוע|השנה|מתי|זמן|שעה|שקיעה|זריחה|הדלקת|צאת|כניסת|פרשת|תאריך|לוח|ספירת|עומר|מולד')
+CACHEABLE = {'summary-with-quote', 'web-quote-answer', 'model-knowledge', 'llm', 'source-only', 'web-model-answer'}
+
+
+def _key(question):
+    return ' '.join(_re.sub(r'[^\u05d0-\u05eaA-Za-z0-9 ]', ' ', question).split())
+
+
+def cached_forward(question, history=None):
+    if history or TIMELY.search(question):
+        return forward(question, history)
+    key, now = _key(question), time.time()
+    hit = ANSWERS.get(key)
+    if hit and now - hit[0] < ANSWER_TTL:
+        ANSWERS.move_to_end(key)
+        return hit[1]
+    result = forward(question, history)
+    if result.get('mode') in CACHEABLE and result.get('answer'):
+        ANSWERS[key] = (now, result)
+        while len(ANSWERS) > ANSWERS_MAX:
+            ANSWERS.popitem(last=False)
+    return result
+
+
 def forward(question, history=None):
     req = urllib.request.Request(UPSTREAM + '/demo/ask', data=json.dumps({'question': question, 'top_k': 5, 'turns': history or []}).encode(),
                                  headers={'Content-Type': 'application/json'})
@@ -173,7 +203,7 @@ async def ask(request: Request):
     started = time.time()
     try:
         async with slot:
-            result = await asyncio.get_running_loop().run_in_executor(None, forward, question.strip(), history)
+            result = await asyncio.get_running_loop().run_in_executor(None, cached_forward, question.strip(), history)
     except Exception:
         timing('ask', 502, started, len(history), question)
         return JSONResponse({'error': 'agent unavailable'}, 502, headers=headers)

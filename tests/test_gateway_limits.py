@@ -28,3 +28,15 @@ def test_devices_behind_one_address_each_have_their_allowance():
     assert [g.over(Req('3.3.3.3', 'd' * 32)) for _ in range(2)] == [None, 'minute']
     g.GLOBAL_PER_DAY['ask'] = len(g.served['ask'])
     assert g.over(Req('9.9.9.9', 'e' * 32)) == 'day'  # the whole service's day
+
+
+def test_repeated_questions_are_answered_from_memory_but_never_timely_or_follow_ups():
+    g = gateway()
+    calls = []
+    g.forward = lambda q, h=None: (calls.append(q), {'mode': 'llm', 'answer': 'x'})[1]
+    g.cached_forward('מה מברכים על בננה?'); g.cached_forward('מה מברכים על בננה')
+    assert len(calls) == 1
+    g.cached_forward('מתי שקיעה היום?'); g.cached_forward('מתי שקיעה היום?')
+    assert len(calls) == 3
+    g.cached_forward('ולמה?', [{'q': 'a', 'a': 'b'}]); g.cached_forward('ולמה?', [{'q': 'a', 'a': 'b'}])
+    assert len(calls) == 5

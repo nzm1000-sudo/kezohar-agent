@@ -1,4 +1,5 @@
 """Hebrew normalization for search only. Original text is never modified."""
+import functools
 import re
 import unicodedata
 
@@ -15,6 +16,7 @@ def strip_niqqud(s):
 def unify_finals(s):
     return s.translate(FINAL_MAP)
 
+@functools.lru_cache(maxsize=200000)  # a pure function called ~240,000 times an answer, mostly on the same words
 def normalize(s):
     """Normalize Hebrew for search: strip niqqud/taamim, unify finals,
     drop geresh variants, lowercase latin, collapse spaces."""
