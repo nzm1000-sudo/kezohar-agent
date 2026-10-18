@@ -455,6 +455,11 @@ class Agent:
         # A kashrut question is answered first from הכשרות למעשה (owner, 2026-10-16), the author's book; the usual
         # path follows only when the book has no passage that answers it.
         import os
+        # "מה מברכים על…" from the app's verified blessings table, before the bank and any model memory (blessing_lookup.py).
+        if not circumstances and 'PYTEST_CURRENT_TEST' not in os.environ:
+            from .blessing_lookup import lookup as blessing_lookup
+            known=blessing_lookup(question)
+            if known:return known
         # The ready answer bank first: a near restatement of a prepared question is answered at once (qa_bank.py).
         if not circumstances and 'PYTEST_CURRENT_TEST' not in os.environ:
             dense=next((b for b in getattr(self.search,'backends',[]) if hasattr(b,'index')),None)

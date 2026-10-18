@@ -12,8 +12,9 @@ from . import config
 
 SCHEMA = {'type': 'object', 'properties': {
     'items': {'type': 'array', 'items': {'type': 'object', 'properties': {
-        'name': {'type': 'string'}, 'kind': {'type': 'string'}, 'main': {'type': 'boolean'}, 'confidence': {'type': 'number'}},
-        'required': ['name', 'kind', 'main', 'confidence'], 'additionalProperties': False}},
+        'name': {'type': 'string'}, 'kind': {'type': 'string'}, 'main': {'type': 'boolean'}, 'confidence': {'type': 'number'},
+        'alternatives': {'type': 'array', 'items': {'type': 'string'}}},
+        'required': ['name', 'kind', 'main', 'confidence', 'alternatives'], 'additionalProperties': False}},
     'not_food': {'type': 'boolean'},
     # A packaged product: the package's own words, read — never guessed (owner, 2026-10-18: a Tamar date bar filled with
     # almond butter was named "date and coconut bar").
@@ -26,6 +27,10 @@ PROMPT = ('זהה את המאכלים והמשקאות שבתמונה, לצור�
           '(למשל "שניצל", "אורז", "תפוח", "פיתה", "קולה", "עוגת שוקולד"); kind — סוג המאכל הכללי, משם שברשימה '
           '(למשל לדוריטוס "חטיף תירס", לאוראו "עוגיות", למילקי "מעדן חלב"); main — true למאכל העיקרי בצלחת, false לטפל; '
           'confidence — 0 עד 1. מאכל מורכב (סלט, פשטידה, מרק) — שמו, ואם רואים, גם רכיבים עיקריים כפריטים נפרדים. '
+          'alternatives — עד שני שמות אחרים שהמאכל עשוי להיות, כשאינך בטוח (אחרת ריק). '
+          'מאכלים שקל להחליף — הבחן היטב: פתיתים (כדוריות או גרגרים קטנים של בצק קלוי, "אורז" של פתיתים) ≠ פסטה (צורות '
+          'גדולות: קרניים, פנה, ספגטי) ≠ קוסקוס (גרגרים זעירים) ≠ אורז; מלפפון (קליפה כהה עם בליטות) ≠ קישוא; בורקס ≠ '
+          'מאפה שמרים; לביבה ≠ שניצל; חומוס (ממרח) ≠ טחינה; בורגול ≠ קינואה. '
           'אל תנחש מה שלא נראה. not_food=true אם אין בתמונה מאכל או משקה. עד 6 פריטים. '
           'מוצר ארוז: product.packaged=true, ו־name, brand ו־ingredients כפי שהם כתובים על האריזה, מילה במילה (כולל '
           'תיאור כמו "במילוי חמאת שקדים מצופה שוקולד מריר"); אל תוסיף רכיב שאינו כתוב או נראה. מה שלא נראה — מחרוזת ריקה. '
@@ -78,6 +83,7 @@ def identify(image_b64, timeout=30):
         except Exception:
             continue  # a busy or limited model: the next one
         items = [{'name': ' '.join(str(i.get('name', '')).split())[:60], 'kind': ' '.join(str(i.get('kind', '')).split())[:40], 'main': bool(i.get('main')),
+                  'alternatives': [' '.join(str(a).split())[:60] for a in (i.get('alternatives') or [])[:2] if str(a).strip()],
                   'confidence': max(0.0, min(1.0, float(i.get('confidence') or 0)))}
                  for i in (got.get('items') or [])[:6] if str(i.get('name', '')).strip()]
         product = got.get('product') or {}
