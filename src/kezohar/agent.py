@@ -464,6 +464,11 @@ class Agent:
             except Exception:
                 ready=None
             if ready:return ready
+        # "מה אומר האבן עזרא על «והכנעני אז בארץ»": the commentator's own words on that verse (commentary_lookup.py).
+        if not circumstances and 'PYTEST_CURRENT_TEST' not in os.environ:
+            from .commentary_lookup import lookup as commentary_lookup
+            said=commentary_lookup(question)
+            if said:return said
         if not circumstances and 'PYTEST_CURRENT_TEST' not in os.environ and (book=='Hakashrut_Lemaase' or _KASHRUT.search(question)):
             found=self._from_book('Hakashrut_Lemaase',question)
             if found:return found
