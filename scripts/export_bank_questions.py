@@ -48,6 +48,20 @@ def main(target):
         if cat in ('shabbat', 'kashrut') and ' – ' in topic:  # "שבת – מוקצה וטלטול" under שבת reads "מוקצה וטלטול"
             topic = topic.split(' – ', 1)[1]
         out.append([cat, topic, q, r['answer'], r['quote'] if sourced else None, r['cite'] if sourced else None])
+    # The blessings table of עונג שבת (owner, 2026-10-18: "more questions"): each food's question answered from the book's
+    # own line, no model in between — before and after, the book's words as the quote, its page as the source.
+    table = bank / '..' / 'food-blessings.json'
+    if table.exists():
+        for food in json.loads(table.read_text()):
+            if not food.get('book'):
+                continue
+            name = food['names'][0].split('[')[0].strip()
+            q = f'מה מברכים על {name}?'
+            if q in seen:
+                continue
+            seen.add(q)
+            answer = f'על {name} מברכים «{food["before"]}», ולאחר האכילה «{food["after"]}».'
+            out.append(['blessings', 'לוח הברכות — עונג שבת', q, answer, food['book'], food['cite']])
     # The list holds the questions only (it opens at once — owner, 2026-10-18: "still slow"); each category's answers are
     # their own file beside it, read when an answer of that category opens: rav-bari/<category>.json {question: [answer, quote, cite]}.
     target = Path(target)

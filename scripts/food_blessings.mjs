@@ -13,7 +13,7 @@ const out = [];
 for (const r of records) {
   const v = presentRecord(r, { nusach: 'edot' });
   if (!v.before?.label || !v.after?.label || r.kind === 'pending' || r.kind === 'conditional') continue; // verified only
-  out.push({ names: [r.name, ...(r.aliases || [])].filter(Boolean), brand: r.brand || '', before: v.before.label, after: v.after.label, cite: r.kind === 'book' ? (v.sources?.[0] || '') : [v.ruleTitle, v.ruleSources?.[0]?.citation || v.ruleSources?.[0]?.title || ''].filter(Boolean).join(' — ') });
+  out.push({ names: [r.name, ...(r.aliases || [])].filter(Boolean), brand: r.brand || '', before: v.before.label, after: v.after.label, book: r.kind === 'book' && r.origin === 'ong-table' ? (r.text || '') : '', cite: r.kind === 'book' ? (v.sources?.[0] || '') : [v.ruleTitle, v.ruleSources?.[0]?.citation || v.ruleSources?.[0]?.title || ''].filter(Boolean).join(' — ') });
 }
 fs.writeFileSync(process.argv[3], JSON.stringify(out));
 console.log(out.length, 'foods with a verified blessing');
