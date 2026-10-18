@@ -370,7 +370,8 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('stage', choices=['questions', 'subtopics', 'answers', 'rekashrut', 'verify', 'repair', 'wording', 'retopic'])
     p.add_argument('--topics', nargs='*')
+    p.add_argument('--subs', type=int, default=12)
     p.add_argument('--limit', type=int)
     a = p.parse_args()
     ONLY = a.topics or None
-    {'questions': questions, 'subtopics': subtopics, 'retopic': retopic, 'rekashrut': rekashrut, 'verify': verify, 'repair': repair, 'wording': wording}.get(a.stage, lambda: answers(a.limit))()
+    {'questions': questions, 'subtopics': lambda: subtopics(n_subs=a.subs), 'retopic': retopic, 'rekashrut': rekashrut, 'verify': verify, 'repair': repair, 'wording': wording}.get(a.stage, lambda: answers(a.limit))()
