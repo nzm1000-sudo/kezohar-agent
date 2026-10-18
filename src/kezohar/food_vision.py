@@ -14,12 +14,21 @@ SCHEMA = {'type': 'object', 'properties': {
     'items': {'type': 'array', 'items': {'type': 'object', 'properties': {
         'name': {'type': 'string'}, 'main': {'type': 'boolean'}, 'confidence': {'type': 'number'}},
         'required': ['name', 'main', 'confidence'], 'additionalProperties': False}},
-    'not_food': {'type': 'boolean'}}, 'required': ['items', 'not_food'], 'additionalProperties': False}
+    'not_food': {'type': 'boolean'},
+    # A packaged product: the package's own words, read — never guessed (owner, 2026-10-18: a Tamar date bar filled with
+    # almond butter was named "date and coconut bar").
+    'product': {'type': 'object', 'properties': {'packaged': {'type': 'boolean'}, 'name': {'type': 'string'},
+                                                 'brand': {'type': 'string'}, 'ingredients': {'type': 'string'}},
+                'required': ['packaged', 'name', 'brand', 'ingredients'], 'additionalProperties': False}},
+    'required': ['items', 'not_food', 'product'], 'additionalProperties': False}
 
 PROMPT = ('זהה את המאכלים והמשקאות שבתמונה, לצורך בירור ברכה. לכל אחד: name — שם המאכל בעברית פשוטה כפי שמחפשים אותו '
           '(למשל "שניצל", "אורז", "תפוח", "פיתה", "קולה", "עוגת שוקולד"); main — true למאכל העיקרי בצלחת, false לטפל; '
           'confidence — 0 עד 1. מאכל מורכב (סלט, פשטידה, מרק) — שמו, ואם רואים, גם רכיבים עיקריים כפריטים נפרדים. '
-          'אל תנחש מה שלא נראה. not_food=true אם אין בתמונה מאכל או משקה. עד 6 פריטים. JSON בלבד.')
+          'אל תנחש מה שלא נראה. not_food=true אם אין בתמונה מאכל או משקה. עד 6 פריטים. '
+          'מוצר ארוז: product.packaged=true, ו־name, brand ו־ingredients כפי שהם כתובים על האריזה, מילה במילה (כולל '
+          'תיאור כמו "במילוי חמאת שקדים מצופה שוקולד מריר"); אל תוסיף רכיב שאינו כתוב או נראה. מה שלא נראה — מחרוזת ריקה. '
+          'items למוצר ארוז: שם המוצר כפי שכתוב, ואחריו רכיביו העיקריים. אחרת packaged=false והשאר ריקים. JSON בלבד.')
 
 MAX_BYTES = 1_500_000
 # The blessings engine's own names (data/store/food-vocab.json, 2,809 after duplicates: the Oneg Shabbat table and the
@@ -67,8 +76,10 @@ def identify(image_b64, timeout=30):
                 got = json.loads(json.load(r)['choices'][0]['message']['content'])
         except Exception:
             continue  # a busy or limited model: the next one
-        items = [{'name': ' '.join(str(i.get('name', '')).split())[:40], 'main': bool(i.get('main')),
+        items = [{'name': ' '.join(str(i.get('name', '')).split())[:60], 'main': bool(i.get('main')),
                   'confidence': max(0.0, min(1.0, float(i.get('confidence') or 0)))}
                  for i in (got.get('items') or [])[:6] if str(i.get('name', '')).strip()]
-        return {'items': items, 'not_food': bool(got.get('not_food')) and not items}
+        product = got.get('product') or {}
+        product = {k: ' '.join(str(product.get(k, '')).split())[:200] for k in ('name', 'brand', 'ingredients')} | {'packaged': bool(product.get('packaged'))}
+        return {'items': items, 'not_food': bool(got.get('not_food')) and not items, 'product': product if product['packaged'] else None}
     return None

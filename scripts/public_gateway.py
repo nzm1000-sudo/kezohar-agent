@@ -256,7 +256,7 @@ async def food(request: Request):
         timing('food', 502, started)
         return JSONResponse({'error': 'vision unavailable'}, 502, headers=headers)
     timing('food', 200, started, question=' / '.join(i.get('name', '') for i in result.get('items', [])))
-    return JSONResponse({'items': result.get('items', [])[:6], 'not_food': bool(result.get('not_food'))}, headers=headers)
+    return JSONResponse({'items': result.get('items', [])[:6], 'not_food': bool(result.get('not_food')), 'product': result.get('product')}, headers=headers)
 
 
 @app.api_route('/{path:path}', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
