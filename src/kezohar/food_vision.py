@@ -12,8 +12,8 @@ from . import config
 
 SCHEMA = {'type': 'object', 'properties': {
     'items': {'type': 'array', 'items': {'type': 'object', 'properties': {
-        'name': {'type': 'string'}, 'main': {'type': 'boolean'}, 'confidence': {'type': 'number'}},
-        'required': ['name', 'main', 'confidence'], 'additionalProperties': False}},
+        'name': {'type': 'string'}, 'kind': {'type': 'string'}, 'main': {'type': 'boolean'}, 'confidence': {'type': 'number'}},
+        'required': ['name', 'kind', 'main', 'confidence'], 'additionalProperties': False}},
     'not_food': {'type': 'boolean'},
     # A packaged product: the package's own words, read — never guessed (owner, 2026-10-18: a Tamar date bar filled with
     # almond butter was named "date and coconut bar").
@@ -23,7 +23,8 @@ SCHEMA = {'type': 'object', 'properties': {
     'required': ['items', 'not_food', 'product'], 'additionalProperties': False}
 
 PROMPT = ('זהה את המאכלים והמשקאות שבתמונה, לצורך בירור ברכה. לכל אחד: name — שם המאכל בעברית פשוטה כפי שמחפשים אותו '
-          '(למשל "שניצל", "אורז", "תפוח", "פיתה", "קולה", "עוגת שוקולד"); main — true למאכל העיקרי בצלחת, false לטפל; '
+          '(למשל "שניצל", "אורז", "תפוח", "פיתה", "קולה", "עוגת שוקולד"); kind — סוג המאכל הכללי, משם שברשימה '
+          '(למשל לדוריטוס "חטיף תירס", לאוראו "עוגיות", למילקי "מעדן חלב"); main — true למאכל העיקרי בצלחת, false לטפל; '
           'confidence — 0 עד 1. מאכל מורכב (סלט, פשטידה, מרק) — שמו, ואם רואים, גם רכיבים עיקריים כפריטים נפרדים. '
           'אל תנחש מה שלא נראה. not_food=true אם אין בתמונה מאכל או משקה. עד 6 פריטים. '
           'מוצר ארוז: product.packaged=true, ו־name, brand ו־ingredients כפי שהם כתובים על האריזה, מילה במילה (כולל '
@@ -76,7 +77,7 @@ def identify(image_b64, timeout=30):
                 got = json.loads(json.load(r)['choices'][0]['message']['content'])
         except Exception:
             continue  # a busy or limited model: the next one
-        items = [{'name': ' '.join(str(i.get('name', '')).split())[:60], 'main': bool(i.get('main')),
+        items = [{'name': ' '.join(str(i.get('name', '')).split())[:60], 'kind': ' '.join(str(i.get('kind', '')).split())[:40], 'main': bool(i.get('main')),
                   'confidence': max(0.0, min(1.0, float(i.get('confidence') or 0)))}
                  for i in (got.get('items') or [])[:6] if str(i.get('name', '')).strip()]
         product = got.get('product') or {}
