@@ -90,6 +90,29 @@ def comment(pattern, verse):
     return (data.get('heRef') or ref, segments) if segments else None
 
 
+READ_SCHEMA = {'type': 'object', 'properties': {'answer': {'type': 'string'}, 'quote': {'type': 'string'}},
+               'required': ['answer', 'quote'], 'additionalProperties': False}
+READ_PROMPT = ('לפניך לשון המפרש על הפסוק. ענה על השאלה מה הוא אומר: answer — שניים־שלושה משפטים בעברית פשוטה, רק מה '
+               'שכתוב בקטע, בלי להוסיף דבר מידיעתך ובלי לייחס לו דבר שאינו כתוב; quote — העתק מילה במילה את המשפט המרכזי '
+               'מן הקטע (עד 40 מילים). אם הקטע אינו עוסק במילים שנשאלו, החזר answer ריק. אל תזכיר "הקטע". JSON בלבד.')
+
+
+def _read(question, name, reference, passage, timeout):
+    """(answer, quote) read from the commentator's words only; the quote must be in the passage word for word."""
+    from . import config
+    from .llm import _post
+    from .web_answer import _plain
+    body = {'model': config.llm_model(), 'temperature': 0, 'max_tokens': 500, 'stream': False,
+            'response_format': {'type': 'json_schema', 'json_schema': {'name': 'commentary', 'strict': True, 'schema': READ_SCHEMA}},
+            'messages': [{'role': 'system', 'content': READ_PROMPT},
+                         {'role': 'user', 'content': f'שאלה: {question}\nהמפרש: {name} ({reference})\n\n{passage}'}]}
+    got = json.loads(_post(config.llm_base_url(), '/chat/completions', body, timeout=timeout)['choices'][0]['message']['content'])
+    answer, quote = ' '.join(got['answer'].split()), _plain(got['quote'])
+    if not answer or len(quote) < 8 or quote not in _plain(passage) or len(answer) > 700:
+        return None
+    return answer, quote
+
+
 def lookup(question, timeout=35):
     found = asked(question)
     if not found:
@@ -103,17 +126,39 @@ def lookup(question, timeout=35):
     if not got:
         return None
     reference, segments = got
-    # The comment's paragraphs on the asked words first (its dibur hamatchil), then the rest of the comment.
+    # The comment's paragraphs on the asked words first (its dibur hamatchil), then the rest. Matching ignores nikud:
+    # the Ramban's comment is one vocalized paragraph of 4,250 characters, the asked words near its end.
+    plain = lambda t: re.sub(r'[\u0591-\u05C7]', '', t)
     stems = [w[:4] for w in phrase.split() if len(w) > 2]
-    on_words = [s for s in segments if any(stem in s[:40] for stem in stems)]
-    text = '\n'.join(on_words + [s for s in segments if s not in on_words])
-    source = {'source_id': 'sefaria:' + reference, 'reference': reference, 'text': text, 'work_title': name}
-    from .web_answer import read_and_answer
-    found = read_and_answer(question, [source], timeout=timeout, chars=2500)
-    if not found:
-        return None
-    answer, quote, chosen, _ = found
-    return {'verdict': 'ok', 'mode': 'summary-with-quote', 'answer': answer + '\n״' + quote + '״ (' + reference + ').',
+    on_words = [x for x in segments if sum(stem in plain(x) for stem in stems) >= max(1, len(stems) - 1)]
+    text = '\n'.join(on_words + [x for x in segments if x not in on_words])
+    # Where the comment speaks of the asked words: the whole phrase, else its rarest word (a word like "בארץ" also opens
+    # the Ramban's comment, "ויעבר אברם בארץ"). The reading gets that passage, unvocalized, not the whole long comment.
+    words = plain(text)
+    at = words.find(phrase)
+    if at < 0:
+        hits = [words.find(stem) for stem in sorted(stems, key=lambda stem: words.count(stem)) if stem in words]
+        at = hits[0] if hits else -1
+    window = words[max(0, at - 700):at + 1800] if at > 900 else words[:2500]
+    source = {'source_id': 'sefaria:' + reference, 'reference': reference, 'text': window, 'work_title': name}
+    try:
+        found = _read(question, name, reference, window, timeout)
+    except Exception:
+        found = None
+    if found:
+        answer, quote = found
+        return {'verdict': 'ok', 'mode': 'summary-with-quote', 'answer': answer + '\n״' + quote + '״ (' + reference + ').',
+                'sources': [source], 'halachic_verified': False,
+                'bari': {'answer': answer, 'quote': quote, 'cite': reference, 'source': 'library'},
+                'commentary_lookup': {'commentator': name, 'verse': verse, 'phrase': phrase}}
+    # Not read into an answer: the commentator's own words are shown, never a summary from memory (a model "Ramban"
+    # once said the Torah was written after the conquest — nothing he says).
+    start = max(0, at - 150) if at >= 0 else 0
+    excerpt = ('…' if start else '') + words[start:start + 900].strip() + ('…' if start + 900 < len(words) else '')
+    # The commentator does not speak of the asked words (Sforno on 12:6 explains ויעבר אברם only): said so, plainly.
+    about = phrase in words or all(stem in words for stem in stems)
+    lead = f'זה לשון {name} על הפסוק:' if about else f'{name} אינו מפרש את המילים «{phrase}»; זה לשונו על הפסוק:'
+    return {'verdict': 'ok', 'mode': 'source-only', 'answer': f'{lead}\n״{excerpt}״ ({reference}).',
             'sources': [source], 'halachic_verified': False,
-            'bari': {'answer': answer, 'quote': quote, 'cite': reference, 'source': 'library'},
-            'commentary_lookup': {'commentator': name, 'verse': verse, 'phrase': phrase}}
+            'bari': {'answer': lead, 'quote': excerpt, 'cite': reference, 'source': 'library'},
+            'commentary_lookup': {'commentator': name, 'verse': verse, 'phrase': phrase, 'read': False}}
