@@ -53,6 +53,25 @@ def vocab():
     return _VOCAB
 
 
+def learned_corrections(least=2, most=40):
+    """Corrections readers made ("זוהה X — נכון Y", data/store/answer-ratings.jsonl), each seen at least twice, so that one
+    mistaken tap — or a mischievous one — teaches nothing (owner, 2026-10-18: the camera must learn from its users)."""
+    from collections import Counter
+    from pathlib import Path
+    path = Path(config.get('ANSWER_RATINGS', 'data/store/answer-ratings.jsonl'))
+    if not path.exists():
+        return []
+    pairs = Counter()
+    for line in path.read_text().splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if row.get('kind') in ('food-camera-choice', 'food-camera-typed') and row.get('question', '').startswith('זוהה: '):
+            pairs[(row['question'][6:].strip(), row.get('answer', '')[5:].strip())] += 1
+    return [pair for pair, n in pairs.most_common(most) if n >= least and pair[0] and pair[1]]
+
+
 def identify(image_b64, timeout=30):
     """{'items': [{name, main, confidence}], 'not_food': bool} or None when no model could look."""
     try:
@@ -65,6 +84,9 @@ def identify(image_b64, timeout=30):
     names = vocab()
     prompt = PROMPT + (('\nשמות המאכלים במאגר הברכות — כשהמאכל שבתמונה מופיע ברשימה, השתמש בשם שבה בדיוק; מאכל שאינו ברשימה '
                         '(למשל מג׳דרה) — פרק לרכיביו שברשימה (אורז, עדשים):\n' + ' · '.join(names)) if names else '')
+    learned = learned_corrections()
+    if learned:
+        prompt += '\nתיקונים שמשתמשים עשו בעבר (זוהה ← היה בפועל) — הבחן ביניהם היטב: ' + ' · '.join(f'{a} ← {b}' for a, b in learned)
     messages = [{'role': 'user', 'content': [{'type': 'text', 'text': prompt}, {'type': 'image_url', 'image_url': {'url': url}}]}]
     fmt = {'type': 'json_schema', 'json_schema': {'name': 'foods', 'strict': True, 'schema': SCHEMA}}
     attempts = []
