@@ -134,7 +134,9 @@ def _key(question):
     return ' '.join(_re.sub(r'[^\u05d0-\u05eaA-Za-z0-9 ]', ' ', question).split())
 
 
-def cached_forward(question, history=None):
+def cached_forward(question, history=None, spoken=False):
+    if spoken:  # corrected upstream first: not matched to a cached question as heard
+        return forward(question, history, True)
     if history or TIMELY.search(question):
         return forward(question, history)
     key, now = _key(question), time.time()
@@ -150,8 +152,8 @@ def cached_forward(question, history=None):
     return result
 
 
-def forward(question, history=None):
-    req = urllib.request.Request(UPSTREAM + '/demo/ask', data=json.dumps({'question': question, 'top_k': 5, 'turns': history or []}).encode(),
+def forward(question, history=None, spoken=False):
+    req = urllib.request.Request(UPSTREAM + '/demo/ask', data=json.dumps({'question': question, 'top_k': 5, 'turns': history or [], 'spoken': bool(spoken)}).encode(),
                                  headers={'Content-Type': 'application/json'})
     with urllib.request.urlopen(req, timeout=120) as r:
         result = json.load(r)
@@ -203,7 +205,7 @@ async def ask(request: Request):
     started = time.time()
     try:
         async with slot:
-            result = await asyncio.get_running_loop().run_in_executor(None, cached_forward, question.strip(), history)
+            result = await asyncio.get_running_loop().run_in_executor(None, cached_forward, question.strip(), history, body.get('spoken') is True if isinstance(body, dict) else False)
     except Exception:
         timing('ask', 502, started, len(history), question)
         return JSONResponse({'error': 'agent unavailable'}, 502, headers=headers)

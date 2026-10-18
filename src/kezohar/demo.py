@@ -171,6 +171,12 @@ async def ask(request: Request):
     try:
         body=api._decode_body(await request.body())
         question, opts = api._validate_body(body)
+        # A question spoken aloud: words the recognizer misheard are set right first (spoken.py).
+        heard = question
+        if body.get('spoken') is True:
+            from .spoken import correct
+            question = correct(question)
+        spoken_fixed = question if question != heard else None
         from .conversation_updates import browser_turn
         from .question_intent import QuestionIntentRouter
         original=question
@@ -215,6 +221,7 @@ async def ask(request: Request):
                       demo_model=agent.model, demo_model_calls=budget.calls)
         result['temporary_conversation']=turn
         result['server_version']=SERVER_VERSION
+        if spoken_fixed:result['understood_as']=spoken_fixed  # shown to the reader: what was understood from the voice
         return result
     try:return await asyncio.to_thread(run)
     except asyncio.CancelledError:
