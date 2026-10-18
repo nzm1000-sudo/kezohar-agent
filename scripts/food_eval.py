@@ -70,6 +70,50 @@ def search(term):
     return None
 
 
+def openverse(term, n=3):
+    """Up to n freely licensed photos (commercial use allowed) from Openverse — Flickr, Wikimedia and more, no key."""
+    q = urllib.parse.urlencode({'q': term, 'page_size': n + 3, 'license_type': 'commercial', 'extension': 'jpg'})
+    with urllib.request.urlopen(urllib.request.Request('https://api.openverse.org/v1/images/?' + q, headers=UA), timeout=20) as r:
+        results = json.load(r).get('results', [])
+    return [(x['url'], x.get('title') or '', f"{x.get('license')} · {x.get('source')} · {x.get('creator') or ''}") for x in results][:n]
+
+
+def download_more(per=3):
+    """More photos per food from Openverse (owner, 2026-10-18: "take what you can"), each kept with its licence."""
+    meta = OUT / 'photos.jsonl'
+    have = [json.loads(l) for l in meta.read_text().splitlines()] if meta.exists() else []
+    count = {}
+    for row in have:
+        count[row['term']] = count.get(row['term'], 0) + 1
+    with meta.open('a') as out:
+        for term, names in FOODS:
+            if count.get(term, 0) >= per + 1:
+                continue
+            try:
+                found = openverse(term, per)
+            except Exception as exc:
+                print('openverse failed:', term, type(exc).__name__)
+                time.sleep(10)
+                continue
+            for i, (url, title, licence) in enumerate(found):
+                path = OUT / f"{term.replace(' ', '_')}_ov{i}.jpg"
+                if path.exists():
+                    continue
+                try:
+                    with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
+                        data = r.read(4_000_000)
+                except Exception:
+                    continue
+                if data[:3] != b'\xff\xd8\xff':
+                    continue
+                path.write_bytes(data)
+                import subprocess  # as the phone does: the longest side 768 px
+                subprocess.run(['sips', '-Z', '768', str(path)], capture_output=True)
+                out.write(json.dumps({'term': term, 'names': names, 'file': path.name, 'title': title, 'licence': licence}, ensure_ascii=False) + '\n')
+                out.flush()
+            time.sleep(3)
+
+
 def download():
     OUT.mkdir(parents=True, exist_ok=True)
     meta = OUT / 'photos.jsonl'
@@ -119,4 +163,4 @@ def report():
 
 
 if __name__ == '__main__':
-    {'download': download, 'run': run, 'report': report}[sys.argv[1] if len(sys.argv) > 1 else 'report']()
+    {'download': download, 'more': download_more, 'run': run, 'report': report}[sys.argv[1] if len(sys.argv) > 1 else 'report']()
