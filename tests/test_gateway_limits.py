@@ -20,7 +20,7 @@ def test_devices_behind_one_address_each_have_their_allowance():
     g.PER_MINUTE, g.PER_DAY = 100, 3
     assert [g.over(Req('1.1.1.1', 'a' * 32)) for _ in range(4)] == [None, None, None, 'day']
     assert [g.over(Req('1.1.1.1', 'b' * 32)) for _ in range(4)] == [None, None, None, 'day']
-    g.ADDRESS_PER_DAY = 8
+    g.ADDRESS_PER_DAY = 6  # six counted from this address already
     assert g.over(Req('1.1.1.1', 'c' * 32)) == 'day'  # the shared address's ceiling
     g.PER_DAY = 2
     assert [g.over(Req('2.2.2.2')) for _ in range(3)] == [None, None, 'day']  # no device id: the address
