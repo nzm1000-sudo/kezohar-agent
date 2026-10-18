@@ -158,6 +158,10 @@ async def ask(request: Request):
     except ValueError:
         body = {}
     question = body.get('question', '') if isinstance(body, dict) else ''
+    # The iPhone keyboard may open a Hebrew question with an invisible direction mark (U+200F): it hid "מה מברכים על…"
+    # from the blessings table (20 s instead of 1). Direction marks are dropped from every question.
+    if isinstance(question, str):
+        question = question.translate({c: None for c in (0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069, 0xfeff)})
     history = body.get('turns') if isinstance(body, dict) and isinstance(body.get('turns'), list) else []
     history = [{'q': str(t.get('q', ''))[:300], 'a': str(t.get('a', ''))[:600]} for t in history[-4:] if isinstance(t, dict)]
     if not isinstance(question, str) or not question.strip() or len(question) > 500:

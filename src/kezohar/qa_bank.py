@@ -12,6 +12,7 @@ from . import config
 THRESHOLD = 0.95
 _lock = threading.Lock()
 _bank = None
+_matrix = None
 
 
 def _load(model):
@@ -57,9 +58,16 @@ def lookup(question, model):
     rows, vectors = _bank
     if not rows:
         return None
-    from .vector import cosine
-    qv = model.embed_query(question)
-    best, row = max(((cosine(qv, v), r) for v, r in zip(vectors, rows)), key=lambda pair: pair[0])
+    # One matrix product over the whole bank (numpy) instead of 7,000 Python cosines: 0.7 s → a few ms.
+    import numpy as np
+    global _matrix
+    if _matrix is None or _matrix.shape[0] != len(vectors):
+        m = np.asarray(vectors, dtype=np.float32)
+        _matrix = m / np.maximum(np.linalg.norm(m, axis=1, keepdims=True), 1e-9)
+    qv = np.asarray(model.embed_query(question), dtype=np.float32)
+    scores = _matrix @ (qv / max(float(np.linalg.norm(qv)), 1e-9))
+    i = int(scores.argmax())
+    best, row = float(scores[i]), rows[i]
     if best < THRESHOLD:
         return None
     if not (row.get('quote') and row.get('cite')):  # checked right, with no source found: labelled so (owner, 2026-10-16)

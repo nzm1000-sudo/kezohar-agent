@@ -103,6 +103,13 @@ class SQLiteLibrarySearch:
                 rows=(short+[(payload,score) for payload,score in rows if json.loads(payload)['source_id'] not in seen])[:limit]
             if request_budget:request_budget.check('SQLite focused retrieval return')
             if len(rows)<limit:
+                # A word in more than 20,000 passages ("מי", "היו") made the ranking scan most of the library: 2.7 s for
+                # "מי היו הבנים של קורח", 0.0 s without it, the same sources (2026-10-18). Each word's count is probed
+                # (2 ms, capped); the common ones are left out while a rarer word remains.
+                if len(terms)>1:
+                    rare=[t for t in terms[:50] if db.execute('SELECT count(*) FROM (SELECT rowid FROM library_fts WHERE library_fts MATCH ? LIMIT 20000)',('"'+t.replace('"','""')+'"',)).fetchone()[0]<20000]
+                    if rare:
+                        expression=' OR '.join('"'+t.replace('"','""')+'"' for t in rare)
                 broad=db.execute(sql,(expression,limit)).fetchall()
                 seen={json.loads(payload)['source_id'] for payload,_ in rows}
                 rows.extend((payload,score) for payload,score in broad if json.loads(payload)['source_id'] not in seen)
