@@ -19,8 +19,9 @@ SCHEMA = {'type': 'object', 'properties': {
     # A packaged product: the package's own words, read — never guessed (owner, 2026-10-18: a Tamar date bar filled with
     # almond butter was named "date and coconut bar").
     'product': {'type': 'object', 'properties': {'packaged': {'type': 'boolean'}, 'name': {'type': 'string'},
-                                                 'brand': {'type': 'string'}, 'ingredients': {'type': 'string'}},
-                'required': ['packaged', 'name', 'brand', 'ingredients'], 'additionalProperties': False}},
+                                                 'brand': {'type': 'string'}, 'ingredients': {'type': 'string'},
+                                                 'barcode': {'type': 'string'}},
+                'required': ['packaged', 'name', 'brand', 'ingredients', 'barcode'], 'additionalProperties': False}},
     'required': ['items', 'not_food', 'product'], 'additionalProperties': False}
 
 PROMPT = ('זהה את המאכלים והמשקאות שבתמונה, לצורך בירור ברכה. לכל אחד: name — שם המאכל בעברית פשוטה כפי שמחפשים אותו '
@@ -34,6 +35,7 @@ PROMPT = ('זהה את המאכלים והמשקאות שבתמונה, לצור�
           'אל תנחש מה שלא נראה. not_food=true אם אין בתמונה מאכל או משקה. עד 6 פריטים. '
           'מוצר ארוז: product.packaged=true, ו־name, brand ו־ingredients כפי שהם כתובים על האריזה, מילה במילה (כולל '
           'תיאור כמו "במילוי חמאת שקדים מצופה שוקולד מריר"); אל תוסיף רכיב שאינו כתוב או נראה. מה שלא נראה — מחרוזת ריקה. '
+          'barcode — הספרות שמתחת לברקוד, אם נראות בבירור (8 או 13 ספרות), אחרת ריק. '
           'items למוצר ארוז: שם המוצר כפי שכתוב, ואחריו רכיביו העיקריים. אחרת packaged=false והשאר ריקים. JSON בלבד.')
 
 MAX_BYTES = 1_500_000
@@ -74,6 +76,54 @@ def identify(image_b64, timeout=30):
         attempts.append(('https://api.openai.com/v1/chat/completions', config.get('OPENAI_API_KEY'),
                          {'model': config.get('OPENAI_MODEL', 'gpt-6-luna'), 'messages': messages, 'response_format': fmt,
                           'reasoning_effort': 'none', 'max_completion_tokens': 400}))
+    first = _ask(attempts)
+    if first is None:
+        return None
+    main = next((item for item in first['items'] if item['main']), first['items'][0] if first['items'] else None)
+    # Not sure: a stronger model looks too; agreement stands, disagreement becomes an alternative (research 2026-10-18).
+    if main and main['confidence'] < 0.8 and config.get('GEMINI_API_KEY', ''):
+        strong = [a for a in attempts if a[2].get('model') == 'gemini-3.8-flash'] + [a for a in attempts if 'openai.com' in a[0]]
+        second = _ask(strong)
+        if second and second['items']:
+            other = next((item for item in second['items'] if item['main']), second['items'][0])
+            if other['name'] != main['name'] and other['name'] not in main['alternatives']:
+                if other['confidence'] > main['confidence']:
+                    main['alternatives'] = [main['name']] + main['alternatives'][:1]
+                    main.update(name=other['name'], kind=other['kind'], confidence=other['confidence'])
+                else:
+                    main['alternatives'] = ([other['name']] + main['alternatives'])[:2]
+            if not first['product'] and second['product']:
+                first['product'] = second['product']
+    # A barcode read on the package: the product's own name from Open Food Facts (ODbL), when it has one.
+    if first['product'] and first['product'].get('barcode'):
+        found = barcode_product(first['product']['barcode'])
+        if found:
+            first['product'].update({k: v for k, v in found.items() if v})
+            if first['items'] and found.get('name'):
+                first['items'][0]['alternatives'] = ([first['items'][0]['name']] + first['items'][0]['alternatives'])[:2]
+                first['items'][0]['name'] = found['name'][:60]
+    return first
+
+
+def barcode_product(code):
+    """{'name', 'brand', 'ingredients'} from Open Food Facts for an EAN/UPC barcode, or None."""
+    code = ''.join(ch for ch in str(code) if ch.isdigit())
+    if len(code) not in (8, 12, 13, 14):
+        return None
+    url = f'https://world.openfoodfacts.org/api/v2/product/{code}.json?fields=product_name_he,product_name,brands,ingredients_text_he,ingredients_text'
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'KezoharAgent/1.0 (blessings camera)'}), timeout=6) as r:
+            got = json.load(r)
+    except Exception:
+        return None
+    p = got.get('product') or {}
+    if got.get('status') != 1 or not (p.get('product_name_he') or p.get('product_name')):
+        return None
+    return {'name': p.get('product_name_he') or p.get('product_name'), 'brand': (p.get('brands') or '').split(',')[0].strip(),
+            'ingredients': (p.get('ingredients_text_he') or p.get('ingredients_text') or '')[:300], 'barcode': code, 'from': 'openfoodfacts'}
+
+
+def _ask(attempts, timeout=30):
     for endpoint, key, body in attempts:
         req = urllib.request.Request(endpoint, json.dumps(body).encode(),
                                      {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key})
@@ -87,6 +137,6 @@ def identify(image_b64, timeout=30):
                   'confidence': max(0.0, min(1.0, float(i.get('confidence') or 0)))}
                  for i in (got.get('items') or [])[:6] if str(i.get('name', '')).strip()]
         product = got.get('product') or {}
-        product = {k: ' '.join(str(product.get(k, '')).split())[:200] for k in ('name', 'brand', 'ingredients')} | {'packaged': bool(product.get('packaged'))}
+        product = {k: ' '.join(str(product.get(k, '')).split())[:200] for k in ('name', 'brand', 'ingredients', 'barcode')} | {'packaged': bool(product.get('packaged'))}
         return {'items': items, 'not_food': bool(got.get('not_food')) and not items, 'product': product if product['packaged'] else None}
     return None
