@@ -22,6 +22,18 @@ PROMPT = ('זהה את המאכלים והמשקאות שבתמונה, לצור�
           'אל תנחש מה שלא נראה. not_food=true אם אין בתמונה מאכל או משקה. עד 6 פריטים. JSON בלבד.')
 
 MAX_BYTES = 1_500_000
+# The blessings engine's own names (data/store/food-vocab.json, 2,809 after duplicates: the Oneg Shabbat table and the
+# open food data), so a food is named as the engine knows it (owner, 2026-10-18: "the camera needs much knowledge").
+_VOCAB = None
+
+
+def vocab():
+    global _VOCAB
+    if _VOCAB is None:
+        from pathlib import Path
+        path = Path(config.get('FOOD_VOCAB', 'data/store/food-vocab.json'))
+        _VOCAB = json.loads(path.read_text()) if path.exists() else []
+    return _VOCAB
 
 
 def identify(image_b64, timeout=30):
@@ -33,7 +45,10 @@ def identify(image_b64, timeout=30):
     if not raw or len(raw) > MAX_BYTES or raw[:3] != b'\xff\xd8\xff':  # a JPEG, made small by the app
         return None
     url = 'data:image/jpeg;base64,' + base64.b64encode(raw).decode()
-    messages = [{'role': 'user', 'content': [{'type': 'text', 'text': PROMPT}, {'type': 'image_url', 'image_url': {'url': url}}]}]
+    names = vocab()
+    prompt = PROMPT + (('\nשמות המאכלים במאגר הברכות — כשהמאכל שבתמונה מופיע ברשימה, השתמש בשם שבה בדיוק; מאכל שאינו ברשימה '
+                        '(למשל מג׳דרה) — פרק לרכיביו שברשימה (אורז, עדשים):\n' + ' · '.join(names)) if names else '')
+    messages = [{'role': 'user', 'content': [{'type': 'text', 'text': prompt}, {'type': 'image_url', 'image_url': {'url': url}}]}]
     fmt = {'type': 'json_schema', 'json_schema': {'name': 'foods', 'strict': True, 'schema': SCHEMA}}
     attempts = []
     if config.get('GEMINI_API_KEY', ''):
