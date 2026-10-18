@@ -28,7 +28,8 @@ ADDRESS_PER_MINUTE, ADDRESS_PER_DAY = 40, 2000
 # changing addresses could run up the paid models' bill): questions, readings aloud and word timings.
 GLOBAL_PER_DAY = {'ask': int(os.environ.get('KEZOHAR_GLOBAL_ASKS_PER_DAY', '3000')),
                   'voice': int(os.environ.get('KEZOHAR_GLOBAL_VOICE_PER_DAY', '600')),
-                  'align': int(os.environ.get('KEZOHAR_GLOBAL_ALIGN_PER_DAY', '600'))}
+                  'align': int(os.environ.get('KEZOHAR_GLOBAL_ALIGN_PER_DAY', '600')),
+                  'food': int(os.environ.get('KEZOHAR_GLOBAL_FOOD_PER_DAY', '800'))}
 
 
 TIMING = ROOT / 'data/store/gateway-timing.log'
@@ -129,6 +130,7 @@ def forward(question, history=None):
                         for s in (result.get('sources') or [])[:5] if isinstance(s, dict)]}
 
 
+@app.options('/demo/food')
 @app.options('/demo/align')
 @app.options('/demo/speak')
 @app.options('/demo/ask')
@@ -228,6 +230,33 @@ async def align(request: Request):
     except Exception:
         return JSONResponse({'error': 'no timings'}, 404, headers=headers)
     return JSONResponse(result, headers=headers)
+
+
+@app.post('/demo/food')
+async def food(request: Request):
+    """A photo of a plate (a small JPEG, base64) → the foods' names. Its own allowance; the photo is not kept or logged."""
+    headers = cors(request.headers.get('origin'))
+    if not secrets.compare_digest(request.headers.get('x-kezohar-key', ''), KEY):
+        return JSONResponse({'error': 'unauthorized'}, 401, headers=headers)
+    reason = over(request, 'food')
+    if reason:
+        return JSONResponse({'error': 'too many photos, try again soon', 'limit': reason}, 429, headers=headers)
+    raw = await request.body()
+    if len(raw) > 2_200_000:
+        return JSONResponse({'error': 'photo too large'}, 413, headers=headers)
+
+    def fetch():
+        req = urllib.request.Request(UPSTREAM + '/demo/food', data=raw, headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return json.load(r)
+    started = time.time()
+    try:
+        result = await asyncio.get_running_loop().run_in_executor(None, fetch)
+    except Exception:
+        timing('food', 502, started)
+        return JSONResponse({'error': 'vision unavailable'}, 502, headers=headers)
+    timing('food', 200, started, question=' / '.join(i.get('name', '') for i in result.get('items', [])))
+    return JSONResponse({'items': result.get('items', [])[:6], 'not_food': bool(result.get('not_food'))}, headers=headers)
 
 
 @app.api_route('/{path:path}', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])

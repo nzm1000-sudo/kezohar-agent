@@ -125,6 +125,20 @@ def calendar_reference(date: str):
     except (ResearchError,BudgetExceeded,OSError,ValueError):
         return JSONResponse({'error':'ההשוואה החיצונית לא הושלמה; החישוב המקומי אינו מוצג כאימות חיצוני.'},status_code=502)
 
+@app.post('/demo/food')
+async def food_route(request: Request):
+    """A photo of a plate → the foods' names (food_vision.py); the app's blessings engine decides the blessing."""
+    import asyncio
+    from .food_vision import identify
+    try:
+        image=json.loads((await request.body())[:2_200_000]).get('image','')
+    except ValueError:
+        image=''
+    if not isinstance(image,str) or not image:
+        return JSONResponse({'error':'image required'},status_code=400)
+    got=await asyncio.get_running_loop().run_in_executor(None,identify,image)
+    return JSONResponse(got) if got is not None else JSONResponse({'error':'vision unavailable'},status_code=503)
+
 @app.post('/demo/speak')
 async def speak_route(request: Request):
     import asyncio
