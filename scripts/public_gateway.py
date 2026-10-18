@@ -21,6 +21,9 @@ KEY_FILE = ROOT / 'data/store/public_gateway.key'
 UPSTREAM = os.environ.get('KEZOHAR_AGENT_UPSTREAM', 'http://127.0.0.1:8711')
 ORIGINS = {'https://nzm1000-sudo.github.io', 'capacitor://localhost', 'https://localhost', 'http://localhost'}
 PER_MINUTE, PER_DAY, QUEUE = 6, 150, 3
+# An internet address may be shared by a whole home, yeshiva or phone company (owner, 2026-10-18), so the allowance is
+# per device (the app's random install id); the address keeps only a wide ceiling, against one caller inventing devices.
+ADDRESS_PER_MINUTE, ADDRESS_PER_DAY = 40, 2000
 # The whole service's daily ceiling, whatever the address (security review 2026-10-18: the app key is public, so a caller
 # changing addresses could run up the paid models' bill): questions, readings aloud and word timings.
 GLOBAL_PER_DAY = {'ask': int(os.environ.get('KEZOHAR_GLOBAL_ASKS_PER_DAY', '3000')),
@@ -60,7 +63,7 @@ def cors(origin):
     if origin in ORIGINS or (origin or '').startswith(('http://localhost:', 'http://127.0.0.1:', 'http://192.168.')):
         return {'Access-Control-Allow-Origin': origin, 'Vary': 'Origin',
                 'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'content-type, x-kezohar-key', 'Access-Control-Max-Age': '600'}
+                'Access-Control-Allow-Headers': 'content-type, x-kezohar-key, x-kezohar-device', 'Access-Control-Max-Age': '600'}
     return {}
 
 
@@ -68,21 +71,50 @@ served = defaultdict(deque)
 last_sweep = [0.0]
 
 
+def who(request, kind=''):
+    """The device (its random install id) when the app sends one, else the address; and the address itself."""
+    address = request.headers.get('cf-connecting-ip') or request.client.host
+    device = request.headers.get('x-kezohar-device', '')
+    device = device if len(device) == 32 and all(c in '0123456789abcdef' for c in device) else ''
+    return (('d:' + device) if device else address) + kind, 'a:' + address + kind, bool(device)
+
+
+def over(request, kind='ask'):
+    """None when allowed; else 'minute' or 'day'. A device: 6 a minute and 150 a day; its address, shared, a wider ceiling."""
+    client, address, device = who(request, '' if kind == 'ask' else ':' + kind)
+    if device:
+        now, q = time.time(), hits[address]
+        while q and now - q[0] > 86400:
+            q.popleft()
+        if len(q) >= ADDRESS_PER_DAY:
+            return 'day'
+        if sum(1 for t in q if now - t < 60) >= ADDRESS_PER_MINUTE:
+            return 'minute'
+    reason = limited(client, kind)
+    if not reason and device:
+        hits[address].append(time.time())
+    return reason
+
+
 def limited(client, kind='ask'):
-    """Per address (a minute and a day) and for the whole service (a day). Addresses idle for a day are forgotten."""
-    now, q, total = time.time(), hits[client], served[kind]
-    if now - last_sweep[0] > 3600:
+    """Per client (a minute and a day) and for the whole service (a day): None, 'minute' or 'day'. Clients idle for a day
+    are forgotten."""
+    now = time.time()
+    if now - last_sweep[0] > 3600:  # before this client's entry is taken, so the sweep never drops a count
         last_sweep[0] = now
         for key in [k for k, v in hits.items() if not v or now - v[-1] > 86400]:
             del hits[key]
+    q, total = hits[client], served[kind]
     for dq in (q, total):
         while dq and now - dq[0] > 86400:
             dq.popleft()
-    if len(total) >= GLOBAL_PER_DAY[kind] or len(q) >= PER_DAY or sum(1 for t in q if now - t < 60) >= PER_MINUTE:
-        return True
+    if len(total) >= GLOBAL_PER_DAY[kind] or len(q) >= PER_DAY:
+        return 'day'
+    if sum(1 for t in q if now - t < 60) >= PER_MINUTE:
+        return 'minute'
     q.append(now)
     total.append(now)
-    return False
+    return None
 
 
 def forward(question, history=None):
@@ -111,9 +143,9 @@ async def ask(request: Request):
     headers = cors(request.headers.get('origin'))
     if not secrets.compare_digest(request.headers.get('x-kezohar-key', ''), KEY):
         return JSONResponse({'error': 'unauthorized'}, 401, headers=headers)
-    client = request.headers.get('cf-connecting-ip') or request.client.host
-    if limited(client):
-        return JSONResponse({'error': 'too many questions, try again soon'}, 429, headers=headers)
+    reason = over(request)
+    if reason:
+        return JSONResponse({'error': 'too many questions, try again soon', 'limit': reason}, 429, headers=headers)
     raw = await request.body()
     try:
         body = json.loads(raw) if len(raw) <= 12288 else {}
@@ -146,9 +178,9 @@ async def speak(request: Request):
     headers = cors(request.headers.get('origin'))
     if not secrets.compare_digest(request.headers.get('x-kezohar-key', ''), KEY):
         return JSONResponse({'error': 'unauthorized'}, 401, headers=headers)
-    client = (request.headers.get('cf-connecting-ip') or request.client.host) + ':voice'
-    if limited(client, 'voice'):
-        return JSONResponse({'error': 'too many requests, try again soon'}, 429, headers=headers)
+    reason = over(request, 'voice')
+    if reason:
+        return JSONResponse({'error': 'too many requests, try again soon', 'limit': reason}, 429, headers=headers)
     raw = await request.body()
     try:
         text = json.loads(raw).get('text', '') if len(raw) <= 8192 else ''
@@ -175,8 +207,9 @@ async def align(request: Request):
     headers = cors(request.headers.get('origin'))
     if not secrets.compare_digest(request.headers.get('x-kezohar-key', ''), KEY):
         return JSONResponse({'error': 'unauthorized'}, 401, headers=headers)
-    if limited((request.headers.get('cf-connecting-ip') or request.client.host) + ':align', 'align'):
-        return JSONResponse({'error': 'too many requests, try again soon'}, 429, headers=headers)
+    reason = over(request, 'align')
+    if reason:
+        return JSONResponse({'error': 'too many requests, try again soon', 'limit': reason}, 429, headers=headers)
     raw = await request.body()
     try:
         text = json.loads(raw).get('text', '') if len(raw) <= 8192 else ''
