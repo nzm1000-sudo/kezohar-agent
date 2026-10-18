@@ -29,7 +29,8 @@ ADDRESS_PER_MINUTE, ADDRESS_PER_DAY = 40, 2000
 GLOBAL_PER_DAY = {'ask': int(os.environ.get('KEZOHAR_GLOBAL_ASKS_PER_DAY', '3000')),
                   'voice': int(os.environ.get('KEZOHAR_GLOBAL_VOICE_PER_DAY', '600')),
                   'align': int(os.environ.get('KEZOHAR_GLOBAL_ALIGN_PER_DAY', '600')),
-                  'food': int(os.environ.get('KEZOHAR_GLOBAL_FOOD_PER_DAY', '800'))}
+                  'food': int(os.environ.get('KEZOHAR_GLOBAL_FOOD_PER_DAY', '800')),
+                  'rate': int(os.environ.get('KEZOHAR_GLOBAL_RATE_PER_DAY', '5000'))}
 
 
 TIMING = ROOT / 'data/store/gateway-timing.log'
@@ -130,6 +131,7 @@ def forward(question, history=None):
                         for s in (result.get('sources') or [])[:5] if isinstance(s, dict)]}
 
 
+@app.options('/demo/rate')
 @app.options('/demo/food')
 @app.options('/demo/align')
 @app.options('/demo/speak')
@@ -257,6 +259,37 @@ async def food(request: Request):
         return JSONResponse({'error': 'vision unavailable'}, 502, headers=headers)
     timing('food', 200, started, question=' / '.join(i.get('name', '') for i in result.get('items', [])))
     return JSONResponse({'items': result.get('items', [])[:6], 'not_food': bool(result.get('not_food')), 'product': result.get('product')}, headers=headers)
+
+
+RATINGS = ROOT / 'data/store/answer-ratings.jsonl'
+
+
+@app.post('/demo/rate')
+async def rate(request: Request):
+    """נכון / טעות on an answer (owner, 2026-10-18: "the system must learn from its users"): the question, the answer and the
+    verdict, kept on this computer to review and correct — no name, address or device id."""
+    headers = cors(request.headers.get('origin'))
+    if not secrets.compare_digest(request.headers.get('x-kezohar-key', ''), KEY):
+        return JSONResponse({'error': 'unauthorized'}, 401, headers=headers)
+    if over(request, 'rate'):
+        return JSONResponse({'error': 'too many'}, 429, headers=headers)
+    raw = await request.body()
+    try:
+        body = json.loads(raw) if len(raw) <= 8192 else {}
+    except ValueError:
+        body = {}
+    verdict = body.get('verdict') if isinstance(body, dict) else None
+    if verdict not in ('right', 'wrong'):
+        return JSONResponse({'error': 'verdict required'}, 400, headers=headers)
+    clip = lambda key, n: ' '.join(str(body.get(key, '')).split())[:n]
+    row = {'at': time.strftime('%Y-%m-%d %H:%M:%S'), 'verdict': verdict, 'kind': clip('kind', 30), 'id': clip('id', 80),
+           'question': clip('question', 400), 'answer': clip('answer', 1500)}
+    try:
+        with open(os.open(RATINGS, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), 'a') as out:
+            out.write(json.dumps(row, ensure_ascii=False) + '\n')
+    except OSError:
+        return JSONResponse({'error': 'not saved'}, 503, headers=headers)
+    return JSONResponse({'ok': True}, headers=headers)
 
 
 @app.api_route('/{path:path}', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
