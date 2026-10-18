@@ -106,6 +106,13 @@ class DenseIndex:
     def __len__(self):
         return len(self.ids)
 
+    def vector(self, source_id):
+        """The stored vector of a passage, or None — a reranking need not embed again what the index holds."""
+        if not hasattr(self, '_row'):
+            self._row = {sid: i for i, sid in enumerate(self.ids)}
+        i = self._row.get(source_id)
+        return None if i is None else self.matrix[i].astype('float32')
+
     def search(self, query, top_k=10):
         import numpy as np
         if not self.ids:

@@ -117,10 +117,17 @@ def semantic_rerank(ordered, question, search, request_budget=None):
     try:
         if request_budget:request_budget.check('semantic rerank')
         qv=model.embed_query(str(getattr(question,'semantic_text',None) or question))
-        vectors=[]
-        for i in range(0,len(head),16):
+        # A passage the dense index holds keeps its stored vector (6.3 s of a 20 s answer re-embedded them, 2026-10-18);
+        # only the others — web pages, new texts — are embedded now.
+        indexes=[b.index for b in getattr(search,'backends',[]) if hasattr(getattr(b,'index',None),'vector')]
+        stored=[next((v for v in (ix.vector(s.get('source_id')) for ix in indexes) if v is not None),None) for s in head]
+        missing=[i for i,v in enumerate(stored) if v is None]
+        fresh=[]
+        for i in range(0,len(missing),16):
             if request_budget:request_budget.check('semantic rerank batch')
-            vectors+=model.embed_many([embed_text(s.get('text') or '')[:2000] or '-' for s in head[i:i+16]])
+            fresh+=model.embed_many([embed_text(head[j].get('text') or '')[:2000] or '-' for j in missing[i:i+16]])
+        for j,v in zip(missing,fresh):stored[j]=v
+        vectors=[list(map(float,v)) for v in stored]
     except EmbeddingUnavailable:
         return ordered  # lexical order stays; never fail the answer for reranking
     for source,vector in zip(head,vectors):
