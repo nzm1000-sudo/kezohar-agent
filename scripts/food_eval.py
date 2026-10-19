@@ -243,6 +243,19 @@ def download():
                 print('failed:', term, type(exc).__name__)
 
 
+def spelling(word):
+    """A name with its spelling variants folded (רוגלעך = רוגלך, אזני = אוזני, סופגניות = סופגנייה, בלינצ'ס = בלינצס)."""
+    import re
+    word = re.sub(r"[\'\"׳״`]", '', word)
+    word = re.sub(r'(?:ות|ים|ה|ת)$', '', word.strip())
+    return re.sub(r'[יוע]', '', word)
+
+
+def matches(wanted, names):
+    got = [spelling(n) for n in names]
+    return any(any(w and (w in g or g in w) for g in got if g) for w in (spelling(x) for x in wanted))
+
+
 def run():
     from kezohar.food_vision import identify
     results = OUT / 'results.jsonl'
@@ -253,13 +266,15 @@ def run():
                 continue
             got = identify(base64.b64encode((OUT / row['file']).read_bytes()).decode())
             names = [i['name'] for i in (got or {}).get('items', [])]
-            hit = any(any(want in name or name in want for name in names) for want in row['names'])
+            hit = matches(row['names'], names)
             out.write(json.dumps({**row, 'got': names, 'hit': hit}, ensure_ascii=False) + '\n')
             out.flush()
 
 
 def report():
     rows = [json.loads(l) for l in (OUT / 'results.jsonl').read_text().splitlines()]
+    for r in rows:
+        r['hit'] = matches(r['names'], r['got'])  # scored again: the same rule for old and new results
     hits = sum(r['hit'] for r in rows)
     print(f'recognised {hits}/{len(rows)} ({round(100 * hits / max(1, len(rows)))}%)')
     for r in rows:
