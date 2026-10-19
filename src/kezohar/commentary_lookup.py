@@ -37,9 +37,26 @@ SEFARIA = 'https://www.sefaria.org/api/'
 UA = {'User-Agent': 'KezoharAgent/1.0 (Jewish learning app)', 'Content-Type': 'application/json'}
 
 
+# "<verse> תסביר לי", "מה הפירוש של <verse>" — a verse to explain, no commentator named (owner, 2026-10-19: "והכנעני אז
+# בארץ תסביר לי", asked five times, was answered from memory with no source): Rashi, the first explanation. When the words
+# are not a verse (verse_of finds none) nothing is answered here and the usual path goes on.
+EXPLAIN = re.compile(r'^\s*(?:(?:מה\s+(?:ה)?פירוש|תסביר(?:\s+לי)?|הסבר|תפרש(?:\s+לי)?|מה\s+הכוונה)\s+(?:של\s+|ב|את\s+)?(?:ה?פסוק\s+)?(?P<a>.+?)'
+                     r'|(?P<b>.+?)\s+(?:תסביר(?:\s+לי)?|תפרש(?:\s+לי)?|מה\s+הפירוש|מה\s+זה\s+אומר|מה\s+הכוונה))\s*[?.!]*\s*$')
+
+
 def asked(question):
     """(Hebrew name, Sefaria pattern, the verse's words) when the question asks what a commentator says on a verse."""
     first = question.split('\n')[0]
+    return _named(first) or _explain(first)
+
+
+def _explain(first):
+    plain = EXPLAIN.match(first)
+    words = re.findall(r'[א-ת]+', (plain.group('a') or plain.group('b')) if plain else '')
+    return (COMMENTATORS[0][1], COMMENTATORS[0][2], ' '.join(words)) if plain and 3 <= len(words) <= 14 else None
+
+
+def _named(first):
     if not ASKS.search(first):
         return None
     for pattern, name, ref in COMMENTATORS:
