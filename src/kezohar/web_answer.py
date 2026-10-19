@@ -108,6 +108,9 @@ def _article_paragraphs(encyclopedia, title, question, budget, keep=4):
                           'paragraph_index': i}} for i in sorted(order[:keep])]
 
 
+GATHER_SECONDS = 6.0
+
+
 def _gather(question, route, budget, discovered):
     """Torah sites, the encyclopedia and Sefaria are independent: they are searched at the same time, and each one's
     pages are read at the same time (owner, 2026-10-16: ~15 s of one-after-another lookups). The order of the
@@ -144,11 +147,19 @@ def _gather(question, route, budget, discovered):
         web = JewishKnowledgeWebSearch()
         return each(web.search(question, route, budget, limit=4), lambda url: web.read(url, budget), 'web-answer-sefaria-read')
 
-    with ThreadPoolExecutor(3) as pool:
-        groups = [(pool.submit(fn), stage) for fn, stage in
-                  ((sites, 'web-answer-torah-sites'), (encyclopedia, 'web-answer-search'), (sefaria, 'web-answer-sefaria-search'))]
+    # The three are waited for together up to GATHER_SECONDS (2026-10-20: the slowest site set the time of every answer,
+    # 8 s and more): a group not back by then is left out of this answer, never waited for.
+    from concurrent.futures import wait
+    pool = ThreadPoolExecutor(3)
+    groups = [(pool.submit(fn), stage) for fn, stage in
+              ((sites, 'web-answer-torah-sites'), (encyclopedia, 'web-answer-search'), (sefaria, 'web-answer-sefaria-search'))]
+    pool.shutdown(wait=False)
+    wait([future for future, _ in groups], timeout=GATHER_SECONDS)
     sources = []
     for future, stage in groups:
+        if not future.done():
+            errors.append({'stage': stage, 'error': 'late'})
+            continue
         try:
             sources += future.result()
         except Exception as exc:
@@ -293,6 +304,28 @@ def is_jewish_topic(question, timeout=15):
         with model_slot(timeout) as slot:
             resp = _post(config.llm_base_url(), '/chat/completions', body, timeout=slot['remaining_s'])
         return bool(json.loads(resp['choices'][0]['message']['content'])['jewish'])
+    except Exception:
+        return None
+
+
+def same_question(asked, prepared, timeout=8):
+    """One short model call: does the prepared question's answer fully answer the asked one? (qa_bank's near matches,
+    2026-10-20.) Strict: another order (חלב אחרי בשר / בשר אחרי חלב), another food, case or person is not the same.
+    None when unknown (model unavailable) — counted as no."""
+    from .model_gate import model_slot
+    body = {'model': config.llm_model(), 'temperature': 0, 'max_tokens': 20, 'stream': False,
+            'response_format': {'type': 'json_schema', 'json_schema': {'name': 'same_question', 'strict': True, 'schema': {
+                'type': 'object', 'properties': {'same': {'type': 'boolean'}}, 'required': ['same'],
+                'additionalProperties': False}}},
+            'messages': [{'role': 'system', 'content': 'שתי שאלות. האם התשובה לשאלה ב׳ עונה במלואה ובדיוק על שאלה א׳? '
+                          'ענה true אם הן שואלות על אותו דבר במילים אחרות, וגם אם ב׳ שואלת אותו דבר ומוסיפה עליו פרט '
+                          '(מי היו פלוני — ומי היו פלוני ומה עשו). false אם ב׳ צרה יותר או שונה: סדר הפוך (חלב אחרי בשר מול '
+                          'בשר אחרי חלב), מאכל אחר, מקרה מיוחד (מאכל שנצלה), זמן אחר או אדם אחר. החזר JSON בלבד.'},
+                         {'role': 'user', 'content': f'א׳: {asked}\nב׳: {prepared}'}]}
+    try:
+        with model_slot(timeout) as slot:
+            resp = _post(config.llm_base_url(), '/chat/completions', body, timeout=slot['remaining_s'])
+        return bool(json.loads(resp['choices'][0]['message']['content'])['same'])
     except Exception:
         return None
 

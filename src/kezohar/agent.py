@@ -546,10 +546,19 @@ class Agent:
                 from .question_intent import QuestionIntentRouter
                 route=QuestionIntentRouter().route(question)
             from .web_answer import answer as web_answer
+            from .web_answer import model_answer
+            # The model's own answer is asked at the same time as the web (2026-10-20, speed): it is the fallback when
+            # the web finds nothing, and waiting for the web first added its whole time to every such answer.
+            from concurrent.futures import ThreadPoolExecutor
+            pool=ThreadPoolExecutor(max_workers=1)
+            spare=pool.submit(model_answer,question)
+            pool.shutdown(wait=False)
             found=web_answer(question,route,discovered=(result.get('knowledge_discovery') or {}).get('sources',[]))
             if found:found['question_intent']=route;return found
-            from .web_answer import model_answer
-            jewish,known=model_answer(question)
+            try:
+                jewish,known=spare.result(timeout=35)
+            except Exception:
+                jewish,known=None,None
             if jewish is False:
                 return {'verdict':'out_of_scope','mode':'scope','sources':[],'halachic_verified':False,
                         'answer':'אני עונה רק על שאלות ביהדות: תורה, הלכה, מנהגים, חגים, תפילה, אישים וספרים.'}

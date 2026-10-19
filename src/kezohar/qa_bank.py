@@ -10,6 +10,7 @@ from pathlib import Path
 from . import config
 
 THRESHOLD = 0.95
+NEAR = 0.85
 _lock = threading.Lock()
 _bank = None
 _matrix = None
@@ -65,10 +66,18 @@ def lookup(question, model):
         m = np.asarray(vectors, dtype=np.float32)
         _matrix = m / np.maximum(np.linalg.norm(m, axis=1, keepdims=True), 1e-9)
     qv = np.asarray(model.embed_query(question), dtype=np.float32)
-    scores = _matrix @ (qv / max(float(np.linalg.norm(qv)), 1e-9))
+    with np.errstate(all='ignore'):  # numpy 2.0 + Apple Accelerate warns falsely on matmul; the scores are finite
+        scores = _matrix @ (qv / max(float(np.linalg.norm(qv)), 1e-9))
     i = int(scores.argmax())
     best, row = float(scores[i]), rows[i]
-    if best < THRESHOLD:
+    # Near, not certain (2026-10-20: "מי אלו דתן ואבירם" scored 0.884 against its own bank question and was answered from
+    # memory in 17 s): one short model check that it is the same question — never by score alone, since "חלב אחרי בשר"
+    # scores 0.925 against "בשר אחרי חלב".
+    if NEAR <= best < THRESHOLD and config.get('QA_BANK_NEAR', '1') != '0':
+        from .web_answer import same_question
+        if same_question(question, row['q']) is not True:
+            return None
+    elif best < THRESHOLD:
         return None
     if not (row.get('quote') and row.get('cite')):  # checked right, with no source found: labelled so (owner, 2026-10-16)
         return {'verdict': 'model_knowledge', 'mode': 'model-knowledge', 'sources': [], 'halachic_verified': False,

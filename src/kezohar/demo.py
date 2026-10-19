@@ -50,6 +50,10 @@ def _warm_bank(agent):
             from .qa_bank import lookup
             try:lookup('שלום',dense.index.model)
             except Exception:pass
+        # The library's indexes read once from disk at start (2026-10-20: the first question after a restart waited
+        # ~5 s on a cold search; warm it is 0.3 s).
+        try:agent.search.search('ברכת המזון שבת',20)
+        except Exception:pass
     threading.Thread(target=run,daemon=True).start()
 
 def demo_agent():
