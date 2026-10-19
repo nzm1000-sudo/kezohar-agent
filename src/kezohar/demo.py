@@ -177,6 +177,11 @@ async def ask(request: Request):
             from .spoken import correct
             question = correct(question)
         spoken_fixed = question if question != heard else None
+        # The reader's tradition from the app's settings (Ashkenazi only; the default is Maran): said in the question the
+        # way a reader would write it, so the usual understanding (question_understanding.py) applies — unless the
+        # question already names a tradition.
+        if body.get('tradition') == 'ashkenazi' and not any(t in question for t in ('אשכנז','ספרד','השוואת מסורות')):
+            question = question.rstrip(' ?') + ' לפי פסיקת האשכנזים?'
         from .conversation_updates import browser_turn
         from .question_intent import QuestionIntentRouter
         original=question

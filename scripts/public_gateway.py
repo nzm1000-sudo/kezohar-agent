@@ -134,17 +134,17 @@ def _key(question):
     return ' '.join(_re.sub(r'[^\u05d0-\u05eaA-Za-z0-9 ]', ' ', question).split())
 
 
-def cached_forward(question, history=None, spoken=False):
+def cached_forward(question, history=None, spoken=False, tradition=None):
     if spoken:  # corrected upstream first: not matched to a cached question as heard
-        return forward(question, history, True)
+        return forward(question, history, True, tradition)
     if history or TIMELY.search(question):
-        return forward(question, history)
-    key, now = _key(question), time.time()
+        return forward(question, history, tradition=tradition)
+    key, now = (tradition or '') + _key(question), time.time()
     hit = ANSWERS.get(key)
     if hit and now - hit[0] < ANSWER_TTL:
         ANSWERS.move_to_end(key)
         return hit[1]
-    result = forward(question, history)
+    result = forward(question, history, tradition=tradition)
     if result.get('mode') in CACHEABLE and result.get('answer'):
         ANSWERS[key] = (now, result)
         while len(ANSWERS) > ANSWERS_MAX:
@@ -152,8 +152,8 @@ def cached_forward(question, history=None, spoken=False):
     return result
 
 
-def forward(question, history=None, spoken=False):
-    req = urllib.request.Request(UPSTREAM + '/demo/ask', data=json.dumps({'question': question, 'top_k': 5, 'turns': history or [], 'spoken': bool(spoken)}).encode(),
+def forward(question, history=None, spoken=False, tradition=None):
+    req = urllib.request.Request(UPSTREAM + '/demo/ask', data=json.dumps({'question': question, 'top_k': 5, 'turns': history or [], 'spoken': bool(spoken), **({'tradition': 'ashkenazi'} if tradition == 'ashkenazi' else {})}).encode(),
                                  headers={'Content-Type': 'application/json'})
     with urllib.request.urlopen(req, timeout=120) as r:
         result = json.load(r)
@@ -205,7 +205,8 @@ async def ask(request: Request):
     started = time.time()
     try:
         async with slot:
-            result = await asyncio.get_running_loop().run_in_executor(None, cached_forward, question.strip(), history, body.get('spoken') is True if isinstance(body, dict) else False)
+            result = await asyncio.get_running_loop().run_in_executor(None, cached_forward, question.strip(), history, body.get('spoken') is True if isinstance(body, dict) else False,
+                                                                       'ashkenazi' if isinstance(body, dict) and body.get('tradition') == 'ashkenazi' else None)
     except Exception:
         timing('ask', 502, started, len(history), question)
         return JSONResponse({'error': 'agent unavailable'}, 502, headers=headers)
@@ -329,7 +330,8 @@ async def rate(request: Request):
         return JSONResponse({'error': 'not saved'}, 503, headers=headers)
     # An answer called wrong is not given again from the cache: the next asker gets a fresh one (review: review_ratings.py).
     if verdict == 'wrong' and row['question']:
-        ANSWERS.pop(_key(row['question']), None)
+        for tradition in ('', 'ashkenazi'):
+            ANSWERS.pop(tradition + _key(row['question']), None)
     return JSONResponse({'ok': True}, headers=headers)
 
 
