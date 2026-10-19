@@ -181,6 +181,19 @@ SECULAR_REFUSAL={'verdict':'out_of_scope','mode':'scope','sources':[],'halachic_
                  'answer':'אני עונה רק על שאלות ביהדות — תורה, הלכה, מנהגים, חגים, תפילה, אישים וספרים. אם השאלה נשמעה או נכתבה אחרת ממה שהתכוונתם, נסחו אותה שוב.'}
 
 
+# A "how do I get her" question (owner, 2026-10-19: "איך אפשר לשכב עם מישהי ולהשפיע עליה?" ran the model for 30
+# seconds) is not sent to a model at all: seduction or pressure ("איך" + to bed / seduce / sway her) and pornography.
+# A halacha question on the same subject ("מותר לשכב עם אשתי בימי נידה?", "האם מותר … לפני החתונה?") is not "איך".
+INDECENT=re.compile(r'איך\s+(?:אפשר\s+|אני\s+יכול\s+|לגרום\s+ל\S*\s+)?(?:\S+\s+){0,2}(?:לשכב\s+עם|לפתות|להשיג\s+(?:בחורה|אישה|מישהי)|להשפיע\s+על(?:יה|\s+בחורה)|לשכנע\s+אותה\s+ל)|'
+                    r'פורנו|סרטי?\s+כחול|אתרי?\s+סקס|סקס\s+(?:טלפוני|מזדמן)|ליצור\s+קשר\s+מיני')
+INDECENT_REPLY={'verdict':'out_of_scope','mode':'scope','sources':[],'halachic_verified':False,
+                'answer':'על שאלה כזו לא אענה. אם יש לכם שאלה בהלכות צניעות, זוגיות או שלום בית — אשמח לעזור, ואפשר גם לפנות לרב בשיחה אישית.'}
+
+
+def indecent_question(question):
+    return bool(INDECENT.search(str(question or '')))
+
+
 def secular_answer(result):
     text=' '.join([str(result.get('answer') or ''),str((result.get('bari') or {}).get('answer') or '')]+
                   [str(s.get('reference') or s.get('title') or '') for s in result.get('sources') or [] if isinstance(s,dict)])
@@ -466,6 +479,7 @@ class Agent:
     def converse(self, question, circumstances=None, research=False, history=None, **kwargs):
         """Every answer, whatever path produced it, passes the one final check (final_check.finish)."""
         asked=question
+        if indecent_question(question):return dict(INDECENT_REPLY)
         if history:
             from .followup import standalone
             question=standalone(question,history)
