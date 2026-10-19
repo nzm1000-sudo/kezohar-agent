@@ -327,6 +327,9 @@ async def rate(request: Request):
             out.write(json.dumps(row, ensure_ascii=False) + '\n')
     except OSError:
         return JSONResponse({'error': 'not saved'}, 503, headers=headers)
+    # An answer called wrong is not given again from the cache: the next asker gets a fresh one (review: review_ratings.py).
+    if verdict == 'wrong' and row['question']:
+        ANSWERS.pop(_key(row['question']), None)
     return JSONResponse({'ok': True}, headers=headers)
 
 

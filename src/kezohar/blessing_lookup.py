@@ -16,6 +16,10 @@ _TABLE = None
 # A name cut down to one of these alone says nothing of which food it is (חטיף תמרים → חטיף → a candy's blessing).
 GENERIC = {'חטיף', 'חטיפי', 'חטיפים', 'ממתק', 'ממתקים', 'עוגה', 'עוגת', 'עוגות', 'עוגיות', 'עוגייה', 'משקה', 'משקאות', 'מאכל',
            'סלט', 'מרק', 'שוקולד', 'לחם', 'גבינה', 'גבינת', 'מיץ', 'רוטב', 'ממרח', 'קרם', 'פשטידה', 'מעדן', 'דגני', 'בטעם', 'מוצר'}
+# A brand the book itself rules on (the app's data/blessings/verifiedCorrections.mjs, the same words): checked first.
+BRANDS = [(re.compile(r'קורנפלקס.*(?:תלמה|אלופים)|(?:תלמה|אלופים).*קורנפלקס'),
+           {'names': ['קורנפלקס של תלמה'], 'before': 'שהכל נהיה בדברו', 'after': 'בורא נפשות',
+            'cite': 'עונג שבת, פרק כ״ו (לוח ברכות): "הקורנפלקס המיוצר כיום בחברת תלמה, עשוי מקמח תירס — ברכתו שהכל / נפשות"'})]
 
 
 def _norm(text):
@@ -41,12 +45,15 @@ def lookup(question):
     m = ASKED.match(question.split('\n')[0])
     if not m:
         return None
-    words = _norm(re.sub(r'^(?:ה|את\s+ה?)', '', m.group(1))).split()
+    # The food's name only: what the camera adds after it (", הרכיבים: …") names other foods.
+    asked = re.split(r'\?|הרכיבים|רכיבים:', m.group(1))[0]
+    brand = next((row for pattern, row in BRANDS if pattern.search(asked)), None)
+    words = _norm(re.sub(r'^(?:ה|את\s+ה?)', '', asked)).split()
     rows = table()
     # The whole name, then shorter from its end ("דובונים חטיף תפוח אדמה בטעם טבעי" → "דובונים"), two letters at least.
     for size in range(len(words), 0, -1):
         key = ' '.join(words[:size])
-        row = rows.get(key) or rows.get('ה' + key if not key.startswith('ה') else key[1:])
+        row = brand or rows.get(key) or rows.get('ה' + key if not key.startswith('ה') else key[1:])
         if size < len(words) and size == 1 and key in GENERIC:
             break
         if row and len(key) >= 2:
