@@ -12,6 +12,9 @@ def gateway():
     spec = importlib.util.spec_from_file_location('gw', Path(__file__).resolve().parents[1] / 'scripts/public_gateway.py')
     g = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(g)
+    import tempfile
+    g.ANSWERS.clear()
+    g.ANSWERS_FILE = Path(tempfile.mkdtemp()) / 'answer-cache.json'
     return g
 
 
@@ -48,3 +51,15 @@ def test_an_ashkenazi_reader_never_gets_the_sephardi_answer_from_memory():
     g.forward = lambda q, h=None, spoken=False, tradition=None: (calls.append(tradition), {'mode': 'llm', 'answer': 'x'})[1]
     g.cached_forward('מה מברכים על אורז?'); g.cached_forward('מה מברכים על אורז?', None, False, 'ashkenazi')
     assert calls == [None, 'ashkenazi']
+
+
+def test_answers_are_kept_across_a_restart_by_fingerprint_and_dropped_for_new_code():
+    g = gateway()
+    g.forward = lambda q, h=None, spoken=False, tradition=None: {'mode': 'llm', 'answer': 'x'}
+    g.cached_forward('מה מברכים על בננה?')
+    saved = g.ANSWERS_FILE.read_text()
+    assert 'בננה' not in saved
+    g.ANSWERS.clear(); g._load_answers()
+    assert len(g.ANSWERS) == 1
+    g.ANSWERS.clear(); g.CODE_VERSION = 'another'; g._load_answers()
+    assert len(g.ANSWERS) == 0

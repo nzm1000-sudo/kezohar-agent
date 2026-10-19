@@ -131,7 +131,51 @@ CACHEABLE = {'summary-with-quote', 'web-quote-answer', 'model-knowledge', 'llm',
 
 
 def _key(question):
-    return ' '.join(_re.sub(r'[^\u05d0-\u05eaA-Za-z0-9 ]', ' ', question).split())
+    # A fingerprint, never the words (2026-10-20): the answers are kept on disk across restarts, the questions are not.
+    import hashlib
+    return hashlib.sha256(' '.join(_re.sub(r'[^\u05d0-\u05eaA-Za-z0-9 ]', ' ', question).split()).encode()).hexdigest()[:32]
+
+
+# Kept across restarts (owner, 2026-10-20), for one version of the agent's code only: a fix (a new commit) starts empty, so
+# a corrected answer is never served from before it. Written whole after each new answer (a few MB at most).
+ANSWERS_FILE = ROOT / 'data/store/answer-cache.json'
+
+
+def _code_version():
+    try:
+        import subprocess
+        return subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], capture_output=True, text=True, timeout=5).stdout.strip()
+    except Exception:
+        return ''
+
+
+CODE_VERSION = _code_version()
+
+
+def _load_answers():
+    try:
+        saved = json.loads(ANSWERS_FILE.read_text())
+    except (OSError, ValueError):
+        return
+    if saved.get('version') != CODE_VERSION:
+        return
+    now = time.time()
+    for key, (at, result) in saved.get('answers', {}).items():
+        if now - at < ANSWER_TTL:
+            ANSWERS[key] = (at, result)
+
+
+def _save_answers():
+    try:
+        tmp = ANSWERS_FILE.with_suffix('.tmp')
+        tmp.write_text(json.dumps({'version': CODE_VERSION, 'answers': dict(ANSWERS)}, ensure_ascii=False))
+        os.chmod(tmp, 0o600)
+        tmp.replace(ANSWERS_FILE)
+    except OSError:
+        pass
+
+
+_load_answers()
 
 
 def cached_forward(question, history=None, spoken=False, tradition=None):
@@ -149,6 +193,7 @@ def cached_forward(question, history=None, spoken=False, tradition=None):
         ANSWERS[key] = (now, result)
         while len(ANSWERS) > ANSWERS_MAX:
             ANSWERS.popitem(last=False)
+        _save_answers()
     return result
 
 
@@ -332,6 +377,7 @@ async def rate(request: Request):
     if verdict == 'wrong' and row['question']:
         for tradition in ('', 'ashkenazi'):
             ANSWERS.pop(tradition + _key(row['question']), None)
+        _save_answers()
     return JSONResponse({'ok': True}, headers=headers)
 
 
