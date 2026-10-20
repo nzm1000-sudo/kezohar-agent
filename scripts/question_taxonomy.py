@@ -172,6 +172,55 @@ def export(out):
     print('exported', sum(len(d['of']) for d in app.values()), 'questions in', len(app), 'categories')
 
 
+def kinds(only=None):
+    """Each category its own kinds (owner, 2026-10-20: "the same tags in every category is not right"): the model proposes
+    5–6 from a sample, then every question gets one; the subjects stay."""
+    data, cats = load(), by_category()
+    schema = {'type': 'object', 'additionalProperties': False, 'required': ['kinds'], 'properties': {'kinds': {'type': 'array', 'items': {'type': 'string'}}}}
+    for cat, rows in cats.items():
+        if cat not in data or (only and cat not in only):
+            continue
+        random.seed(5)
+        sample = random.sample(rows, min(300, len(rows)))
+        names = call(f'אתה מארגן מאגר שאלות ותשובות ביהדות בטלפון. הקטגוריה: "{TITLES.get(cat, cat)}". הצע 6 תגיות (בדיוק 6 אם '
+                     'יש בקטגוריה מספיק גיוון, אחרת 4) שבהן אדם יסנן את שאלות הקטגוריה הזו — לפי מה שהוא מחפש או המצב שבו הוא '
+                     'נמצא, לא לפי נושא (הנושאים כבר קיימים). כל תגית 1–3 מילים, חיה ומדוברת, מתאימה דווקא לקטגוריה הזו '
+                     '(למשל בשבת: "מותר בשבת?", "מה מכינים מראש"; בתנ״ך: "מי היה", "איפה זה קרה"). ביחד הן מכסות כמעט כל שאלה. JSON בלבד.',
+                     '\n'.join('- ' + r['question'] for r in sample), schema, 'kinds', 400)['kinds']
+        names = [n.strip() for n in names if n.strip()][:6]
+        d = data[cat]
+        topics = d['topics']
+        # the kind only: the subject is kept as it is
+        item = {'type': 'object', 'additionalProperties': False, 'required': ['i', 'first_words', 'kind'],
+                'properties': {'i': {'type': 'integer'}, 'first_words': {'type': 'string'}, 'kind': {'type': 'string', 'enum': names}}}
+        sch = {'type': 'object', 'additionalProperties': False, 'required': ['items'], 'properties': {'items': {'type': 'array', 'items': item}}}
+        system = 'לכל שאלה: המספר שלה, שתי המילים הראשונות שלה כפי שהן, והתגית המתאימה לה ביותר מהרשימה: ' + ' / '.join(names) + '. JSON בלבד.'
+        first = lambda q: q.split()[:2]
+        got = {}
+
+        def batch(chunk):
+            try:
+                res = call(system, '\n'.join(f'{i}. {r["question"]}' for i, r in enumerate(chunk)), sch, 'kind', 2500)['items']
+            except Exception:
+                return []
+            return [(chunk[g['i']]['question'], names.index(g['kind'])) for g in res
+                    if 0 <= g['i'] < len(chunk) and first(chunk[g['i']]['question']) == first(g['first_words'])]
+        todo = [r for r in rows if r['question'] in d['of']]
+        for _ in range(3):
+            if not todo:
+                break
+            with ThreadPoolExecutor(6) as pool:
+                for part in pool.map(batch, [todo[i:i + 20] for i in range(0, len(todo), 20)]):
+                    for q, k in part:
+                        got[q] = k
+            todo = [r for r in todo if r['question'] not in got]
+        for q, k in got.items():
+            d['of'][q] = [d['of'][q][0], k]
+        d['kinds'] = names
+        save(data)
+        print(cat, names, len(got), 'of', len(rows), flush=True)
+
+
 # Subjects the model made twice (reviewed by hand, 2026-10-20): merged into one, every question kept.
 MERGES = {
     'holidays': [(['פורים ומגילה', 'מצוות פורים'], 'פורים'), (['ראש חודש', 'תפילות ראש חודש'], 'ראש חודש')],
@@ -208,6 +257,8 @@ def merge():
 if __name__ == '__main__':
     if sys.argv[1] == 'merge':
         merge()
+    elif sys.argv[1] == 'kinds':
+        kinds(sys.argv[2:] or None)
     stage = sys.argv[1]
     if stage == 'build':
         build(sys.argv[2:] or None)
