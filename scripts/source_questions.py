@@ -38,6 +38,15 @@ _PARTS = {'תפילת שחרית – ילקוט יוסף': [2, 3, 4, 5, 6, 7, 8,
           'צדקה ומעשרות – ילקוט יוסף': [47, 56, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81],
           'לשון הרע – ילקוט יוסף': [46, 48, 67]}
 TOPIC.update({f'yy-{n}': topic for topic, parts in _PARTS.items() for n in parts})
+# The Torat Emet books, each to its category (the prefix decides it, as above).
+TE_TOPIC = {'02336': 'הלכות נשים – אוצר דינים לאשה ולבת', '01602': 'הלכות נשים – נשים בהלכה', '01597': 'חינוך ילדים – ילדים כהלכה',
+            '01596': 'שבת – שבת כהלכה', '01964': 'לשון הרע – ואהבת כהלכה', '01822': 'כשרות – כשרות המטבח', '02531': 'כשרות – מנחת שי בשר בחלב',
+            '02532': 'כשרות – מנחת שי טבילת כלים', '01599': 'כשרות – טהרת כלים', '01598': 'כשרות – פתבג המלך',
+            '01677': 'כשרות – קדושים תהיו, תולעים', '01881': 'ברכות הנהנין – הלכות סעודה', '01961': 'תפילת שחרית – סדר היום',
+            '01897': 'פסח – הגעלת כלים לפסח', '01002': 'חנוכה – פסקי משה', '02071': 'חול המועד – מנחת שי יום טוב'}
+TOPIC.update({f'te-{k}': v for k, v in TE_TOPIC.items()})
+# חיים בריאים כהלכה and חיים ללא עישון are left out: mostly health advice, not halacha (a seat belt, whole-wheat flour).
+TE_AREAS = sorted(f'te-{k}' for k in TE_TOPIC)
 YY_AREAS = sorted({f'yy-{n}' for parts in _PARTS.values() for n in parts})
 
 SYSTEM = """אתה כותב שאלות ותשובות לאפליקציית הלכה, מתוך הלכה אחת של ספר. לפניך הלכה אחת בלשון הספר.
@@ -144,4 +153,4 @@ if __name__ == '__main__':
     if sys.argv[1] == 'pilot':
         pilot(int(sys.argv[2]) if len(sys.argv) > 2 else 100)
     elif sys.argv[1] == 'run':
-        run(set(YY_AREAS) if sys.argv[2:] == ['yy'] else set(sys.argv[2:]))
+        run(set(YY_AREAS) if sys.argv[2:] == ['yy'] else set(TE_AREAS) if sys.argv[2:] == ['te'] else set(sys.argv[2:]))
