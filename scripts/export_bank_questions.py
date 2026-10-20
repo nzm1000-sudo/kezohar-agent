@@ -73,6 +73,18 @@ def main(target):
     for cat in {row[0] for row in out}:
         answers = {row[2]: row[3:] for row in out if row[0] == cat}
         (shards / f'{cat}.json').write_text(json.dumps(answers, ensure_ascii=False, separators=(',', ':')))
+    # The list by category too (owner, 2026-10-21: "split it, so it is easier"): rav-bari-list/<category>.json rows
+    # [topic, question], and rav-bari-list/index.json {category: count} — the bank's first screen reads only the index.
+    lists = target.with_name('rav-bari-list')
+    lists.mkdir(exist_ok=True)
+    for old in lists.glob('*.json'):
+        old.unlink()
+    counts = {}
+    for cat in sorted({row[0] for row in out}):
+        rows = [[row[1], row[2]] for row in out if row[0] == cat]
+        counts[cat] = len(rows)
+        (lists / f'{cat}.json').write_text(json.dumps(rows, ensure_ascii=False, separators=(',', ':')))
+    (lists / 'index.json').write_text(json.dumps(counts, ensure_ascii=False))
     print(len(out), 'checked answers')
 
 
