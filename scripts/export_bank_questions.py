@@ -62,6 +62,12 @@ def main(target):
             seen.add(q)
             answer = f'על {name} מברכים «{food["before"]}», ולאחר האכילה «{food["after"]}».'
             out.append(['blessings', 'לוח הברכות — עונג שבת', q, answer, food['book'], food['cite']])
+    # A question shown in a second category too (question_taxonomy.py cross: a sick person on Shabbat is also health):
+    # its row again under that category, its answer in that category's file too, so it opens from either.
+    cross = ROOT / 'data/store/cross-list.json'
+    if cross.exists():
+        also = json.loads(cross.read_text())
+        out += [[cat, 'נוסף', *row[2:]] for row in list(out) for cat in also.get(row[2], []) if cat != row[0]]
     # The list holds the questions only (it opens at once — owner, 2026-10-18: "still slow"); each category's answers are
     # their own file beside it, read when an answer of that category opens: rav-bari/<category>.json {question: [answer, quote, cite]}.
     target = Path(target)
