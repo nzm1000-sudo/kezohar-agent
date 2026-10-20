@@ -159,9 +159,23 @@ ORDERS = {
 }
 
 
+def short(question):
+    """The app's own short id of a question (ravBariBank.mjs › bankId, without "rb-"): the catalog keyed by it, not by
+    the question's words (2026-10-20: the words made the file 2.3 MB)."""
+    h = 5381
+    for ch in question:
+        h = ((h * 33) ^ ord(ch)) & 0xFFFFFFFF
+    digits, out = '0123456789abcdefghijklmnopqrstuvwxyz', ''
+    while True:
+        h, r = divmod(h, 36)
+        out = digits[r] + out
+        if not h:
+            return out
+
+
 def export(out):
     data = load()
-    app = {cat: {'topics': [t['name'] for t in d['topics']], 'kinds': d['kinds'], 'of': d['of'],
+    app = {cat: {'topics': [t['name'] for t in d['topics']], 'kinds': d['kinds'], 'of': {short(q): v for q, v in d['of'].items()},
                  **({'order': [n for n in ORDERS[cat] if n in [t['name'] for t in d['topics']]]} if cat in ORDERS else {})}
            for cat, d in data.items()}
     for cat, names in ORDERS.items():
