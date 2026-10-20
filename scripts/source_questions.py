@@ -44,9 +44,17 @@ TE_TOPIC = {'02336': 'הלכות נשים – אוצר דינים לאשה ול�
             '02532': 'כשרות – מנחת שי טבילת כלים', '01599': 'כשרות – טהרת כלים', '01598': 'כשרות – פתבג המלך',
             '01677': 'כשרות – קדושים תהיו, תולעים', '01881': 'ברכות הנהנין – הלכות סעודה', '01961': 'תפילת שחרית – סדר היום',
             '01897': 'פסח – הגעלת כלים לפסח', '01002': 'חנוכה – פסקי משה', '02071': 'חול המועד – מנחת שי יום טוב'}
+TE_TOPIC.update({'01105': 'הלכות נשים – טהרת המשפחה', '01595': 'הלכות נשים – טהרת המשפחה', '01594': 'הלכות נשים – צניעות'})
 TOPIC.update({f'te-{k}': v for k, v in TE_TOPIC.items()})
+# Family purity and modesty (owner, 2026-10-21: "important — in gentle words, more general questions"): general,
+# principled questions only, in modest language; a halacha of examinations or bodily detail gives no question.
+GENTLE = {'te-01105', 'te-01595', 'te-01594'}
+GENTLE_RULES = ('\nזה נושא צנוע ועדין (טהרת המשפחה וצניעות): כתוב רק שאלות כלליות ועקרוניות (למשל "מה מטרת הטבילה במקווה?", '
+                '"מה הם שבעה נקיים?", "איך נוהגים בימי ההרחקה?"), בלשון עדינה וצנועה, בלי פרטים גופניים, בלי תיאור בדיקות '
+                'ובלי מקרים אישיים. הלכה שעוסקת בבדיקות, בכתמים או בפרטים אינטימיים — החזר רשימה ריקה.')
+GENTLE_AREAS = sorted(GENTLE)
 # חיים בריאים כהלכה and חיים ללא עישון are left out: mostly health advice, not halacha (a seat belt, whole-wheat flour).
-TE_AREAS = sorted(f'te-{k}' for k in TE_TOPIC)
+TE_AREAS = sorted(f'te-{k}' for k in TE_TOPIC if f'te-{k}' not in {'te-01105', 'te-01595', 'te-01594'})
 YY_AREAS = sorted({f'yy-{n}' for parts in _PARTS.values() for n in parts})
 
 SYSTEM = """אתה כותב שאלות ותשובות לאפליקציית הלכה, מתוך הלכה אחת של ספר. לפניך הלכה אחת בלשון הספר.
@@ -75,7 +83,7 @@ def flat(text):
 def make(unit):
     body = {'model': config.llm_model(), 'temperature': 0.2, 'max_tokens': 1500, 'stream': False, '_prefer_strong': True,
             'response_format': {'type': 'json_schema', 'json_schema': {'name': 'qa', 'strict': True, 'schema': SCHEMA}},
-            'messages': [{'role': 'system', 'content': SYSTEM},
+            'messages': [{'role': 'system', 'content': SYSTEM + (GENTLE_RULES if unit['area'] in GENTLE else '')},
                          {'role': 'user', 'content': f"{unit['title']}\n{unit['text']}"}]}
     try:
         items = json.loads(_post(config.llm_base_url(), '/chat/completions', body, timeout=90)['choices'][0]['message']['content'])['items']
@@ -153,4 +161,4 @@ if __name__ == '__main__':
     if sys.argv[1] == 'pilot':
         pilot(int(sys.argv[2]) if len(sys.argv) > 2 else 100)
     elif sys.argv[1] == 'run':
-        run(set(YY_AREAS) if sys.argv[2:] == ['yy'] else set(TE_AREAS) if sys.argv[2:] == ['te'] else set(sys.argv[2:]))
+        run(set(YY_AREAS) if sys.argv[2:] == ['yy'] else set(TE_AREAS) if sys.argv[2:] == ['te'] else set(GENTLE_AREAS) if sys.argv[2:] == ['gentle'] else set(sys.argv[2:]))
