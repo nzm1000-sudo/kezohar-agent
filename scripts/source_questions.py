@@ -26,6 +26,19 @@ UNITS = ROOT / 'data/store/book-units.json'
 BANK = ROOT / 'data/store/qa-bank/answers.jsonl'
 DONE = ROOT / 'data/store/source-done.json'
 TOPIC = {'shabbat': 'שבת – לפי ילקוט יוסף', 'kashrut': 'כשרות – הכשרות למעשה'}
+# ילקוט יוסף's parts by the app's category (the bank's topic prefix decides it: export_bank_questions.CATEGORY).
+# Part 83 (הלכות אישות) is left out: a sensitive subject the bank does not answer.
+_PARTS = {'תפילת שחרית – ילקוט יוסף': [2, 3, 4, 5, 6, 7, 8, 9, 10, 19, 21, 22, 24],
+          'ברכות הנהנין – ילקוט יוסף': [11, 12, 13, 14, 15, 16, 17, 18, 20],
+          'ראש חודש – ילקוט יוסף': [25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36],
+          'כשרות – ילקוט יוסף': [37, 38, 39, 40, 41, 42, 43, 44, 45, 58, 59, 63],
+          'ציצית ומזוזה – ילקוט יוסף': [49, 50, 51, 52, 54, 55, 57, 60, 61, 62, 64],
+          'כיבוד הורים – ילקוט יוסף': [53, 84, 85, 86, 87],
+          'אבלות – ילקוט יוסף': [65, 66, 82],
+          'צדקה ומעשרות – ילקוט יוסף': [47, 56, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81],
+          'לשון הרע – ילקוט יוסף': [46, 48, 67]}
+TOPIC.update({f'yy-{n}': topic for topic, parts in _PARTS.items() for n in parts})
+YY_AREAS = sorted({f'yy-{n}' for parts in _PARTS.values() for n in parts})
 
 SYSTEM = """אתה כותב שאלות ותשובות לאפליקציית הלכה, מתוך הלכה אחת של ספר. לפניך הלכה אחת בלשון הספר.
 כתוב 1–3 שאלות שאדם רגיל באמת שואל ושההלכה הזו עונה עליהן במפורש — מעשיות, במילים של היום ("מקרר", "פלטה",
@@ -116,7 +129,7 @@ def run(areas):
                     continue
                 seen.add(norm(r['q']))
                 made += 1
-                bank.write(json.dumps({'topic': TOPIC.get(unit['area'], 'ילקוט יוסף'), 'q': r['q'], 'sourced': True, 'answer': r['answer'],
+                bank.write(json.dumps({'topic': TOPIC[unit['area']], 'q': r['q'], 'sourced': True, 'answer': r['answer'],
                                        'quote': r['quote'], 'cite': r['cite'], 'mode': 'source-first'}, ensure_ascii=False) + '\n')
             done.add(unit['id'])
             if i % 50 == 0:
@@ -131,4 +144,4 @@ if __name__ == '__main__':
     if sys.argv[1] == 'pilot':
         pilot(int(sys.argv[2]) if len(sys.argv) > 2 else 100)
     elif sys.argv[1] == 'run':
-        run(set(sys.argv[2:]))
+        run(set(YY_AREAS) if sys.argv[2:] == ['yy'] else set(sys.argv[2:]))
