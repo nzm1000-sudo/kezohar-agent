@@ -10,7 +10,7 @@ from pathlib import Path
 from . import config
 
 THRESHOLD = 0.95
-NEAR = 0.85
+NEAR = 0.8
 _lock = threading.Lock()
 _bank = None
 _matrix = None
@@ -68,17 +68,24 @@ def lookup(question, model):
     qv = np.asarray(model.embed_query(question), dtype=np.float32)
     with np.errstate(all='ignore'):  # numpy 2.0 + Apple Accelerate warns falsely on matmul; the scores are finite
         scores = _matrix @ (qv / max(float(np.linalg.norm(qv)), 1e-9))
-    i = int(scores.argmax())
-    best, row = float(scores[i]), rows[i]
-    # Near, not certain (2026-10-20: "מי אלו דתן ואבירם" scored 0.884 against its own bank question and was answered from
-    # memory in 17 s): one short model check that it is the same question — never by score alone, since "חלב אחרי בשר"
-    # scores 0.925 against "בשר אחרי חלב".
-    if NEAR <= best < THRESHOLD and config.get('QA_BANK_NEAR', '1') != '0':
-        from .web_answer import same_question
-        if same_question(question, row['q']) is not True:
-            return None
-    elif best < THRESHOLD:
+    # The few nearest bank questions go to one short model call that picks the one asking the same thing, or none
+    # (2026-10-21: one call for five candidates instead of a check of the nearest alone — a reworded question whose own
+    # bank question ranked second was answered from memory). Never by score alone: "חלב אחרי בשר" scores 0.925
+    # against "בשר אחרי חלב".
+    top = [int(i) for i in np.argsort(-scores)[:5] if scores[i] >= NEAR]
+    if not top:
         return None
+    if float(scores[top[0]]) >= THRESHOLD:
+        i = top[0]
+    elif config.get('QA_BANK_NEAR', '1') != '0':
+        from .web_answer import same_question_of
+        pick = same_question_of(question, [rows[i]['q'] for i in top])
+        if pick is None:
+            return None
+        i = top[pick]
+    else:
+        return None
+    best, row = float(scores[i]), rows[i]
     if not (row.get('quote') and row.get('cite')):  # checked right, with no source found: labelled so (owner, 2026-10-16)
         return {'verdict': 'model_knowledge', 'mode': 'model-knowledge', 'sources': [], 'halachic_verified': False,
                 'answer': row['answer'], 'bari': {'answer': row['answer'], 'quote': None, 'cite': None, 'source': 'model'},

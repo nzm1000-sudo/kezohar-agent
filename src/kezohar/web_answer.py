@@ -330,6 +330,28 @@ def same_question(asked, prepared, timeout=8):
         return None
 
 
+def same_question_of(asked, prepared, timeout=8):
+    """Index of the prepared question whose answer fully answers the asked one, or None (none, or model unavailable).
+    The same strictness as same_question: another order, food, case, time or person is not the same."""
+    from .model_gate import model_slot
+    listed = '\n'.join(f'{n + 1}. {q}' for n, q in enumerate(prepared))
+    body = {'model': config.llm_model(), 'temperature': 0, 'max_tokens': 20, 'stream': False,
+            'response_format': {'type': 'json_schema', 'json_schema': {'name': 'same_question_of', 'strict': True, 'schema': {
+                'type': 'object', 'properties': {'number': {'type': 'integer'}}, 'required': ['number'],
+                'additionalProperties': False}}},
+            'messages': [{'role': 'system', 'content': 'שאלה ורשימת שאלות מוכנות. החזר את מספר השאלה המוכנה שהתשובה לה עונה '
+                          'במלואה ובדיוק על השאלה (אותו דבר במילים אחרות), או 0 אם אין כזו. אינה אותה שאלה: סדר הפוך (חלב '
+                          'אחרי בשר מול בשר אחרי חלב), מאכל אחר, מקרה מיוחד, זמן אחר או אדם אחר. החזר JSON בלבד.'},
+                         {'role': 'user', 'content': f'שאלה: {asked}\n\nשאלות מוכנות:\n{listed}'}]}
+    try:
+        with model_slot(timeout) as slot:
+            resp = _post(config.llm_base_url(), '/chat/completions', body, timeout=slot['remaining_s'])
+        number = int(json.loads(resp['choices'][0]['message']['content'])['number'])
+    except Exception:
+        return None
+    return number - 1 if 1 <= number <= len(prepared) else None
+
+
 def same_act(question, source):
     """True only when the relevance gate judges this passage to be about the asked act (unknown counts as no)."""
     from .answer_gate import gate
