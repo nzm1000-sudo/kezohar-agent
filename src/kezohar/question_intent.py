@@ -1,5 +1,8 @@
 """Question type is independent of tradition, authority and claim support."""
 import re
+
+# A name, phone or ID number in a question: it never leaves this computer (owner, 2026-10-21; llm._post, web search).
+PRIVATE=re.compile(r'קוראים לי|שמי |הטלפון שלי|מספר זהות')
 from .hebrew import strip_niqqud
 
 PUBLIC_ENTITIES=('משה','עמרם','יוכבד','אהרן','מרים','שמואל','חנה','אלקנה','יעקב','ישראל','אברהם','שרה','יצחק','רבקה','יוסף','דוד','שלמה',
@@ -87,6 +90,6 @@ class QuestionIntentRouter:
             'normalized_question':q,'decision_basis':'question grammar and topic cues; not an asserted fact',
             # Owner, 2026-10-21: family words ("אבא שלי", "אשתי") identify no one and go out like any question; only
             # a name, phone or ID number keeps a question local.
-            'export_allowed':not bool(re.search(r'קוראים לי|שמי |הטלפון שלי|מספר זהות',question+' '+q)),
+            'export_allowed':not PRIVATE.search(question+' '+q),
             'spelling_hints':corrections,
             'halachic_verified':False}

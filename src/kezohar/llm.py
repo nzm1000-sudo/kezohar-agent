@@ -92,7 +92,13 @@ def _post(base_url, path, body, timeout=60, stream=False):
     LM Studio model as a last resort; other calls are unchanged."""
     from . import config
     attempts = []
-    if path == '/chat/completions' and not stream and config.get('CLOUD_LLM', '1') != '0':
+    # A question with a name, phone or ID number is answered by the local model only — every cloud call passes here.
+    from .question_intent import PRIVATE
+    private = path == '/chat/completions' and any(PRIVATE.search(str(m.get('content', ''))) for m in body.get('messages', []))
+    if private:
+        base_url = config.get('LOCAL_LLM_BASE_URL', 'http://127.0.0.1:1234/v1')
+        body = dict(body, model=config.get('LOCAL_LLM_MODEL', 'qwen/qwen3.5-35b-a3b'))
+    if path == '/chat/completions' and not stream and not private and config.get('CLOUD_LLM', '1') != '0':
         attempts = _cloud_attempts(body)
         deadline = time.time() + timeout
         for url, key, cloud_body in attempts:
@@ -124,7 +130,7 @@ def _post(base_url, path, body, timeout=60, stream=False):
                     return _send(base_url.rstrip("/") + path, clean, slot['remaining_s'])
             return _send(base_url.rstrip("/") + path, clean, timeout)
         except LLMUnavailable:
-            groq = _cloud_attempts(body, 'groq') if path == '/chat/completions' else []
+            groq = _cloud_attempts(body, 'groq') if path == '/chat/completions' and not private else []
             if not groq:
                 raise
             url, key, groq_body = groq[0]

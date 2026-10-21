@@ -2647,3 +2647,16 @@ def test_quote_match_tolerates_prefixes_and_plene_spelling():
     assert contains('ויען אברהמ ויאמר הנה נא הואלתי לדבר אל אדני ואנכי עפר ואפר', 'אנכי עפר ואפר')
     assert contains('ויאמר לא ידעתי השמר אחי אנכי', 'השומר אחי אנכי')
     assert not contains('אנכי עפר ואפר', 'עפר אנכי')
+
+
+def test_a_name_phone_or_id_never_reaches_a_cloud_model(monkeypatch):
+    from kezohar import llm
+    sent=[]
+    monkeypatch.setenv('CLOUD_LLM','1')
+    monkeypatch.setattr(llm,'_cloud_attempts',lambda body,order=None:[('https://cloud.test/v1/chat/completions','k',dict(body))])
+    monkeypatch.setattr(llm,'_send',lambda url,body,timeout,headers=None:sent.append(url) or {'choices':[{'message':{'content':'{}'}}]})
+    llm._post('http://127.0.0.1:1234/v1','/chat/completions',{'model':'m','messages':[{'role':'user','content':'קוראים לי דוד, מה מברכים על תפוח?'}]},timeout=5)
+    assert sent and all(u.startswith('http://127.0.0.1') for u in sent)
+    sent.clear()
+    llm._post('http://127.0.0.1:1234/v1','/chat/completions',{'model':'m','messages':[{'role':'user','content':'אבא שלי שאל מה מברכים על תפוח?'}]},timeout=5)
+    assert sent and sent[0].startswith('https://cloud.test')
