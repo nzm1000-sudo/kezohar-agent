@@ -345,6 +345,8 @@ def model_answer(question, timeout=30, _retried=False):
     schema = {'type': 'object', 'properties': {'jewish': {'type': 'boolean'}, 'confident': {'type': 'boolean'},
               'answer': {'type': 'string'}}, 'required': ['jewish', 'confident', 'answer'], 'additionalProperties': False}
     body = {'model': config.llm_model(), 'temperature': 0, 'max_tokens': 900, 'stream': False, '_prefer_strong': True,
+            # An answer from memory reasons briefly first (2026-10-21: with none, a convert's chametz was "permitted").
+            '_reasoning': config.get('MODEL_ANSWER_REASONING', 'low'),
             'response_format': {'type': 'json_schema', 'json_schema': {'name': 'model_answer', 'strict': True, 'schema': schema}},
             'messages': [{'role': 'system', 'content':
                 'אתה עוזר בקי ביהדות. jewish=true אם השאלה עוסקת ביהדות: תורה, הלכה, מנהגים, חגים, תפילה, אישים, ספרים '

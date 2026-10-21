@@ -38,9 +38,9 @@ def _cloud_attempts(body, order=None):
         provider = provider.strip()
         if provider == 'openai' and config.get('OPENAI_API_KEY', ''):
             # Owner decision 2026-10-16: gpt-6-luna (~3s, strict JSON schema, $0.10/$0.50 per 1M tokens).
-            out = {k: v for k, v in body.items() if not k.startswith('_') and k != 'max_tokens'}
-            out.update(model=config.get('OPENAI_MODEL', 'gpt-6-luna'), reasoning_effort='none',
-                       max_completion_tokens=body.get('max_tokens', 800))
+            out = {k: v for k, v in body.items() if not k.startswith('_') and k not in ('max_tokens', 'temperature')}
+            out.update(model=config.get('OPENAI_MODEL', 'gpt-6-luna'), reasoning_effort=body.get('_reasoning', 'none'),
+                       max_completion_tokens=body.get('max_tokens', 800) + (2000 if body.get('_reasoning', 'none') != 'none' else 0))
             attempts.append(('https://api.openai.com/v1/chat/completions', config.get('OPENAI_API_KEY'), out))
         if provider == 'gemini' and config.get('GEMINI_API_KEY', ''):
             # Measured 2026-10-16: 3.5-flash-lite ~0.8s, 500 free requests/day; 3.8-flash 20/day, frequent 503.
