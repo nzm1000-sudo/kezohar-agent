@@ -338,7 +338,7 @@ def same_act(question, source):
     return (probe.get('answer_gate') or {}).get('status') == 'confirmed'
 
 
-def model_answer(question, timeout=30):
+def model_answer(question, timeout=30, _retried=False):
     """Owner rule 2026-10-16: no source is fine. One call checks the question is about Judaism and, if so,
     answers from the model's own knowledge. Returns (jewish: bool|None, answer: str|None)."""
     from .model_gate import model_slot
@@ -353,6 +353,7 @@ def model_answer(question, timeout=30):
                 'דעות נוספות: אם ידוע לך בוודאות שיש בעניין דעה אחרת מוכרת (מחלוקת בגמרא, בין פוסקים או בין מפרשים), '
                 'הוסף בסוף משפט אחד קצר ועדין, למשל "ויש אומרים ש…", עם שם בעל הדעה כשהוא ידוע; רק כשבאמת קיימת, אל תמציא. '
                 'בשאלת רשימה ("כל ה…", "מנה", "אילו") כתוב פתיח קצר ורשימה ממוספרת מלאה (עד 8 פריטים). '
+                'קרא כל פרט בשאלה (מי, מתי, סדר המאורעות) וענה על המקרה בדיוק כפי שתואר, בלי לשנות אותו. '
                 'שאלה עם שגיאת כתיב או ניסוח לא מדויק: הבן את הכוונה הסבירה וענה עליה. confident=false רק אם אינך יודע את התשובה. אם השאלה אינה ביהדות, answer ריק. החזר JSON בלבד.'},
                 {'role': 'user', 'content': question}]}
     try:
@@ -362,4 +363,36 @@ def model_answer(question, timeout=30):
     except Exception:
         return None, None
     answer = _plain(reply.get('answer')) if reply.get('jewish') and reply.get('confident') else None
+    if answer and not _retried:
+        # An answer from memory has no source to be checked against; the question's own facts are what it can be
+        # checked against (owner, 2026-10-21: "the gentile converted before the holiday" was answered "at the holiday
+        # it was a gentile's"). Contradicted: answered once more with the problem named, else no answer.
+        problem = contradicts(question, answer)
+        if problem:
+            _, answer = model_answer(question + '\n\n(תשובה קודמת נפסלה: ' + problem + ')', timeout, _retried=True)
+            if answer and contradicts(question, answer):
+                answer = None
     return bool(reply.get('jewish')), (answer or None)
+
+
+def contradicts(question, answer, timeout=25):
+    """The contradiction in one sentence when the answer contradicts or ignores a fact the question states (who, when,
+    the order of events); '' when it keeps them or the model cannot be asked (then the answer is kept)."""
+    from .model_gate import model_slot
+    schema = {'type': 'object', 'properties': {'keeps_facts': {'type': 'boolean'}, 'problem': {'type': 'string'}},
+              'required': ['keeps_facts', 'problem'], 'additionalProperties': False}
+    body = {'model': config.llm_model(), 'temperature': 0, 'max_tokens': 120, 'stream': False,
+            'response_format': {'type': 'json_schema', 'json_schema': {'name': 'keeps_facts', 'strict': True, 'schema': schema}},
+            'messages': [{'role': 'system', 'content':
+                'בדוק רק דבר אחד: האם התשובה אומרת במפורש דבר שהפוך לעובדה שנאמרה בשאלה — מי, מה, מתי, סדר המאורעות '
+                '(למשל השאלה אומרת שדבר קרה לפני החג והתשובה אומרת שבחג המצב היה כמו לפניו). פרט שהתשובה לא הזכירה, '
+                'הסתייגות או תנאי אינם סתירה. אל תשפוט את ההלכה עצמה. keeps_facts=false רק בסתירה מפורשת, ו-problem '
+                'משפט אחד שמצטט אותה; אחרת problem ריק. החזר JSON בלבד.'},
+                {'role': 'user', 'content': 'שאלה: ' + question + '\n\nתשובה:\n' + answer[:2000]}]}
+    try:
+        with model_slot(timeout) as slot:
+            resp = _post(config.llm_base_url(), '/chat/completions', body, timeout=slot['remaining_s'])
+        reply = json.loads(resp['choices'][0]['message']['content'])
+    except Exception:
+        return ''
+    return '' if reply.get('keeps_facts', True) else (reply.get('problem') or 'סתירה לפרטי השאלה').strip()
