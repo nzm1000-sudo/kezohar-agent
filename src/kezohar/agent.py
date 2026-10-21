@@ -520,8 +520,20 @@ class Agent:
         located=lookup(question,self.search) if not circumstances and phrase_of(question) else None
         if located:return located
         from .orchestration import HalachicOrchestrator
-        result=HalachicOrchestrator(self).answer(question,circumstances,research,**kwargs)
         from . import config
+        # The model's own answer starts with the library search, not after it (2026-10-21, speed: library ~3 s, then
+        # the model ~7 s). Used only where it was asked before (no passage readable, or nothing found); otherwise
+        # it is simply not used. A question kept local (export_allowed=False) is not sent early.
+        early=None
+        if not circumstances and 'PYTEST_CURRENT_TEST' not in os.environ and config.get('EARLY_MODEL_ANSWER','1')!='0':
+            from .question_intent import QuestionIntentRouter
+            if QuestionIntentRouter().route(question).get('export_allowed') is not False:
+                from concurrent.futures import ThreadPoolExecutor
+                from .web_answer import model_answer
+                pool=ThreadPoolExecutor(max_workers=1)
+                early=pool.submit(model_answer,question)
+                pool.shutdown(wait=False)
+        result=HalachicOrchestrator(self).answer(question,circumstances,research,**kwargs)
         if config.get('ANSWER_GATE','1')!='0' and isinstance(result,dict):
             from .answer_gate import gate
             result=gate(question,result)
@@ -533,7 +545,10 @@ class Agent:
                 # (CLAUDE.md); the model answers instead and the passage stays listed as a source.
                 if result.get('mode')!='summary-with-quote' and not circumstances:
                     from .web_answer import model_answer
-                    jewish,known=model_answer(question)
+                    try:
+                        jewish,known=early.result(timeout=35) if early else model_answer(question)
+                    except Exception:
+                        jewish,known=None,None
                     if known:
                         result.update(verdict='model_knowledge',mode='model-knowledge',answer=known,source_status='no-source: model knowledge',
                                       bari={'answer':known,'quote':None,'cite':None,'source':'model'})
@@ -550,9 +565,11 @@ class Agent:
             # The model's own answer is asked at the same time as the web (2026-10-20, speed): it is the fallback when
             # the web finds nothing, and waiting for the web first added its whole time to every such answer.
             from concurrent.futures import ThreadPoolExecutor
-            pool=ThreadPoolExecutor(max_workers=1)
-            spare=pool.submit(model_answer,question)
-            pool.shutdown(wait=False)
+            spare=early
+            if spare is None:
+                pool=ThreadPoolExecutor(max_workers=1)
+                spare=pool.submit(model_answer,question)
+                pool.shutdown(wait=False)
             found=web_answer(question,route,discovered=(result.get('knowledge_discovery') or {}).get('sources',[]))
             if found:found['question_intent']=route;return found
             try:
