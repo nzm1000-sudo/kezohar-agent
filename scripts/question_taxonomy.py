@@ -258,13 +258,16 @@ def cross():
     import re as _re
     path = ROOT / 'data/store/cross-list.json'
     out = json.loads(path.read_text()) if path.exists() else {}
+    # Every (question, category) already judged — kept or not — is not asked again on the next run.
+    seen_path = ROOT / 'data/store/cross-seen.json'
+    seen = set(map(tuple, json.loads(seen_path.read_text()))) if seen_path.exists() else {(q, c) for q, cats in out.items() for c in cats}
     rows = [r for r in json.loads(QUESTIONS.read_text())]
     schema = {'type': 'object', 'additionalProperties': False, 'required': ['items'], 'properties': {'items': {'type': 'array', 'items': {
         'type': 'object', 'additionalProperties': False, 'required': ['i', 'first_words', 'belongs'],
         'properties': {'i': {'type': 'integer'}, 'first_words': {'type': 'string'}, 'belongs': {'type': 'boolean'}}}}}}
     first = lambda q: q.split()[:2]
     for cat, (title, pattern) in CROSS.items():
-        cands = [r for r in rows if r['category'] != cat and _re.search(pattern, r['question']) and cat not in out.get(r['question'], [])]
+        cands = [r for r in rows if r['category'] != cat and _re.search(pattern, r['question']) and (r['question'], cat) not in seen]
         system = (f'לכל שאלה: המספר שלה, שתי המילים הראשונות שלה כפי שהן, והאם היא שייכת גם לקטגוריה "{title}" — '
                   'כלומר אדם שמחפש בקטגוריה הזו היה מצפה למצוא אותה שם. מילה משותפת בלבד אינה מספיקה. JSON בלבד.')
 
@@ -281,7 +284,9 @@ def cross():
                 for q in part:
                     out.setdefault(q, []).append(cat)
                     kept += 1
+        seen |= {(r['question'], cat) for r in cands}
         path.write_text(json.dumps(out, ensure_ascii=False))
+        seen_path.write_text(json.dumps(sorted(seen), ensure_ascii=False))
         print(cat, len(cands), 'candidates →', kept, 'kept', flush=True)
 
 
