@@ -35,11 +35,13 @@ def main(target):
     new = reworded()  # the questions as people ask them (build_qa_bank.py wording)
     retopic = json.loads((bank / 'retopic.json').read_text()) if (bank / 'retopic.json').exists() else {}
     good = {r['key'] for r in map(json.loads, (bank / 'checks.jsonl').read_text().splitlines()) if r['ok']}
+    # Questions a later review left out (gentle_review.py): never exported, whatever the check said.
+    dropped = set(json.loads((bank / 'dropped.json').read_text())) if (bank / 'dropped.json').exists() else set()
     key = lambda r: hashlib.sha256((r['q'] + '|' + r['answer']).encode()).hexdigest()[:20]
     seen, out = set(), []
     for r in map(json.loads, (bank / 'answers.jsonl').read_text().splitlines()):
         q = new.get(r['q'], r['q'])  # two wordings may become one question: it is listed once
-        if not r.get('answer') or 'הקטע' in r['answer'] or q in seen or key(r) not in good:
+        if not r.get('answer') or 'הקטע' in r['answer'] or q in seen or key(r) not in good or r['q'] in dropped:
             continue
         seen.add(q)
         # The old "במדבר ודברים" subject, split by book (build_qa_bank.py retopic).
