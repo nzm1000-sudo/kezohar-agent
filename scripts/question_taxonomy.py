@@ -282,7 +282,9 @@ def cross():
         with ThreadPoolExecutor(6) as pool:
             for part in pool.map(batch, [cands[i:i + 20] for i in range(0, len(cands), 20)]):
                 for q in part:
-                    out.setdefault(q, []).append(cat)
+                    if cat in out.setdefault(q, []):
+                        continue
+                    out[q].append(cat)
                     kept += 1
         seen |= {(r['question'], cat) for r in cands}
         path.write_text(json.dumps(out, ensure_ascii=False))
