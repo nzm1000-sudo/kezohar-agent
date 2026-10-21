@@ -2043,9 +2043,11 @@ def test_private_question_does_not_export_even_a_registered_book(tmp_path,monkey
     from kezohar.jewish_web import knowledge_queries
     p=tmp_path/'catalog.json';monkeypatch.setattr(kc,'storage_path',lambda:p)
     kc.save_catalog([{'title':'Fixture Work','heTitle':'ספר אלפא'}],p)
-    q='אבא שלי כתב לי על ספר אלפא, מי חיבר אותו?'
+    q='קוראים לי דוד וכתבו לי על ספר אלפא, מי חיבר אותו?'
     r=QuestionIntentRouter().route(q)
     assert not r['export_allowed'] and not knowledge_queries(q,r)
+    # Owner, 2026-10-21: a family word identifies no one.
+    assert QuestionIntentRouter().route('אבא שלי כתב לי על ספר אלפא, מי חיבר אותו?')['export_allowed']
 
 
 def test_larger_catalog_response_bound_never_applies_to_text_or_search():

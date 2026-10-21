@@ -85,6 +85,8 @@ class QuestionIntentRouter:
             'public_catalog_matches':catalog,
             'complexity':'deep' if explicit_deep else 'simple' if kind=='fact' else 'explanation',
             'normalized_question':q,'decision_basis':'question grammar and topic cues; not an asserted fact',
-            'export_allowed':not bool(re.search(r'אבא שלי|אמא שלי|אב שלי|אם שלי|אבי שלי|משפחה שלי|קוראים לי|שמי |הטלפון שלי|מספר זהות',question+' '+q)),
+            # Owner, 2026-10-21: family words ("אבא שלי", "אשתי") identify no one and go out like any question; only
+            # a name, phone or ID number keeps a question local.
+            'export_allowed':not bool(re.search(r'קוראים לי|שמי |הטלפון שלי|מספר זהות',question+' '+q)),
             'spelling_hints':corrections,
             'halachic_verified':False}
