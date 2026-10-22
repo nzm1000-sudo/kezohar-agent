@@ -149,6 +149,9 @@ def handle(question, lat=DEFAULT_LAT, lon=DEFAULT_LON, location=DEFAULT_LOCATION
                 "no_llm": True}
     if not is_fast_question(question):
         return None
+    # "When does Yom Kippur fall?" asks a holiday's date, not today's (2026-10-23: it answered "today there is no fast").
+    if re.search(r'(באיזה תאריך|באיזה יום|מתי)\s+(חל|חלה|יחול|יחולו|נופל|נופלת|יוצא|יוצאת|יהיה|תהיה)', question) and not re.search(r'היום|מחר', question):
+        return None
     d = today or today_israel()
     if isinstance(d, datetime.datetime):
         d = d.date()
