@@ -42,6 +42,16 @@ def _cloud_attempts(body, order=None):
             out.update(model=config.get('OPENAI_MODEL', 'gpt-6-luna'), reasoning_effort=body.get('_reasoning', 'none'),
                        max_completion_tokens=body.get('max_tokens', 800) + (2000 if body.get('_reasoning', 'none') != 'none' else 0))
             attempts.append(('https://api.openai.com/v1/chat/completions', config.get('OPENAI_API_KEY'), out))
+        if provider == 'cfai':
+            # הרב בארי's Workers AI door (server/kezohar-ai in the app repo, 2026-10-22): Qwen3-30B on Cloudflare's free allowance.
+            # Opt-in only (CLOUD_ORDER=...,cfai): tested, it answered "מה מברכים על בננה" with nonsense and judged a right answer
+            # wrong — never a writer of halacha by default.
+            from pathlib import Path
+            key_file = Path(__file__).resolve().parents[2] / 'data/store/kezohar_ai.key'
+            if key_file.exists():
+                out = {k: v for k, v in body.items() if not k.startswith('_') and k in ('messages', 'max_tokens', 'response_format')}
+                attempts.append((config.get('KEZOHAR_AI_URL', 'https://kezohar-ai.challenge-worker.workers.dev') + '/chat',
+                                 'cfai:' + key_file.read_text().strip(), dict(out, model='@cf/qwen/qwen3-30b-a3b-fp8')))
         if provider == 'gemini' and config.get('GEMINI_API_KEY', ''):
             # Measured 2026-10-16: 3.5-flash-lite ~0.8s, 500 free requests/day; 3.8-flash 20/day, frequent 503.
             models = [config.get('GEMINI_MODEL', 'gemini-3.5-flash-lite')] + [
@@ -107,6 +117,7 @@ def _post(base_url, path, body, timeout=60, stream=False):
                 break
             try:
                 resp = (_anthropic(cloud_body, key, remaining) if 'api.anthropic.com' in url
+                        else _send(url, cloud_body, remaining, {'x-kezohar-ai-key': key[5:]}) if key.startswith('cfai:')
                         else _send(url, cloud_body, remaining, {'Authorization': 'Bearer ' + key}))
                 if isinstance(resp, list):
                     resp = resp[0]
