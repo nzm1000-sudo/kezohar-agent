@@ -378,7 +378,11 @@ def model_answer(question, timeout=30, _retried=False):
                 'הוסף בסוף משפט אחד קצר ועדין, למשל "ויש אומרים ש…", עם שם בעל הדעה כשהוא ידוע; רק כשבאמת קיימת, אל תמציא. '
                 'בשאלת רשימה ("כל ה…", "מנה", "אילו") כתוב פתיח קצר ורשימה ממוספרת מלאה (עד 8 פריטים). '
                 'קרא כל פרט בשאלה (מי, מתי, סדר המאורעות) וענה על המקרה בדיוק כפי שתואר, בלי לשנות אותו. '
-                'שאלה עם שגיאת כתיב או ניסוח לא מדויק: הבן את הכוונה הסבירה וענה עליה. confident=false רק אם אינך יודע את התשובה. אם השאלה אינה ביהדות, answer ריק. החזר JSON בלבד.'},
+                'שאלה עם שגיאת כתיב או ניסוח לא מדויק: הבן את הכוונה הסבירה וענה עליה. confident=false רק אם אינך יודע את התשובה. אם השאלה אינה ביהדות, answer ריק. '
+                # Facts the model got wrong from memory (2026-10-23: "no יעלה ויבוא in the Amida of Rosh Hashana").
+                'עובדות קבועות (אל תסתור אותן): «יעלה ויבוא» נאמר בעמידה של ראש חודש וחול המועד בברכת «רצה»; ביום טוב, '
+                'בראש השנה וביום הכיפורים הוא נאמר בעמידה בברכה האמצעית (קדושת היום); ובברכת המזון בראש חודש, בחול המועד, '
+                'ביום טוב ובראש השנה, בברכת «בונה ירושלים». בחנוכה ובפורים אין «יעלה ויבוא» אלא «על הניסים». החזר JSON בלבד.'},
                 {'role': 'user', 'content': question}]}
     try:
         with model_slot(timeout) as slot:
@@ -386,6 +390,10 @@ def model_answer(question, timeout=30, _retried=False):
         reply = json.loads(resp['choices'][0]['message']['content'])
     except Exception:
         return None, None
+    # Facts from memory only from the strong model (2026-10-23: when Luna timed out, the light fallback wrote that
+    # יעלה ויבוא is said on Shabbat, Chanukah and Purim and not in the Amida). No answer is better than a wrong one.
+    if not _strong(resp):
+        return bool(reply.get('jewish')), None
     answer = _plain(reply.get('answer')) if reply.get('jewish') and reply.get('confident') else None
     if answer and not _retried:
         # An answer from memory has no source to be checked against; the question's own facts are what it can be
@@ -397,6 +405,11 @@ def model_answer(question, timeout=30, _retried=False):
             if answer and contradicts(question, answer):
                 answer = None
     return bool(reply.get('jewish')), (answer or None)
+
+
+def _strong(resp):
+    """True when the reply came from the configured strong model (Luna), not a fallback."""
+    return str((resp or {}).get('model') or '').startswith(config.get('OPENAI_MODEL', 'gpt-6-luna'))
 
 
 def contradicts(question, answer, timeout=25):
