@@ -30,6 +30,19 @@ def category_of(topic):
     return next((cat for cat, starts in CATEGORY.items() if any(topic.startswith(s) for s in starts)), 'torah')
 
 
+def bank_id(question):
+    """The app's id for a bank question (ravBariBank.mjs › bankId: djb2-xor over code points, base 36)."""
+    h = 5381
+    for ch in question:
+        h = ((h * 33) ^ ord(ch)) & 0xFFFFFFFF
+    digits, out = '0123456789abcdefghijklmnopqrstuvwxyz', ''
+    while True:
+        h, r = divmod(h, 36)
+        out = digits[r] + out
+        if not h:
+            return 'rb-' + out
+
+
 def main(target):
     bank = ROOT / 'data/store/qa-bank'
     new = reworded()  # the questions as people ask them (build_qa_bank.py wording)
@@ -38,11 +51,18 @@ def main(target):
     # Questions a later review left out (gentle_review.py): never exported, whatever the check said.
     dropped = set(json.loads((bank / 'dropped.json').read_text())) if (bank / 'dropped.json').exists() else set()
     key = lambda r: hashlib.sha256((r['q'] + '|' + r['answer']).encode()).hexdigest()[:20]
-    seen, out = set(), []
+    seen, out, ids = set(), [], set()
     for r in map(json.loads, (bank / 'answers.jsonl').read_text().splitlines()):
         q = new.get(r['q'], r['q'])  # two wordings may become one question: it is listed once
         if not r.get('answer') or 'הקטע' in r['answer'] or q in seen or key(r) not in good or r['q'] in dropped:
             continue
+        # The app names a question by a 32-bit hash of its words (ravBariBank.mjs › bankId); a later question whose hash is
+        # already taken is left out, so every id opens one answer whichever list is read (2026-10-23: 66,662 rows, 1 clash).
+        app_id = bank_id(q)
+        if app_id in ids:
+            print(f'left out (id {app_id} taken): {q}', file=sys.stderr)
+            continue
+        ids.add(app_id)
         seen.add(q)
         # The old "במדבר ודברים" subject, split by book (build_qa_bank.py retopic).
         topic = retopic.get(r['q']) or r['topic'].split(' › ')[0].strip()
