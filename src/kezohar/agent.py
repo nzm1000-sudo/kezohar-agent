@@ -480,6 +480,11 @@ class Agent:
         """Every answer, whatever path produced it, passes the one final check (final_check.finish)."""
         asked=question
         if indecent_question(question):return dict(INDECENT_REPLY)
+        # After a device's daily Luna answers (owner, 2026-10-23: 70), only the free paths answer — the blessings table,
+        # the ready bank, a commentator's words — with no model call; else the limit is reported.
+        if kwargs.pop('free_only',False):
+            free=None if history else self._free(question)
+            return free or {'verdict':'limited','mode':'limited','answer':'','sources':[],'halachic_verified':False}
         if history:
             from .followup import standalone
             question=standalone(question,history)
@@ -490,6 +495,22 @@ class Agent:
         if isinstance(result,dict) and not result.get('bari'):result=_display(result)
         return result
 
+    def _free(self, question):
+        """The answer of a path that calls no paid model, or None."""
+        from .blessing_lookup import lookup as blessing_lookup
+        from .commentary_lookup import lookup as commentary_lookup
+        known=blessing_lookup(question)
+        if known:return {**known,'free':True}
+        dense=next((b for b in getattr(self.search,'backends',[]) if hasattr(b,'index')),None)
+        try:
+            from .qa_bank import lookup
+            ready=lookup(question,dense.index.model if dense else None)
+        except Exception:
+            ready=None
+        if ready:return {**ready,'free':True}
+        said=commentary_lookup(question)
+        return {**said,'free':True} if said else None
+
     def _converse(self, question, circumstances=None, research=False, book=None, **kwargs):
         # A kashrut question is answered first from הכשרות למעשה (owner, 2026-10-16), the author's book; the usual
         # path follows only when the book has no passage that answers it.
@@ -498,7 +519,7 @@ class Agent:
         if not circumstances and 'PYTEST_CURRENT_TEST' not in os.environ:
             from .blessing_lookup import lookup as blessing_lookup
             known=blessing_lookup(question)
-            if known:return known
+            if known:return {**known,'free':True}
         # The ready answer bank first: a near restatement of a prepared question is answered at once (qa_bank.py).
         if not circumstances and 'PYTEST_CURRENT_TEST' not in os.environ:
             dense=next((b for b in getattr(self.search,'backends',[]) if hasattr(b,'index')),None)
@@ -507,12 +528,12 @@ class Agent:
                 ready=lookup(question,dense.index.model if dense else None)
             except Exception:
                 ready=None
-            if ready:return ready
+            if ready:return {**ready,'free':True}
         # "מה אומר האבן עזרא על «והכנעני אז בארץ»": the commentator's own words on that verse (commentary_lookup.py).
         if not circumstances and 'PYTEST_CURRENT_TEST' not in os.environ:
             from .commentary_lookup import lookup as commentary_lookup
             said=commentary_lookup(question)
-            if said:return said
+            if said:return {**said,'free':True}
         if not circumstances and 'PYTEST_CURRENT_TEST' not in os.environ and (book=='Hakashrut_Lemaase' or _KASHRUT.search(question)):
             found=self._from_book('Hakashrut_Lemaase',question)
             if found:return found

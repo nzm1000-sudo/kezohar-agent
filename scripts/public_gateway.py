@@ -20,7 +20,11 @@ ROOT = Path(__file__).resolve().parents[1]
 KEY_FILE = ROOT / 'data/store/public_gateway.key'
 UPSTREAM = os.environ.get('KEZOHAR_AGENT_UPSTREAM', 'http://127.0.0.1:8711')
 ORIGINS = {'https://nzm1000-sudo.github.io', 'capacitor://localhost', 'https://localhost', 'http://localhost'}
-PER_MINUTE, PER_DAY, QUEUE = 6, 70, 3  # 70 a day per device (owner, 2026-10-23; was 150)
+PER_MINUTE, PER_DAY, QUEUE = 6, 150, 3
+# Of a device's questions, at most 70 a day are answered with the paid model (owner, 2026-10-23: "by Luna, not by halacha
+# questions"); then the free paths still answer — the blessings table, the ready bank, answers already given, commentators.
+LUNA_PER_DAY = int(os.environ.get('KEZOHAR_LUNA_PER_DAY', '70'))
+FREE_MODES = {'fast', 'refuse', 'scope', 'clarification', 'limited'}
 # An internet address may be shared by a whole home, yeshiva or phone company (owner, 2026-10-18), so the allowance is
 # per device (the app's random install id); the address keeps only a wide ceiling, against one caller inventing devices.
 ADDRESS_PER_MINUTE, ADDRESS_PER_DAY = 40, 2000
@@ -83,7 +87,7 @@ def who(request, kind=''):
 
 
 def over(request, kind='ask'):
-    """None when allowed; else 'minute' or 'day'. A device: 6 a minute and 70 a day; its address, shared, a wider ceiling."""
+    """None when allowed; else 'minute' or 'day'. A device: 6 a minute and 150 a day; its address, shared, a wider ceiling."""
     client, address, device = who(request, '' if kind == 'ask' else ':' + kind)
     if device:
         now, q = time.time(), hits[address]
@@ -178,17 +182,20 @@ def _save_answers():
 _load_answers()
 
 
-def cached_forward(question, history=None, spoken=False, tradition=None):
+luna_hits = defaultdict(deque)  # device → times of answers that used the paid model
+
+
+def cached_forward(question, history=None, spoken=False, tradition=None, free_only=False):
     if spoken:  # corrected upstream first: not matched to a cached question as heard
-        return forward(question, history, True, tradition)
+        return forward(question, history, True, tradition, free_only)
     if history or TIMELY.search(question):
-        return forward(question, history, tradition=tradition)
+        return forward(question, history, tradition=tradition, free_only=free_only)
     key, now = (tradition or '') + _key(question), time.time()
     hit = ANSWERS.get(key)
     if hit and now - hit[0] < ANSWER_TTL:
         ANSWERS.move_to_end(key)
-        return hit[1]
-    result = forward(question, history, tradition=tradition)
+        return {**hit[1], 'free': True}  # an answer already given costs nothing again
+    result = forward(question, history, tradition=tradition, free_only=free_only)
     if result.get('mode') in CACHEABLE and result.get('answer'):
         ANSWERS[key] = (now, result)
         while len(ANSWERS) > ANSWERS_MAX:
@@ -197,8 +204,8 @@ def cached_forward(question, history=None, spoken=False, tradition=None):
     return result
 
 
-def forward(question, history=None, spoken=False, tradition=None):
-    req = urllib.request.Request(UPSTREAM + '/demo/ask', data=json.dumps({'question': question, 'top_k': 5, 'turns': history or [], 'spoken': bool(spoken), **({'tradition': 'ashkenazi'} if tradition == 'ashkenazi' else {})}).encode(),
+def forward(question, history=None, spoken=False, tradition=None, free_only=False):
+    req = urllib.request.Request(UPSTREAM + '/demo/ask', data=json.dumps({'question': question, 'top_k': 5, 'turns': history or [], 'spoken': bool(spoken), **({'tradition': 'ashkenazi'} if tradition == 'ashkenazi' else {}), **({'free_only': True} if free_only else {})}).encode(),
                                  headers={'Content-Type': 'application/json'})
     with urllib.request.urlopen(req, timeout=120) as r:
         result = json.load(r)
@@ -248,15 +255,25 @@ async def ask(request: Request):
         return JSONResponse({'error': 'busy, try again in a minute'}, 503, headers=headers)
     waiting += 1
     started = time.time()
+    client = who(request)[0]
+    luna = luna_hits[client]
+    while luna and started - luna[0] > 86400:
+        luna.popleft()
+    free_only = len(luna) >= LUNA_PER_DAY
     try:
         async with slot:
             result = await asyncio.get_running_loop().run_in_executor(None, cached_forward, question.strip(), history, body.get('spoken') is True if isinstance(body, dict) else False,
-                                                                       'ashkenazi' if isinstance(body, dict) and body.get('tradition') == 'ashkenazi' else None)
+                                                                       'ashkenazi' if isinstance(body, dict) and body.get('tradition') == 'ashkenazi' else None, free_only)
     except Exception:
         timing('ask', 502, started, len(history), question)
         return JSONResponse({'error': 'agent unavailable'}, 502, headers=headers)
     finally:
         waiting -= 1
+    if result.get('mode') == 'limited':
+        timing('ask', 429, started, len(history), question)
+        return JSONResponse({'error': 'daily answers used, try again tomorrow', 'limit': 'day'}, 429, headers=headers)
+    if not result.get('free') and result.get('mode') not in FREE_MODES:
+        luna.append(started)
     timing('ask', 200, started, len(history), question)
     return JSONResponse(result, headers=headers)
 

@@ -224,7 +224,7 @@ async def ask(request: Request):
         agent = demo_agent()
         deep=opts.get('study_mode')=='deep'
         budget = RequestBudget(seconds=90 if deep else 45,max_context_bytes=96000 if deep else 48000,cancel_event=event)
-        result = agent.converse(question, **opts, cache_namespace='private-loopback-demo', request_budget=budget, timeout=45, cache_ttl=0)
+        result = agent.converse(question, **opts, cache_namespace='private-loopback-demo', request_budget=budget, timeout=45, cache_ttl=0, **({'free_only': True} if body.get('free_only') is True else {}))
         result = dict(result, sources=public_sources(result.get('sources', [])),
                       demo_elapsed_s=round(time.perf_counter()-started, 3),
                       demo_model=agent.model, demo_model_calls=budget.calls)
