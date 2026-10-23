@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 KEY_FILE = ROOT / 'data/store/public_gateway.key'
 UPSTREAM = os.environ.get('KEZOHAR_AGENT_UPSTREAM', 'http://127.0.0.1:8711')
 ORIGINS = {'https://nzm1000-sudo.github.io', 'capacitor://localhost', 'https://localhost', 'http://localhost'}
-PER_MINUTE, PER_DAY, QUEUE = 6, 150, 3
+PER_MINUTE, PER_DAY, QUEUE = 6, 70, 3  # 70 a day per device (owner, 2026-10-23; was 150)
 # An internet address may be shared by a whole home, yeshiva or phone company (owner, 2026-10-18), so the allowance is
 # per device (the app's random install id); the address keeps only a wide ceiling, against one caller inventing devices.
 ADDRESS_PER_MINUTE, ADDRESS_PER_DAY = 40, 2000
@@ -83,7 +83,7 @@ def who(request, kind=''):
 
 
 def over(request, kind='ask'):
-    """None when allowed; else 'minute' or 'day'. A device: 6 a minute and 150 a day; its address, shared, a wider ceiling."""
+    """None when allowed; else 'minute' or 'day'. A device: 6 a minute and 70 a day; its address, shared, a wider ceiling."""
     client, address, device = who(request, '' if kind == 'ask' else ':' + kind)
     if device:
         now, q = time.time(), hits[address]
